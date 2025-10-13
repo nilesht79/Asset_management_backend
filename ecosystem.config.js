@@ -1,0 +1,25 @@
+module.exports = {
+  apps: [
+    {
+      name: 'asset-management-api',
+      script: 'src/app.js',
+      instances: 'max',
+      exec_mode: 'cluster',
+      env: {
+        NODE_ENV: 'production',
+        PORT: 5000
+      },
+      env_development: {
+        NODE_ENV: 'development',
+        PORT: 5000
+      },
+      log_file: 'logs/combined.log',
+      out_file: 'logs/out.log',
+      error_file: 'logs/error.log',
+      log_date_format: 'YYYY-MM-DD HH:mm Z',
+      merge_logs: true,
+      max_memory_restart: '1G',
+      node_args: '--max_old_space_size=1024'
+    }
+  ]
+};

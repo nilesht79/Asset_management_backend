@@ -1,0 +1,256 @@
+const express = require('express');
+const { asyncHandler } = require('../../middleware/error-handler');
+const { validateBody } = require('../../middleware/validation');
+const { sendSuccess, sendError, sendUnauthorized, sendValidationError } = require('../../utils/response');
+const validators = require('../../utils/validators');
+const OAuth2Server = require('../../oauth/server');
+const OAuth2ClientManager = require('../../oauth/clients');
+const OAuth2Request = require('oauth2-server/lib/request');
+const OAuth2Response = require('oauth2-server/lib/response');
+const { getAccessTokenCookieOptions, getRefreshTokenCookieOptions, getClearCookieOptions } = require('../../config/cookies');
+
+const router = express.Router();
+
+// OAuth 2.0 Resource Owner Password Credentials Grant
+// This allows direct username/password login that returns OAuth tokens
+router.post('/oauth-login',
+  validateBody(validators.auth.oauthLogin),
+  asyncHandler(async (req, res) => {
+    const { email, password, client_id, client_secret, scope, role } = req.body;
+
+    try {
+      // Verify client credentials
+      if (!client_id) {
+        return sendValidationError(res, 'client_id is required for OAuth login');
+      }
+
+      const client = await OAuth2ClientManager.getClient(client_id, true);
+      if (!client) {
+        return sendUnauthorized(res, 'Invalid client credentials');
+      }
+
+      // Verify client secret if provided (required for confidential clients)
+      if (client.isConfidential && client_secret) {
+        const bcrypt = require('bcryptjs');
+        const isValidSecret = await bcrypt.compare(client_secret, client.clientSecret);
+        if (!isValidSecret) {
+          return sendUnauthorized(res, 'Invalid client credentials');
+        }
+      }
+
+      // Check if client supports password grant
+      if (!client.grants.includes('password')) {
+        return sendError(res, 'Client does not support password grant type', 400);
+      }
+
+      // Create OAuth2Server Request object
+      const oauthRequest = new OAuth2Request({
+        body: {
+          grant_type: 'password',
+          username: email,
+          password: password,
+          client_id: client_id,
+          client_secret: client_secret,
+          scope: scope || 'read write'
+        },
+        headers: {
+          ...req.headers,
+          'content-type': 'application/x-www-form-urlencoded'
+        },
+        method: 'POST',
+        query: req.query || {}
+      });
+
+      // Create OAuth2Server Response object
+      const oauthResponse = new OAuth2Response({
+        body: {},
+        headers: {}
+      });
+
+      // Get OAuth token
+      const tokenResponse = await OAuth2Server.token(oauthRequest, oauthResponse);
+
+      // Customize response for role-specific login if needed
+      let loginMessage = 'Login successful';
+      if (role && tokenResponse.user.role !== role) {
+        return sendUnauthorized(res, `Invalid role. This login is specifically for ${role}s.`);
+      }
+
+      if (role) {
+        loginMessage = `Login successful as ${tokenResponse.user.role}`;
+      }
+
+      // Set tokens as HttpOnly cookies for security using centralized config
+      const accessCookieOptions = getAccessTokenCookieOptions(tokenResponse.expires_in);
+      const refreshCookieOptions = getRefreshTokenCookieOptions(); // Default 30 days
+
+      res.cookie('access_token', tokenResponse.access_token, accessCookieOptions);
+      res.cookie('refresh_token', tokenResponse.refresh_token, refreshCookieOptions);
+
+      return sendSuccess(res, {
+        user: {
+          id: tokenResponse.user.id,
+          email: tokenResponse.user.email,
+          firstName: tokenResponse.user.firstName,
+          lastName: tokenResponse.user.lastName,
+          role: tokenResponse.user.role,
+          department: tokenResponse.user.department,
+          permissions: tokenResponse.user.permissions
+        },
+        token_type: tokenResponse.token_type,
+        expires_in: tokenResponse.expires_in,
+        scope: tokenResponse.scope
+      }, loginMessage);
+
+    } catch (error) {
+      console.error('OAuth login error:', error);
+
+      if (error.name === 'invalid_grant') {
+        return sendUnauthorized(res, 'Invalid username or password');
+      } else if (error.name === 'invalid_client') {
+        return sendUnauthorized(res, 'Invalid client credentials');
+      } else if (error.name === 'unsupported_grant_type') {
+        return sendError(res, 'Unsupported grant type', 400);
+      }
+
+      return sendError(res, 'Login failed', 500);
+    }
+  })
+);
+
+// OAuth 2.0 Refresh Token endpoint
+router.post('/oauth-refresh',
+  validateBody(validators.auth.oauthRefresh),
+  asyncHandler(async (req, res) => {
+    // Get refresh token from HttpOnly cookie
+    const refresh_token = req.cookies?.refresh_token;
+    const { client_id, client_secret } = req.body;
+
+    if (!refresh_token) {
+      console.log('No refresh token found in cookies for refresh attempt');
+      return sendUnauthorized(res, 'Refresh token required - please login again');
+    }
+
+    try {
+      // Create OAuth2Server Request object
+      const oauthRequest = new OAuth2Request({
+        body: {
+          grant_type: 'refresh_token',
+          refresh_token: refresh_token,
+          client_id: client_id,
+          client_secret: client_secret
+        },
+        headers: {
+          ...req.headers,
+          'content-type': 'application/x-www-form-urlencoded'
+        },
+        method: 'POST',
+        query: req.query || {}
+      });
+
+      // Create OAuth2Server Response object
+      const oauthResponse = new OAuth2Response({
+        body: {},
+        headers: {}
+      });
+
+      const tokenResponse = await OAuth2Server.token(oauthRequest, oauthResponse);
+
+      // Set refreshed tokens as HttpOnly cookies using centralized config
+      const accessCookieOptions = getAccessTokenCookieOptions(tokenResponse.expires_in);
+      const refreshCookieOptions = getRefreshTokenCookieOptions(); // Default 30 days
+
+      res.cookie('access_token', tokenResponse.access_token, accessCookieOptions);
+
+      if (tokenResponse.refresh_token) {
+        res.cookie('refresh_token', tokenResponse.refresh_token, refreshCookieOptions);
+      }
+
+      return sendSuccess(res, {
+        token_type: tokenResponse.token_type,
+        expires_in: tokenResponse.expires_in,
+        scope: tokenResponse.scope
+      }, 'Token refreshed successfully');
+
+    } catch (error) {
+      console.error('OAuth refresh error:', error);
+
+      if (error.name === 'invalid_grant') {
+        return sendUnauthorized(res, 'Invalid or expired refresh token');
+      } else if (error.name === 'invalid_client') {
+        return sendUnauthorized(res, 'Invalid client credentials');
+      }
+
+      return sendError(res, 'Token refresh failed', 500);
+    }
+  })
+);
+
+// Role-specific OAuth login endpoints
+const createRoleLogin = (role) => {
+  return asyncHandler(async (req, res) => {
+    req.body.role = role; // Set the expected role
+
+    // Forward to main OAuth login handler
+    const oauthLoginHandler = router.stack.find(
+      layer => layer.route && layer.route.path === '/oauth-login' && layer.route.methods.post
+    );
+
+    if (oauthLoginHandler && oauthLoginHandler.route.stack[1]) {
+      return oauthLoginHandler.route.stack[1].handle(req, res);
+    }
+
+    return sendError(res, 'OAuth login handler not found', 500);
+  });
+};
+
+// Role-specific OAuth login routes
+router.post('/oauth-coordinator-login',
+  validateBody(validators.auth.oauthLogin),
+  createRoleLogin('coordinator')
+);
+
+router.post('/oauth-engineer-login',
+  validateBody(validators.auth.oauthLogin),
+  createRoleLogin('engineer')
+);
+
+router.post('/oauth-department-head-login',
+  validateBody(validators.auth.oauthLogin),
+  createRoleLogin('department_head')
+);
+
+router.post('/oauth-department-coordinator-login',
+  validateBody(validators.auth.oauthLogin),
+  createRoleLogin('department_coordinator')
+);
+
+router.post('/oauth-admin-login',
+  validateBody(validators.auth.oauthLogin),
+  createRoleLogin('admin')
+);
+
+router.post('/oauth-superadmin-login',
+  validateBody(validators.auth.oauthLogin),
+  createRoleLogin('superadmin')
+);
+
+// OAuth 2.0 Logout endpoint - clears HttpOnly cookies
+router.post('/oauth-logout',
+  asyncHandler(async (_, res) => {
+    try {
+      // Clear the HttpOnly cookies using centralized config
+      const clearCookieOptions = getClearCookieOptions();
+
+      res.clearCookie('access_token', clearCookieOptions);
+      res.clearCookie('refresh_token', clearCookieOptions);
+
+      return sendSuccess(res, null, 'Logout successful');
+    } catch (error) {
+      console.error('OAuth logout error:', error);
+      return sendError(res, 'Logout failed', 500);
+    }
+  })
+);
+
+module.exports = router;
