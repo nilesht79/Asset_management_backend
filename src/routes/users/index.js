@@ -26,6 +26,45 @@ router.use('/bulk-upload', bulkUploadRouter);
 // Apply authentication to all routes
 router.use(authenticateToken);
 
+// GET /users/statistics - Get user statistics
+router.get('/statistics',
+  requireDynamicPermission(),
+  asyncHandler(async (req, res) => {
+    const pool = await connectDB();
+
+    const statsQuery = `
+      SELECT
+        COUNT(*) as total_users,
+        SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) as active_users,
+        SUM(CASE WHEN is_active = 0 THEN 1 ELSE 0 END) as inactive_users,
+        SUM(CASE WHEN role = 'admin' THEN 1 ELSE 0 END) as admin_count,
+        SUM(CASE WHEN role = 'user' THEN 1 ELSE 0 END) as user_count,
+        SUM(CASE WHEN role = 'coordinator' THEN 1 ELSE 0 END) as coordinator_count,
+        SUM(CASE WHEN role = 'engineer' THEN 1 ELSE 0 END) as engineer_count,
+        SUM(CASE WHEN role = 'superadmin' THEN 1 ELSE 0 END) as superadmin_count,
+        SUM(CASE WHEN user_status = 'pending' THEN 1 ELSE 0 END) as pending_approvals
+      FROM USER_MASTER
+    `;
+
+    const result = await pool.request().query(statsQuery);
+    const stats = result.recordset[0];
+
+    sendSuccess(res, {
+      total: stats.total_users || 0,
+      active: stats.active_users || 0,
+      inactive: stats.inactive_users || 0,
+      byRole: {
+        admin: stats.admin_count || 0,
+        user: stats.user_count || 0,
+        coordinator: stats.coordinator_count || 0,
+        engineer: stats.engineer_count || 0,
+        superadmin: stats.superadmin_count || 0
+      },
+      pendingApprovals: stats.pending_approvals || 0
+    });
+  })
+);
+
 // GET /users - List all users with pagination and search
 router.get('/',
   requireDynamicPermission(),
@@ -125,6 +164,108 @@ router.get('/',
       users,
       pagination
     }, 'Users retrieved successfully');
+  })
+);
+
+// GET /users/export - Export users to Excel
+router.get('/export',
+  requireDynamicPermission(),
+  asyncHandler(async (req, res) => {
+    const { status, role, search } = req.query;
+    const pool = await connectDB();
+
+    // Build WHERE clause
+    let whereClause = '1=1';
+    const params = [];
+
+    if (status === 'active') {
+      whereClause += ' AND u.is_active = 1';
+    } else if (status === 'inactive') {
+      whereClause += ' AND u.is_active = 0';
+    }
+
+    if (role) {
+      whereClause += ' AND u.role = @role';
+      params.push({ name: 'role', type: sql.VarChar(50), value: role });
+    }
+
+    if (search) {
+      whereClause += ' AND (u.first_name LIKE @search OR u.last_name LIKE @search OR u.email LIKE @search OR u.employee_id LIKE @search)';
+      params.push({ name: 'search', type: sql.VarChar(255), value: `%${search}%` });
+    }
+
+    // Fetch users
+    const dataRequest = pool.request();
+    params.forEach(param => dataRequest.input(param.name, param.type, param.value));
+
+    const result = await dataRequest.query(`
+      SELECT
+        u.user_id as id,
+        u.first_name,
+        u.last_name,
+        u.email,
+        u.employee_id,
+        u.role,
+        u.is_active,
+        d.department_name,
+        l.name as location_name,
+        u.created_at
+      FROM USER_MASTER u
+      LEFT JOIN DEPARTMENT_MASTER d ON u.department_id = d.department_id
+      LEFT JOIN locations l ON u.location_id = l.id
+      WHERE ${whereClause}
+      ORDER BY u.created_at DESC
+    `);
+
+    // Create Excel workbook
+    const ExcelJS = require('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Users');
+
+    // Add headers
+    worksheet.columns = [
+      { header: 'Employee ID', key: 'employee_id', width: 15 },
+      { header: 'First Name', key: 'first_name', width: 20 },
+      { header: 'Last Name', key: 'last_name', width: 20 },
+      { header: 'Email', key: 'email', width: 30 },
+      { header: 'Role', key: 'role', width: 15 },
+      { header: 'Department', key: 'department_name', width: 25 },
+      { header: 'Location', key: 'location_name', width: 25 },
+      { header: 'Status', key: 'is_active', width: 10 },
+      { header: 'Created At', key: 'created_at', width: 20 }
+    ];
+
+    // Style header row
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF4472C4' }
+    };
+    worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+
+    // Add data rows
+    result.recordset.forEach(user => {
+      worksheet.addRow({
+        employee_id: user.employee_id || '',
+        first_name: user.first_name,
+        last_name: user.last_name,
+        email: user.email,
+        role: user.role,
+        department_name: user.department_name || '',
+        location_name: user.location_name || '',
+        is_active: user.is_active ? 'Active' : 'Inactive',
+        created_at: user.created_at ? new Date(user.created_at).toISOString().split('T')[0] : ''
+      });
+    });
+
+    // Generate buffer
+    const buffer = await workbook.xlsx.writeBuffer();
+
+    // Set headers for file download
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=users_export_${new Date().toISOString().split('T')[0]}.xlsx`);
+    res.send(buffer);
   })
 );
 

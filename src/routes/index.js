@@ -13,6 +13,7 @@ const assetRoutes = require('./assets');
 const assetMovementRoutes = require('./asset-movements');
 const dashboardRoutes = require('./dashboard');
 const adminRoutes = require('./admin');
+const ticketRoutes = require('./tickets');
 
 const router = express.Router();
 
@@ -53,7 +54,8 @@ router.get('/', (req, res) => {
       assets: '/assets',
       assetMovements: '/asset-movements',
       dashboard: '/dashboard',
-      admin: '/admin'
+      admin: '/admin',
+      tickets: '/tickets'
     },
     documentation: '/docs',
     health: '/health',
@@ -71,6 +73,7 @@ router.use('/assets', assetRoutes);
 router.use('/asset-movements', assetMovementRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/admin', adminRoutes);
+router.use('/tickets', ticketRoutes);
 
 
 // API version info

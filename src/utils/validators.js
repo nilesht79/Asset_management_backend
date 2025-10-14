@@ -24,7 +24,7 @@ const validators = {
     create: Joi.object({
       first_name: Joi.string().min(2).max(50).required(),
       last_name: Joi.string().min(2).max(50).required(),
-      email: Joi.string().email().optional().allow('', null), // Optional - will auto-generate if not provided
+      email: Joi.string().email({ tlds: { allow: false } }).optional().allow('', null), // Optional - will auto-generate if not provided
       password: Joi.string().min(8).pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]+$')).required(),
       role: Joi.string().valid(...Object.values(USER_ROLES)).required(),
       department_id: Joi.string().uuid().optional().allow(null),
@@ -36,7 +36,7 @@ const validators = {
     update: Joi.object({
       first_name: Joi.string().min(2).max(50).optional(),
       last_name: Joi.string().min(2).max(50).optional(),
-      email: Joi.string().email().optional(),
+      email: Joi.string().email({ tlds: { allow: false } }).optional(),
       role: Joi.string().valid(...Object.values(USER_ROLES)).optional(),
       department_id: Joi.string().uuid().optional().allow(null),
       location_id: Joi.string().uuid().optional().allow(null),
@@ -299,12 +299,12 @@ const validators = {
   // Auth validations
   auth: {
     login: Joi.object({
-      email: Joi.string().email().required(),
+      email: Joi.string().email({ tlds: { allow: false } }).required(),
       password: Joi.string().required()
     }),
-    
+
     roleBasedLogin: Joi.object({
-      email: Joi.string().email().required(),
+      email: Joi.string().email({ tlds: { allow: false } }).required(),
       password: Joi.string().required(),
       role: Joi.string().valid(...Object.values(USER_ROLES)).optional(),
       loginType: Joi.string().valid('role-based', 'generic').optional()
@@ -313,37 +313,37 @@ const validators = {
     register: Joi.object({
       firstName: Joi.string().min(2).max(50).required(),
       lastName: Joi.string().min(2).max(50).required(),
-      email: Joi.string().email().required(),
+      email: Joi.string().email({ tlds: { allow: false } }).required(),
       password: Joi.string().min(8).pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]+$')).required(),
       confirmPassword: Joi.string().valid(Joi.ref('password')).required(),
       role: Joi.string().valid('admin', 'superadmin').required(),
       registrationType: Joi.string().valid('self-registration').optional()
     }),
-    
+
     adminRegister: Joi.object({
       firstName: Joi.string().min(2).max(50).required(),
       lastName: Joi.string().min(2).max(50).required(),
-      email: Joi.string().email().required(),
+      email: Joi.string().email({ tlds: { allow: false } }).required(),
       password: Joi.string().min(8).pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]+$')).required(),
       confirmPassword: Joi.string().valid(Joi.ref('password')).required(),
       registrationType: Joi.string().valid('self-registration').optional()
     }),
-    
+
     superadminRegister: Joi.object({
       firstName: Joi.string().min(2).max(50).required(),
       lastName: Joi.string().min(2).max(50).required(),
-      email: Joi.string().email().required(),
+      email: Joi.string().email({ tlds: { allow: false } }).required(),
       password: Joi.string().min(12).pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]')).required(),
       confirmPassword: Joi.string().valid(Joi.ref('password')).required(),
       registrationType: Joi.string().valid('self-registration').optional()
     }),
-    
+
     refreshToken: Joi.object({
       refresh_token: Joi.string().required()
     }),
-    
+
     forgotPassword: Joi.object({
-      email: Joi.string().email().required()
+      email: Joi.string().email({ tlds: { allow: false } }).required()
     }),
     
     resetPassword: Joi.object({
@@ -354,7 +354,7 @@ const validators = {
 
     // OAuth 2.0 validations
     oauthLogin: Joi.object({
-      email: Joi.string().email().required(),
+      email: Joi.string().email({ tlds: { allow: false } }).required(),
       password: Joi.string().required(),
       client_id: Joi.string().required(),
       client_secret: Joi.string().optional(),
