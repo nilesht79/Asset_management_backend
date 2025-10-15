@@ -36,6 +36,42 @@ const upload = multer({
   }
 });
 
+// GET /masters/products/statistics - Get product statistics
+router.get('/statistics',
+  requireDynamicPermission(),
+  asyncHandler(async (req, res) => {
+    const pool = await connectDB();
+
+    const statsQuery = `
+      SELECT
+        COUNT(*) as total_products,
+        SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) as active_products,
+        SUM(CASE WHEN is_active = 0 THEN 1 ELSE 0 END) as inactive_products
+      FROM products
+    `;
+
+    const result = await pool.request().query(statsQuery);
+    const stats = result.recordset[0];
+
+    // Get total assets count (count of assets linked to products)
+    const assetsQuery = `
+      SELECT COUNT(*) as total_assets
+      FROM assets
+      WHERE product_id IS NOT NULL
+    `;
+
+    const assetsResult = await pool.request().query(assetsQuery);
+    const totalAssets = assetsResult.recordset[0].total_assets || 0;
+
+    sendSuccess(res, {
+      total: stats.total_products || 0,
+      active: stats.active_products || 0,
+      inactive: stats.inactive_products || 0,
+      totalAssets: totalAssets
+    });
+  })
+);
+
 // GET /masters/products - List all products with pagination and search
 router.get('/',
   requireDynamicPermission(),

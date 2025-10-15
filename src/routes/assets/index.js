@@ -5,7 +5,7 @@ const multer = require('multer');
 
 const { connectDB, sql } = require('../../config/database');
 const { validateBody, validateParams, validateQuery, validatePagination, validateUUID } = require('../../middleware/validation');
-const { requireDynamicPermission } = require('../../middleware/permissions');
+const { requireDynamicPermission, requireRole } = require('../../middleware/permissions');
 const { authenticateToken } = require('../../middleware/auth');
 const { asyncHandler } = require('../../middleware/error-handler');
 const { sendSuccess, sendCreated, sendError, sendNotFound, sendConflict } = require('../../utils/response');
@@ -100,6 +100,7 @@ router.get('/',
       INNER JOIN products p ON a.product_id = p.id
       LEFT JOIN categories c ON p.category_id = c.id
       LEFT JOIN oems o ON p.oem_id = o.id
+      LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
       WHERE ${whereClause}
     `);
 
@@ -119,12 +120,18 @@ router.get('/',
       SELECT
         a.id, a.asset_tag, a.tag_no, a.serial_number, a.status, a.condition_status, a.purchase_date, a.warranty_end_date,
         a.purchase_cost, a.notes, a.created_at, a.updated_at,
-        a.product_id, p.name as product_name, p.model as product_model,
-        u.location_id, l.name as location_name, l.address as location_address,
-        a.assigned_to, u.first_name + ' ' + u.last_name as assigned_user_name, u.email as assigned_user_email,
-        d.department_name as department,
+        a.product_id, a.assigned_to,
+        p.name as product_name, p.model as product_model,
         c.id as category_id, c.name as category_name,
         o.id as oem_id, o.name as oem_name,
+        u.location_id,
+        u.first_name + ' ' + u.last_name as assigned_user_name,
+        u.email as assigned_user_email,
+        d.department_name as department,
+        l.name as location_name,
+        l.address as location_address,
+        l.building as location_building,
+        l.floor as location_floor,
         CASE
           WHEN a.warranty_end_date IS NULL THEN 'No Warranty'
           WHEN a.warranty_end_date < GETUTCDATE() THEN 'Expired'
@@ -178,13 +185,13 @@ router.get('/statistics',
     // Get location distribution (assets inherit location from assigned users)
     const locationResult = await pool.request().query(`
       SELECT
-        l.id, l.name as location_name,
+        l.id, l.name as location_name, l.building, l.floor,
         COUNT(a.id) as asset_count
       FROM locations l
       LEFT JOIN USER_MASTER u ON l.id = u.location_id AND u.is_active = 1
       LEFT JOIN assets a ON u.user_id = a.assigned_to AND a.is_active = 1
       WHERE l.is_active = 1
-      GROUP BY l.id, l.name
+      GROUP BY l.id, l.name, l.building, l.floor
       ORDER BY asset_count DESC
     `);
 
@@ -259,7 +266,7 @@ router.get('/statistics',
 
 // GET /assets/export - Export assets to Excel
 router.get('/export',
-  requireDynamicPermission(),
+  requireRole(['superadmin', 'admin', 'coordinator']),
   asyncHandler(async (req, res) => {
     const {
       format = 'xlsx',
@@ -332,11 +339,12 @@ router.get('/export',
 
     const result = await dataRequest.query(`
       SELECT
-        a.id, a.asset_tag, a.status, a.condition_status, a.purchase_date, a.warranty_end_date,
-        a.purchase_cost, a.notes, a.created_at, a.updated_at,
+        a.id, a.asset_tag, a.tag_no, a.serial_number, a.status, a.condition_status,
+        a.purchase_date, a.warranty_end_date, a.purchase_cost, a.notes, a.created_at, a.updated_at,
         p.name as product_name, p.model as product_model,
-        l.name as location_name,
+        l.name as location_name, l.building as location_building, l.floor as location_floor, l.address as location_address,
         u.first_name + ' ' + u.last_name as assigned_user_name, u.email as assigned_user_email,
+        d.name as department_name,
         c.name as category_name,
         o.name as oem_name
       FROM assets a
@@ -345,6 +353,7 @@ router.get('/export',
       LEFT JOIN oems o ON p.oem_id = o.id
       LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
       LEFT JOIN locations l ON u.location_id = l.id
+      LEFT JOIN departments d ON u.department_id = d.id
       WHERE ${whereClause}
       ORDER BY a.created_at DESC
     `);
@@ -357,11 +366,17 @@ router.get('/export',
       // Transform data for Excel export
       const excelData = assets.map(asset => ({
         'Asset Tag': asset.asset_tag,
+        'Tag No': asset.tag_no || '',
+        'Serial Number': asset.serial_number || '',
         'Product Name': asset.product_name,
         'Product Model': asset.product_model || '',
         'OEM': asset.oem_name || '',
         'Category': asset.category_name || '',
+        'Department': asset.department_name || '',
         'Location': asset.location_name || '',
+        'Building': asset.location_building || '',
+        'Floor': asset.location_floor || '',
+        'Room No./Address': asset.location_address || '',
         'Assigned User': asset.assigned_user_name || '',
         'User Email': asset.assigned_user_email || '',
         'Status': asset.status,

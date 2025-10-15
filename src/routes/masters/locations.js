@@ -86,6 +86,7 @@ router.get('/',
       SELECT
         l.id, l.name, l.address,
         l.state_name, l.city_name, l.pincode, l.area_name,
+        l.building, l.floor,
         l.contact_person, l.contact_email, l.contact_phone,
         l.client_id, l.location_type_id,
         l.parent_location_id, pl.name as parent_location_name,
@@ -372,6 +373,7 @@ router.get('/:id',
         SELECT
           l.id, l.name, l.address, l.client_id, l.location_type_id,
           l.city_name, l.state_name, l.area_name, l.pincode,
+          l.building, l.floor,
           l.contact_person, l.contact_email, l.contact_phone,
           l.parent_location_id, pl.name as parent_location_name,
           c.client_name, lt.location_type,
@@ -409,6 +411,8 @@ router.post('/',
       city_name,
       pincode,
       area_name,
+      building,
+      floor,
       parent_location_id,
       is_active = true
     } = req.body;
@@ -464,6 +468,8 @@ router.post('/',
       .input('cityName', sql.VarChar(100), city_name?.trim() || null)
       .input('pincode', sql.VarChar(10), pincode?.trim() || null)
       .input('areaName', sql.VarChar(200), area_name?.trim() || null)
+      .input('building', sql.VarChar(100), building?.trim() || null)
+      .input('floor', sql.VarChar(50), floor?.trim() || null)
       .input('parentLocationId', sql.UniqueIdentifier, parent_location_id || null)
       .input('isActive', sql.Bit, is_active)
       .query(`
@@ -471,18 +477,21 @@ router.post('/',
           id, name, address, client_id, location_type_id,
           contact_person, contact_email, contact_phone,
           state_name, city_name, pincode, area_name,
+          building, floor,
           parent_location_id, is_active, created_at, updated_at
         )
         VALUES (
           @id, @name, @address, @clientId, @locationTypeId,
           @contactPerson, @contactEmail, @contactPhone,
           @stateName, @cityName, @pincode, @areaName,
+          @building, @floor,
           @parentLocationId, @isActive, GETUTCDATE(), GETUTCDATE()
         );
 
         SELECT
           l.id, l.name, l.address, l.client_id, l.location_type_id,
           l.state_name, l.city_name, l.pincode, l.area_name,
+          l.building, l.floor,
           l.contact_person, l.contact_email, l.contact_phone,
           l.parent_location_id, pl.name as parent_location_name,
           c.client_name, lt.location_type,
@@ -533,6 +542,8 @@ router.put('/:id',
       city_name: { type: sql.VarChar(100), dbField: 'city_name' },
       pincode: { type: sql.VarChar(10), dbField: 'pincode' },
       area_name: { type: sql.VarChar(200), dbField: 'area_name' },
+      building: { type: sql.VarChar(100), dbField: 'building' },
+      floor: { type: sql.VarChar(50), dbField: 'floor' },
       parent_location_id: { type: sql.UniqueIdentifier, dbField: 'parent_location_id' },
       is_active: { type: sql.Bit, dbField: 'is_active' }
     };
@@ -559,6 +570,7 @@ router.put('/:id',
       SELECT
         l.id, l.name, l.address, l.client_id, l.location_type_id,
         l.state_name, l.city_name, l.pincode, l.area_name,
+        l.building, l.floor,
         l.contact_person, l.contact_email, l.contact_phone,
         l.parent_location_id, pl.name as parent_location_name,
         c.client_name, lt.location_type,

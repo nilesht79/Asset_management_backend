@@ -71,19 +71,19 @@ router.get('/',
   validatePagination,
   asyncHandler(async (req, res) => {
     const { page, limit, offset, sortBy, sortOrder } = req.pagination;
-    const { search, status, role, department_id } = req.query;
+    const { search, status, role, department_id, location_id } = req.query;
 
     const pool = await connectDB();
-    
+
     // Build WHERE clause
     let whereClause = '1=1';
     const params = [];
-    
+
     if (search) {
       whereClause += ' AND (u.first_name LIKE @search OR u.last_name LIKE @search OR u.email LIKE @search OR u.employee_id LIKE @search)';
       params.push({ name: 'search', type: sql.VarChar(255), value: `%${search}%` });
     }
-    
+
     if (status) {
       whereClause += ' AND u.is_active = @status';
       params.push({ name: 'status', type: sql.Bit, value: status === 'active' });
@@ -97,6 +97,11 @@ router.get('/',
     if (department_id) {
       whereClause += ' AND u.department_id = @departmentId';
       params.push({ name: 'departmentId', type: sql.UniqueIdentifier, value: department_id });
+    }
+
+    if (location_id) {
+      whereClause += ' AND u.location_id = @locationId';
+      params.push({ name: 'locationId', type: sql.UniqueIdentifier, value: location_id });
     }
 
     // Get total count
@@ -169,7 +174,7 @@ router.get('/',
 
 // GET /users/export - Export users to Excel
 router.get('/export',
-  requireDynamicPermission(),
+  requireRole(['superadmin', 'admin', 'coordinator']),
   asyncHandler(async (req, res) => {
     const { status, role, search } = req.query;
     const pool = await connectDB();
@@ -209,6 +214,8 @@ router.get('/export',
         u.is_active,
         d.department_name,
         l.name as location_name,
+        l.building as location_building,
+        l.floor as location_floor,
         u.created_at
       FROM USER_MASTER u
       LEFT JOIN DEPARTMENT_MASTER d ON u.department_id = d.department_id
@@ -231,6 +238,8 @@ router.get('/export',
       { header: 'Role', key: 'role', width: 15 },
       { header: 'Department', key: 'department_name', width: 25 },
       { header: 'Location', key: 'location_name', width: 25 },
+      { header: 'Building', key: 'location_building', width: 20 },
+      { header: 'Floor', key: 'location_floor', width: 15 },
       { header: 'Status', key: 'is_active', width: 10 },
       { header: 'Created At', key: 'created_at', width: 20 }
     ];
@@ -254,6 +263,8 @@ router.get('/export',
         role: user.role,
         department_name: user.department_name || '',
         location_name: user.location_name || '',
+        location_building: user.location_building || '',
+        location_floor: user.location_floor || '',
         is_active: user.is_active ? 'Active' : 'Inactive',
         created_at: user.created_at ? new Date(user.created_at).toISOString().split('T')[0] : ''
       });
