@@ -344,7 +344,7 @@ router.get('/export',
         p.name as product_name, p.model as product_model,
         l.name as location_name, l.building as location_building, l.floor as location_floor, l.address as location_address,
         u.first_name + ' ' + u.last_name as assigned_user_name, u.email as assigned_user_email,
-        d.name as department_name,
+        d.department_name as department_name,
         c.name as category_name,
         o.name as oem_name
       FROM assets a
@@ -353,7 +353,7 @@ router.get('/export',
       LEFT JOIN oems o ON p.oem_id = o.id
       LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
       LEFT JOIN locations l ON u.location_id = l.id
-      LEFT JOIN departments d ON u.department_id = d.id
+      LEFT JOIN DEPARTMENT_MASTER d ON u.department_id = d.department_id
       WHERE ${whereClause}
       ORDER BY a.created_at DESC
     `);

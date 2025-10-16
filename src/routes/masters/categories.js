@@ -17,19 +17,19 @@ router.get('/',
   validatePagination,
   asyncHandler(async (req, res) => {
     const { page, limit, offset, sortBy, sortOrder } = req.pagination;
-    const { search, status } = req.query;
+    const { search, status, include_subcategories } = req.query;
 
     const pool = await connectDB();
-    
-    // Build WHERE clause - only show parent categories
-    let whereClause = 'c.parent_category_id IS NULL';
+
+    // Build WHERE clause - by default only show parent categories unless include_subcategories is true
+    let whereClause = include_subcategories === 'true' ? '1=1' : 'c.parent_category_id IS NULL';
     const params = [];
-    
+
     if (search) {
       whereClause += ' AND (c.name LIKE @search OR c.description LIKE @search)';
       params.push({ name: 'search', type: sql.VarChar(255), value: `%${search}%` });
     }
-    
+
     if (status) {
       whereClause += ' AND c.is_active = @status';
       params.push({ name: 'status', type: sql.Bit, value: status === 'active' });
@@ -60,8 +60,10 @@ router.get('/',
     const result = await dataRequest.query(`
       SELECT c.id, c.name, c.description, c.parent_category_id, c.is_active, c.created_at, c.updated_at,
              (SELECT COUNT(*) FROM categories WHERE parent_category_id = c.id) as subcategory_count,
-             (SELECT COUNT(*) FROM products WHERE category_id = c.id AND is_active = 1) as product_count
+             (SELECT COUNT(*) FROM products WHERE category_id = c.id AND is_active = 1) as product_count,
+             pc.name as parent_category_name
       FROM categories c
+      LEFT JOIN categories pc ON c.parent_category_id = pc.id
       WHERE ${whereClause}
       ORDER BY ${safeSortBy} ${safeSortOrder}
       OFFSET @offset ROWS
