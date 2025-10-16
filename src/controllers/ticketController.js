@@ -5,6 +5,7 @@
 
 const TicketModel = require('../models/ticket');
 const { sendSuccess, sendError, sendCreated, sendNotFound } = require('../utils/response');
+const ExcelJS = require('exceljs');
 
 class TicketController {
   /**
@@ -349,6 +350,96 @@ class TicketController {
     } catch (error) {
       console.error('Get employees error:', error);
       return sendError(res, error.message || 'Failed to fetch employees', 500);
+    }
+  }
+
+  /**
+   * Export tickets to Excel
+   * GET /api/tickets/export
+   */
+  static async exportTickets(req, res) {
+    try {
+      const filters = req.query;
+
+      // Get tickets using the same filtering logic (without pagination to get all)
+      const result = await TicketModel.getTickets(filters, { page: 1, limit: 10000 });
+      const tickets = result.tickets || [];
+
+      // Create workbook
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Tickets');
+
+      // Define columns
+      worksheet.columns = [
+        { header: 'Ticket #', key: 'ticket_number', width: 15 },
+        { header: 'Title', key: 'title', width: 30 },
+        { header: 'Description', key: 'description', width: 40 },
+        { header: 'Status', key: 'status', width: 12 },
+        { header: 'Priority', key: 'priority', width: 12 },
+        { header: 'Category', key: 'category', width: 15 },
+        { header: 'Created For', key: 'created_by_user_name', width: 25 },
+        { header: 'Created For Email', key: 'created_by_user_email', width: 30 },
+        { header: 'Assigned To', key: 'engineer_name', width: 25 },
+        { header: 'Engineer Email', key: 'engineer_email', width: 30 },
+        { header: 'Department', key: 'department_name', width: 20 },
+        { header: 'Location', key: 'location_name', width: 20 },
+        { header: 'Created At', key: 'created_at', width: 20 },
+        { header: 'Updated At', key: 'updated_at', width: 20 },
+        { header: 'Resolved At', key: 'resolved_at', width: 20 },
+        { header: 'Closed At', key: 'closed_at', width: 20 },
+        { header: 'Due Date', key: 'due_date', width: 20 },
+        { header: 'Resolution Notes', key: 'resolution_notes', width: 40 }
+      ];
+
+      // Style header row
+      worksheet.getRow(1).font = { bold: true };
+      worksheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF4472C4' }
+      };
+      worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+
+      // Add data
+      tickets.forEach(ticket => {
+        worksheet.addRow({
+          ticket_number: ticket.ticket_number,
+          title: ticket.title,
+          description: ticket.description,
+          status: ticket.status,
+          priority: ticket.priority,
+          category: ticket.category,
+          created_by_user_name: ticket.created_by_user_name,
+          created_by_user_email: ticket.created_by_user_email,
+          engineer_name: ticket.engineer_name || 'Unassigned',
+          engineer_email: ticket.engineer_email || '',
+          department_name: ticket.department_name || '',
+          location_name: ticket.location_name || '',
+          created_at: ticket.created_at ? new Date(ticket.created_at).toLocaleString() : '',
+          updated_at: ticket.updated_at ? new Date(ticket.updated_at).toLocaleString() : '',
+          resolved_at: ticket.resolved_at ? new Date(ticket.resolved_at).toLocaleString() : '',
+          closed_at: ticket.closed_at ? new Date(ticket.closed_at).toLocaleString() : '',
+          due_date: ticket.due_date ? new Date(ticket.due_date).toLocaleString() : '',
+          resolution_notes: ticket.resolution_notes || ''
+        });
+      });
+
+      // Set response headers
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      );
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename=tickets_export_${new Date().toISOString().split('T')[0]}.xlsx`
+      );
+
+      // Write to response
+      await workbook.xlsx.write(res);
+      res.end();
+    } catch (error) {
+      console.error('Export tickets error:', error);
+      return sendError(res, error.message || 'Failed to export tickets', 500);
     }
   }
 }

@@ -49,6 +49,18 @@ router.get(
 );
 
 /**
+ * @route   GET /api/tickets/export
+ * @desc    Export tickets to Excel
+ * @access  Coordinator, Superadmin
+ */
+router.get(
+  '/export',
+  authenticateOAuth,
+  requireRole(TICKET_MANAGERS),
+  TicketController.exportTickets
+);
+
+/**
  * @route   GET /api/tickets/:id/comments
  * @desc    Get comments for a ticket
  * @access  Coordinator, Superadmin, Engineer

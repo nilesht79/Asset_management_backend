@@ -49,8 +49,8 @@ const validatePagination = (req, res, next) => {
     return sendValidationError(res, [{ field: 'page', message: 'Page must be greater than 0' }]);
   }
 
-  if (limit < 1 || limit > 100) {
-    return sendValidationError(res, [{ field: 'limit', message: 'Limit must be between 1 and 100' }]);
+  if (limit < 1 || limit > 1000) {
+    return sendValidationError(res, [{ field: 'limit', message: 'Limit must be between 1 and 1000' }]);
   }
 
   if (!['asc', 'desc'].includes(sortOrder.toLowerCase())) {
