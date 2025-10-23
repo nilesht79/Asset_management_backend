@@ -23,11 +23,11 @@ router.get('/recent', assetMovementController.getRecentMovements);
 /**
  * @route   GET /api/v1/asset-movements/statistics
  * @desc    Get movement statistics for dashboard
- * @access  Admin/SuperAdmin only
+ * @access  Admin/SuperAdmin/Coordinator
  */
 router.get(
   '/statistics',
-  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN]),
+  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.COORDINATOR]),
   assetMovementController.getMovementStatistics
 );
 

@@ -10,7 +10,8 @@ module.exports = {
     audience: 'asset-management-users',
     roleBasedExpiry: {
       superadmin: '24h',
-      admin: '12h', 
+      admin: '12h',
+      it_head: '10h',
       department_head: '8h',
       coordinator: '8h',
       department_coordinator: '8h',
@@ -41,6 +42,7 @@ module.exports = {
   roles: {
     SUPERADMIN: 'superadmin',
     ADMIN: 'admin',
+    IT_HEAD: 'it_head',
     DEPARTMENT_HEAD: 'department_head',
     COORDINATOR: 'coordinator',
     DEPARTMENT_COORDINATOR: 'department_coordinator',
@@ -53,6 +55,7 @@ module.exports = {
   ROLE_HIERARCHY: {
     superadmin: 100,
     admin: 90,
+    it_head: 80,
     department_head: 70,
     coordinator: 60,
     department_coordinator: 50,
@@ -103,6 +106,9 @@ module.exports = {
       // Ticket management
       'tickets.create', 'tickets.read', 'tickets.update', 'tickets.delete', 'tickets.assign', 'tickets.close',
 
+      // Delivery ticket management
+      'delivery-tickets.create', 'delivery-tickets.read', 'delivery-tickets.update', 'delivery-tickets.delete',
+
       // Reporting
       'reports.view', 'reports.export', 'reports.dashboard', 'reports.analytics',
 
@@ -137,6 +143,9 @@ module.exports = {
       // Ticket management
       'tickets.create', 'tickets.read', 'tickets.update', 'tickets.assign', 'tickets.close',
 
+      // Delivery ticket management
+      'delivery-tickets.create', 'delivery-tickets.read', 'delivery-tickets.update', 'delivery-tickets.delete',
+
       // Reporting
       'reports.view', 'reports.export', 'reports.dashboard',
 
@@ -145,6 +154,33 @@ module.exports = {
 
       // Permission control (limited)
       'permission-control.read', 'permission-control.create', 'permission-control.update',
+
+      // Statistics
+      'statistics.read'
+    ],
+    it_head: [
+      // User management (read only)
+      'users.read', 'users.update',
+
+      // Asset management
+      'assets.create', 'assets.read', 'assets.update', 'assets.assign', 'assets.transfer', 'assets.maintenance',
+
+      // Master data
+      'masters.read', 'masters.create', 'masters.update',
+      'masters.oem.manage', 'masters.categories.manage', 'masters.products.manage',
+      'masters.product-types.manage', 'masters.product-series.manage',
+
+      // Department management (read only)
+      'departments.read',
+
+      // Ticket management
+      'tickets.create', 'tickets.read', 'tickets.update', 'tickets.assign',
+
+      // Delivery ticket management
+      'delivery-tickets.create', 'delivery-tickets.read', 'delivery-tickets.update', 'delivery-tickets.delete',
+
+      // Reporting
+      'reports.view', 'reports.export', 'reports.dashboard',
 
       // Statistics
       'statistics.read'
@@ -178,8 +214,14 @@ module.exports = {
       // Master data (read only)
       'masters.read',
 
+      // Department management (read only)
+      'departments.read',
+
       // Ticket management
       'tickets.create', 'tickets.read', 'tickets.update',
+
+      // Delivery ticket management
+      'delivery-tickets.create', 'delivery-tickets.read', 'delivery-tickets.update', 'delivery-tickets.delete',
 
       // Reporting
       'reports.view'
@@ -203,6 +245,9 @@ module.exports = {
     engineer: [
       // Ticket management
       'tickets.read', 'tickets.update',
+
+      // Delivery ticket management (read and update only)
+      'delivery-tickets.read', 'delivery-tickets.update',
 
       // Asset management (read and maintenance only)
       'assets.read', 'assets.maintenance',

@@ -8,12 +8,18 @@ const authRoutes = require('./auth');
 const oauthRoutes = require('./oauth');
 const userRoutes = require('./users');
 const departmentRoutes = require('./departments');
+const boardRoutes = require('./boards');
 const masterRoutes = require('./masters');
 const assetRoutes = require('./assets');
 const assetMovementRoutes = require('./asset-movements');
+const standbyRoutes = require('./standby');
 const dashboardRoutes = require('./dashboard');
 const adminRoutes = require('./admin');
 const ticketRoutes = require('./tickets');
+const jobRoutes = require('./jobs');
+const requisitionRoutes = require('./requisitions');
+const deliveryTicketRoutes = require('./delivery-tickets');
+const reconciliationRoutes = require('./reconciliations');
 
 const router = express.Router();
 
@@ -50,12 +56,18 @@ router.get('/', (req, res) => {
       oauth: '/oauth',
       users: '/users',
       departments: '/departments',
+      boards: '/boards',
       masters: '/masters',
       assets: '/assets',
       assetMovements: '/asset-movements',
+      standby: '/standby',
       dashboard: '/dashboard',
       admin: '/admin',
-      tickets: '/tickets'
+      tickets: '/tickets',
+      jobs: '/jobs',
+      requisitions: '/requisitions',
+      deliveryTickets: '/delivery-tickets',
+      reconciliations: '/reconciliations'
     },
     documentation: '/docs',
     health: '/health',
@@ -68,12 +80,18 @@ router.use('/auth', authRoutes);
 router.use('/oauth', oauthRoutes);
 router.use('/users', userRoutes);
 router.use('/departments', departmentRoutes);
+router.use('/boards', boardRoutes);
 router.use('/masters', masterRoutes);
 router.use('/assets', assetRoutes);
 router.use('/asset-movements', assetMovementRoutes);
+router.use('/standby', standbyRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/admin', adminRoutes);
 router.use('/tickets', ticketRoutes);
+router.use('/jobs', jobRoutes);
+router.use('/requisitions', requisitionRoutes);
+router.use('/delivery-tickets', deliveryTicketRoutes);
+router.use('/reconciliations', reconciliationRoutes);
 
 
 // API version info

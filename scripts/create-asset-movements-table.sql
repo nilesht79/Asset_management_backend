@@ -75,7 +75,7 @@ CREATE TABLE dbo.ASSET_MOVEMENTS (
 
     -- Check Constraints (flexible for future expansion)
     CONSTRAINT CHK_movement_type
-        CHECK (movement_type IN ('assigned', 'transferred', 'returned', 'relocated', 'unassigned', 'available')),
+        CHECK (movement_type IN ('assigned', 'transferred', 'returned', 'relocated', 'unassigned', 'available', 'component_install', 'component_remove')),
 
     CONSTRAINT CHK_status
         CHECK (status IN ('assigned', 'available', 'maintenance', 'retired', 'lost', 'damaged', 'in-use'))

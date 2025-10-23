@@ -1,5 +1,8 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
+const ExcelJS = require('exceljs');
+const fs = require('fs');
+const path = require('path');
 
 const { connectDB, sql } = require('../../config/database');
 const { validateBody, validateParams, validateQuery, validatePagination, validateUUID } = require('../../middleware/validation');
@@ -12,6 +15,8 @@ const { getPaginationInfo } = require('../../utils/helpers');
 // const { permissions, USER_ROLES } = require('../../config/auth');
 const { roles: USER_ROLES } = require('../../config/auth');
 const validators = require('../../utils/validators');
+const { upload } = require('../../middleware/upload');
+const { generateDepartmentBulkTemplate, parseDepartmentBulkFile } = require('../../utils/excel-template');
 
 const router = express.Router();
 
@@ -25,29 +30,40 @@ router.get('/',
   validatePagination,
   asyncHandler(async (req, res) => {
     const { page, limit, offset, sortBy, sortOrder } = req.pagination;
-    const { search, status, parent_id } = req.query;
+    const { search, status, parent_id, board_id } = req.query;
 
     const pool = await connectDB();
-    
+
     // Build WHERE clause
     let whereClause = '1=1';
     const params = [];
-    
+
     if (search) {
       whereClause += ' AND (d.department_name LIKE @search OR d.description LIKE @search)';
       params.push({ name: 'search', type: sql.VarChar(255), value: `%${search}%` });
     }
 
+    // Filter by board
+    if (board_id) {
+      whereClause += ' AND bd.board_id = @board_id';
+      params.push({ name: 'board_id', type: sql.UniqueIdentifier, value: board_id });
+    }
+
+    // Build FROM clause based on board filter
+    const fromClause = board_id
+      ? 'FROM DEPARTMENT_MASTER d INNER JOIN BOARD_DEPARTMENTS bd ON d.department_id = bd.department_id'
+      : 'FROM DEPARTMENT_MASTER d';
+
     // Get total count
     const countRequest = pool.request();
     params.forEach(param => countRequest.input(param.name, param.type, param.value));
-    
+
     const countResult = await countRequest.query(`
-      SELECT COUNT(*) as total 
-      FROM DEPARTMENT_MASTER d
+      SELECT COUNT(DISTINCT d.department_id) as total
+      ${fromClause}
       WHERE ${whereClause}
     `);
-    
+
     const total = countResult.recordset[0].total;
 
     // Get paginated results
@@ -61,10 +77,10 @@ router.get('/',
     const safeSortOrder = sortOrder === 'asc' ? 'ASC' : 'DESC';
 
     const result = await dataRequest.query(`
-      SELECT d.department_id, d.department_name, d.description, d.contact_person_id,
+      SELECT DISTINCT d.department_id, d.department_name, CAST(d.description AS NVARCHAR(MAX)) as description, d.contact_person_id,
              d.created_at, d.updated_at,
              u.first_name as contact_first_name, u.last_name as contact_last_name, u.email as contact_email
-      FROM DEPARTMENT_MASTER d
+      ${fromClause}
       LEFT JOIN USER_MASTER u ON d.contact_person_id = u.user_id
       WHERE ${whereClause}
       ORDER BY ${safeSortBy} ${safeSortOrder}
@@ -267,6 +283,221 @@ router.get('/list',
     }));
     
     sendSuccess(res, { departments }, 'Departments list retrieved successfully');
+  })
+);
+
+// GET /departments/bulk-template - Download department bulk upload template
+router.get('/bulk-template',
+  requireDynamicPermission(),
+  asyncHandler(async (req, res) => {
+    // Generate template
+    const buffer = await generateDepartmentBulkTemplate();
+
+    // Set response headers for download
+    const fileName = `department_bulk_upload_template_${new Date().toISOString().split('T')[0]}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+
+    res.send(buffer);
+  })
+);
+
+// POST /departments/bulk-upload - Upload and process department bulk upload
+router.post('/bulk-upload',
+  requireDynamicPermission(),
+  upload.single('file'),
+  asyncHandler(async (req, res) => {
+    if (!req.file) {
+      return sendError(res, 'No file uploaded', 400);
+    }
+
+    const filePath = req.file.path;
+
+    try {
+      // Parse Excel file
+      const departments = await parseDepartmentBulkFile(filePath);
+
+      const pool = await connectDB();
+      const results = {
+        total: departments.length,
+        success: 0,
+        failed: 0,
+        errors: []
+      };
+
+      // Process each department
+      for (let i = 0; i < departments.length; i++) {
+        const dept = departments[i];
+        const rowNumber = i + 2; // Excel row (header is row 1, data starts at row 2)
+
+        try {
+          // Check if department name already exists
+          const existingDept = await pool.request()
+            .input('name', sql.VarChar(100), dept.department_name)
+            .query(`
+              SELECT department_id
+              FROM DEPARTMENT_MASTER
+              WHERE LOWER(department_name) = LOWER(@name)
+            `);
+
+          if (existingDept.recordset.length > 0) {
+            results.failed++;
+            results.errors.push({
+              row: rowNumber,
+              department_name: dept.department_name,
+              error: 'Department with this name already exists'
+            });
+            continue;
+          }
+
+          // Find contact person user ID if email provided
+          let contactPersonId = null;
+          if (dept.contact_person_email) {
+            const userResult = await pool.request()
+              .input('email', sql.VarChar(255), dept.contact_person_email)
+              .query(`
+                SELECT user_id
+                FROM USER_MASTER
+                WHERE LOWER(email) = LOWER(@email) AND is_active = 1
+              `);
+
+            if (userResult.recordset.length === 0) {
+              results.failed++;
+              results.errors.push({
+                row: rowNumber,
+                department_name: dept.department_name,
+                error: `Contact person email '${dept.contact_person_email}' not found in system`
+              });
+              continue;
+            }
+
+            contactPersonId = userResult.recordset[0].user_id;
+          }
+
+          // Insert department
+          const departmentId = uuidv4();
+          await pool.request()
+            .input('id', sql.UniqueIdentifier, departmentId)
+            .input('name', sql.VarChar(100), dept.department_name)
+            .input('description', sql.VarChar(500), dept.description || null)
+            .input('contact_person_id', sql.UniqueIdentifier, contactPersonId)
+            .query(`
+              INSERT INTO DEPARTMENT_MASTER (department_id, department_name, description, contact_person_id)
+              VALUES (@id, @name, @description, @contact_person_id)
+            `);
+
+          results.success++;
+        } catch (err) {
+          results.failed++;
+          results.errors.push({
+            row: rowNumber,
+            department_name: dept.department_name,
+            error: err.message
+          });
+        }
+      }
+
+      // Clean up uploaded file
+      fs.unlinkSync(filePath);
+
+      sendSuccess(res, results, 'Department bulk upload completed');
+    } catch (error) {
+      // Clean up uploaded file on error
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+
+      if (error.validationErrors) {
+        return sendError(res, 'Validation failed', 400, {
+          errors: error.validationErrors,
+          message: error.message
+        });
+      }
+
+      throw error;
+    }
+  })
+);
+
+// GET /departments/export - Export departments to Excel
+router.get('/export',
+  requireDynamicPermission(),
+  asyncHandler(async (req, res) => {
+    const { format = 'xlsx', search } = req.query;
+
+    const pool = await connectDB();
+
+    // Build WHERE clause for export
+    let whereClause = '1=1';
+    const params = [];
+
+    if (search) {
+      whereClause += ' AND (d.department_name LIKE @search OR d.description LIKE @search)';
+      params.push({ name: 'search', type: sql.VarChar(255), value: `%${search}%` });
+    }
+
+    // Get all departments for export (no pagination)
+    const dataRequest = pool.request();
+    params.forEach(param => dataRequest.input(param.name, param.type, param.value));
+
+    const result = await dataRequest.query(`
+      SELECT d.department_id, d.department_name, d.description, d.contact_person_id,
+             d.created_at, d.updated_at,
+             u.first_name as contact_first_name, u.last_name as contact_last_name, u.email as contact_email
+      FROM DEPARTMENT_MASTER d
+      LEFT JOIN USER_MASTER u ON d.contact_person_id = u.user_id
+      WHERE ${whereClause}
+      ORDER BY d.created_at DESC
+    `);
+
+    if (format === 'xlsx') {
+      // Create Excel workbook
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Departments');
+
+      // Add headers
+      worksheet.columns = [
+        { header: 'Department ID', key: 'id', width: 10 },
+        { header: 'Department Name', key: 'name', width: 30 },
+        { header: 'Description', key: 'description', width: 50 },
+        { header: 'Contact Person', key: 'contact_person', width: 30 },
+        { header: 'Contact Email', key: 'contact_email', width: 30 },
+        { header: 'Created Date', key: 'created_at', width: 20 },
+        { header: 'Updated Date', key: 'updated_at', width: 20 }
+      ];
+
+      // Style headers
+      worksheet.getRow(1).font = { bold: true };
+      worksheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' }
+      };
+
+      // Add data rows
+      result.recordset.forEach((dept, index) => {
+        worksheet.addRow({
+          id: String(index + 1).padStart(2, '0'),
+          name: dept.department_name,
+          description: dept.description || '',
+          contact_person: dept.contact_first_name ? `${dept.contact_first_name} ${dept.contact_last_name}` : '',
+          contact_email: dept.contact_email || '',
+          created_at: dept.created_at ? new Date(dept.created_at).toLocaleDateString() : '',
+          updated_at: dept.updated_at ? new Date(dept.updated_at).toLocaleDateString() : ''
+        });
+      });
+
+      // Set response headers for download
+      const fileName = `departments_export_${new Date().toISOString().split('T')[0]}.xlsx`;
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+
+      // Write to response
+      await workbook.xlsx.write(res);
+      res.end();
+    } else {
+      return sendError(res, 'Invalid export format. Only xlsx is supported.', 400);
+    }
   })
 );
 

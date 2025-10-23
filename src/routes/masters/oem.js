@@ -1,5 +1,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
+const fs = require('fs');
+const path = require('path');
 
 const { connectDB, sql } = require('../../config/database');
 const { validateBody, validatePagination, validateUUID } = require('../../middleware/validation');
@@ -9,6 +11,8 @@ const { sendSuccess, sendCreated, sendError, sendNotFound, sendConflict } = requ
 const { getPaginationInfo } = require('../../utils/helpers');
 const validators = require('../../utils/validators');
 const ExcelJS = require('exceljs');
+const { upload } = require('../../middleware/upload');
+const { generateOEMBulkTemplate, parseOEMBulkFile } = require('../../utils/excel-template');
 
 const router = express.Router();
 
@@ -171,6 +175,145 @@ router.get('/',
       oems: result.recordset,
       pagination
     }, 'OEMs retrieved successfully');
+  })
+);
+
+// GET /masters/oem/bulk-template - Download OEM bulk upload template
+router.get('/bulk-template',
+  requireDynamicPermission(),
+  asyncHandler(async (req, res) => {
+    // Generate template
+    const buffer = await generateOEMBulkTemplate();
+
+    // Set response headers for download
+    const fileName = `oem_bulk_upload_template_${new Date().toISOString().split('T')[0]}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+
+    res.send(buffer);
+  })
+);
+
+// POST /masters/oem/bulk-upload - Upload and process OEM bulk upload
+router.post('/bulk-upload',
+  requireDynamicPermission(),
+  upload.single('file'),
+  asyncHandler(async (req, res) => {
+    if (!req.file) {
+      return sendError(res, 'No file uploaded', 400);
+    }
+
+    const filePath = req.file.path;
+
+    try {
+      // Parse Excel file
+      const oems = await parseOEMBulkFile(filePath);
+
+      const pool = await connectDB();
+      const results = {
+        total: oems.length,
+        success: 0,
+        failed: 0,
+        errors: []
+      };
+
+      // Process each OEM
+      for (let i = 0; i < oems.length; i++) {
+        const oem = oems[i];
+        const rowNumber = i + 2; // Excel row (header is row 1, data starts at row 2)
+
+        try {
+          // Check if OEM name already exists
+          const existingName = await pool.request()
+            .input('name', sql.VarChar(100), oem.name)
+            .query(`
+              SELECT id
+              FROM oems
+              WHERE LOWER(name) = LOWER(@name)
+            `);
+
+          if (existingName.recordset.length > 0) {
+            results.failed++;
+            results.errors.push({
+              row: rowNumber,
+              oem_name: oem.name,
+              error: 'OEM with this name already exists'
+            });
+            continue;
+          }
+
+          // Check if OEM code already exists
+          const existingCode = await pool.request()
+            .input('code', sql.VarChar(20), oem.code)
+            .query(`
+              SELECT id
+              FROM oems
+              WHERE LOWER(code) = LOWER(@code)
+            `);
+
+          if (existingCode.recordset.length > 0) {
+            results.failed++;
+            results.errors.push({
+              row: rowNumber,
+              oem_name: oem.name,
+              error: `OEM code '${oem.code}' already exists`
+            });
+            continue;
+          }
+
+          // Insert OEM
+          const oemId = uuidv4();
+          await pool.request()
+            .input('id', sql.UniqueIdentifier, oemId)
+            .input('name', sql.VarChar(100), oem.name)
+            .input('code', sql.VarChar(20), oem.code)
+            .input('description', sql.VarChar(500), oem.description)
+            .input('contactPerson', sql.VarChar(100), oem.contact_person)
+            .input('email', sql.VarChar(255), oem.email)
+            .input('phone', sql.VarChar(20), oem.phone)
+            .input('website', sql.VarChar(255), oem.website)
+            .input('address', sql.VarChar(500), oem.address)
+            .input('isActive', sql.Bit, oem.is_active)
+            .query(`
+              INSERT INTO oems (
+                id, name, code, description, contact_person, email, phone,
+                website, address, is_active, created_at, updated_at
+              )
+              VALUES (
+                @id, @name, @code, @description, @contactPerson, @email, @phone,
+                @website, @address, @isActive, GETUTCDATE(), GETUTCDATE()
+              )
+            `);
+
+          results.success++;
+        } catch (error) {
+          results.failed++;
+          results.errors.push({
+            row: rowNumber,
+            oem_name: oem.name,
+            error: error.message || 'Unknown error occurred'
+          });
+        }
+      }
+
+      // Clean up uploaded file
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+
+      return sendSuccess(res, results, 'OEM bulk upload completed');
+    } catch (error) {
+      // Clean up uploaded file on error
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+
+      if (error.validationErrors) {
+        return sendError(res, error.message, 400, { errors: error.validationErrors });
+      }
+
+      throw error;
+    }
   })
 );
 

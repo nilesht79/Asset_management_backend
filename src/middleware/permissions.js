@@ -188,6 +188,10 @@ function extractResourceAndAction(method, baseUrl, routePath, fullPath) {
   else if (fullPath.includes('/statistics') || fullPath.includes('/dashboard')) action = 'read';
   else if (fullPath.includes('/export')) action = 'export';
   else if (fullPath.includes('/audit')) action = 'audit';
+  else if (fullPath.includes('/generate-form')) action = 'read'; // Generating forms is a read operation
+  else if (fullPath.includes('/upload-signature') || fullPath.includes('/upload-signed-form')) action = 'update'; // Uploading is an update operation
+  else if (fullPath.includes('/verify-signature') || fullPath.includes('/confirm-functionality')) action = 'update'; // Verification/confirmation is update
+  else if (fullPath.includes('/mark-delivered')) action = 'update'; // Mark as delivered (bypass verification)
   else {
     // Standard CRUD mapping
     switch (method) {
@@ -228,7 +232,7 @@ function buildPermissionKeys(resource, action) {
     permissions.push(`${resource}.manage`);
 
     // Generic parent permissions
-    if (action === 'read') {
+    if (action === 'read' || action === 'export') {
       permissions.push(`${parent}.read`);
     } else if (['create', 'update', 'delete'].includes(action)) {
       permissions.push(`${parent}.write`);
@@ -238,12 +242,15 @@ function buildPermissionKeys(resource, action) {
     // Standard resource.action format
     permissions.push(`${resource}.${action}`);
 
-    // Add additional fallback permissions for modify operations
+    // Add additional fallback permissions for read-like and modify operations
     if (['create', 'update', 'delete', 'assign', 'transfer'].includes(action)) {
       // Also accept read permission for some operations
       if (action !== 'create') {
         permissions.push(`${resource}.read`);
       }
+    } else if (action === 'export' || action === 'audit') {
+      // Export and audit should also work with read permission
+      permissions.push(`${resource}.read`);
     }
   }
 

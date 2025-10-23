@@ -2,6 +2,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const multer = require('multer');
 const XLSX = require('xlsx');
+const ExcelJS = require('exceljs');
 const csv = require('csv-parser');
 const fs = require('fs');
 const path = require('path');
@@ -158,6 +159,278 @@ router.get('/',
       products: result.recordset,
       pagination
     }, 'Products retrieved successfully');
+  })
+);
+
+// GET /masters/products/bulk-upload/template - Download template file
+router.get('/bulk-upload/template',
+  requireDynamicPermission(),
+  asyncHandler(async (req, res) => {
+    // Create sample template data
+    const templateData = [
+      {
+        name: 'Kingston HyperX Fury 16GB DDR4 3200MHz',
+        model: 'HX432C16FB3/16',
+        description: '16GB DDR4 Desktop RAM Module',
+        type: 'RAM/Memory',
+        category: 'DDR4 Memory',
+        subcategory: 'Desktop RAM',
+        oem: 'Kingston',
+        series: 'HyperX Fury',
+        capacity_value: 16,
+        capacity_unit: 'GB',
+        speed_value: 3200,
+        speed_unit: 'MHz',
+        interface_type: 'DDR4',
+        form_factor: 'DIMM',
+        specifications: 'Non-ECC, CL16, 1.35V, Black heatspreader',
+        warranty_period: 36
+      },
+      {
+        name: 'Intel Core i7-13700K',
+        model: 'BX8071513700K',
+        description: '13th Gen Desktop Processor',
+        type: 'Processor/CPU',
+        category: 'Desktop Processor',
+        subcategory: '',
+        oem: 'Intel',
+        series: 'Core i7',
+        capacity_value: 16,
+        capacity_unit: 'Cores',
+        speed_value: 3.4,
+        speed_unit: 'GHz',
+        interface_type: 'LGA1700',
+        form_factor: '',
+        specifications: '8P+8E cores, Turbo up to 5.4GHz, 30MB Cache, 125W TDP',
+        warranty_period: 36
+      },
+      {
+        name: 'Samsung 980 PRO 1TB',
+        model: 'MZ-V8P1T0BW',
+        description: '1TB NVMe M.2 SSD',
+        type: 'Storage - SSD/NVMe',
+        category: 'SSD NVMe',
+        subcategory: 'SSD M.2',
+        oem: 'Samsung',
+        series: '980 PRO',
+        capacity_value: 1024,
+        capacity_unit: 'GB',
+        speed_value: 7000,
+        speed_unit: 'MB/s',
+        interface_type: 'NVMe',
+        form_factor: 'M.2',
+        specifications: 'PCIe 4.0 x4, Read: 7000MB/s, Write: 5000MB/s',
+        warranty_period: 60
+      },
+      {
+        name: 'Dell OptiPlex 7090 Desktop',
+        model: 'OPTIPLEX-7090-MT',
+        description: 'Complete Desktop System with i7 processor',
+        type: 'Complete System',
+        category: 'Desktop Computer',
+        subcategory: 'Business Desktop',
+        oem: 'Dell',
+        series: 'OptiPlex 7000',
+        capacity_value: '',
+        capacity_unit: '',
+        speed_value: '',
+        speed_unit: '',
+        interface_type: '',
+        form_factor: 'Mid Tower',
+        specifications: 'Intel i7-11700, 16GB DDR4, 512GB NVMe SSD, Intel UHD Graphics 750, Windows 11 Pro, 3-Year Warranty',
+        warranty_period: 36
+      },
+      {
+        name: 'HP Pavilion Gaming Laptop',
+        model: 'PAVILION-15-EC2XXX',
+        description: 'Gaming Laptop with RTX Graphics',
+        type: 'Complete System',
+        category: 'Laptop',
+        subcategory: 'Gaming Laptop',
+        oem: 'HP',
+        series: 'Pavilion Gaming',
+        capacity_value: '',
+        capacity_unit: '',
+        speed_value: '',
+        speed_unit: '',
+        interface_type: '',
+        form_factor: '15.6 inch',
+        specifications: 'AMD Ryzen 7 5800H, 16GB DDR4, 512GB NVMe SSD, NVIDIA RTX 3060 6GB, 15.6" FHD 144Hz, Windows 11 Home',
+        warranty_period: 12
+      }
+    ];
+
+    // Create workbook
+    const ws = XLSX.utils.json_to_sheet(templateData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Products');
+
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 40 }, // name
+      { wch: 20 }, // model
+      { wch: 35 }, // description
+      { wch: 20 }, // type
+      { wch: 20 }, // category
+      { wch: 20 }, // subcategory
+      { wch: 15 }, // oem
+      { wch: 20 }, // series
+      { wch: 15 }, // capacity_value
+      { wch: 15 }, // capacity_unit
+      { wch: 12 }, // speed_value
+      { wch: 12 }, // speed_unit
+      { wch: 15 }, // interface_type
+      { wch: 15 }, // form_factor
+      { wch: 50 }, // specifications
+      { wch: 15 }  // warranty_period
+    ];
+
+    // Generate Excel file
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    // Send file
+    res.setHeader('Content-Disposition', 'attachment; filename=products-bulk-upload-template.xlsx');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.send(buffer);
+  })
+);
+
+// GET /masters/products/export - Export products to Excel
+router.get('/export',
+  requireDynamicPermission(),
+  asyncHandler(async (req, res) => {
+    const { format = 'xlsx', search, category_id, type_id, oem_id, status } = req.query;
+
+    const pool = await connectDB();
+
+    // Build WHERE clause for export
+    let whereClause = '1=1';
+    const params = [];
+
+    if (search) {
+      whereClause += ' AND (p.name LIKE @search OR p.model LIKE @search OR p.description LIKE @search)';
+      params.push({ name: 'search', type: sql.VarChar(255), value: `%${search}%` });
+    }
+
+    if (category_id) {
+      whereClause += ' AND p.category_id = @category_id';
+      params.push({ name: 'category_id', type: sql.UniqueIdentifier, value: category_id });
+    }
+
+    if (type_id) {
+      whereClause += ' AND p.type_id = @type_id';
+      params.push({ name: 'type_id', type: sql.UniqueIdentifier, value: type_id });
+    }
+
+    if (oem_id) {
+      whereClause += ' AND p.oem_id = @oem_id';
+      params.push({ name: 'oem_id', type: sql.UniqueIdentifier, value: oem_id });
+    }
+
+    if (status) {
+      whereClause += ' AND p.is_active = @status';
+      params.push({ name: 'status', type: sql.Bit, value: status === 'active' });
+    }
+
+    // Get all products for export (no pagination)
+    const dataRequest = pool.request();
+    params.forEach(param => dataRequest.input(param.name, param.type, param.value));
+
+    const result = await dataRequest.query(`
+      SELECT
+        p.id, p.name, p.model, p.description,
+        cat.name as category_name,
+        subcat.name as subcategory_name,
+        pt.name as type_name,
+        ps.name as series_name,
+        o.name as oem_name,
+        p.capacity_value, p.capacity_unit,
+        p.speed_value, p.speed_unit,
+        p.interface_type, p.form_factor,
+        p.specifications, p.warranty_period,
+        p.is_active, p.created_at, p.updated_at
+      FROM products p
+      LEFT JOIN categories cat ON p.category_id = cat.id
+      LEFT JOIN categories subcat ON p.subcategory_id = subcat.id
+      LEFT JOIN product_types pt ON p.type_id = pt.id
+      LEFT JOIN product_series ps ON p.series_id = ps.id
+      LEFT JOIN oems o ON p.oem_id = o.id
+      WHERE ${whereClause}
+      ORDER BY p.created_at DESC
+    `);
+
+    if (format === 'xlsx') {
+      // Create Excel workbook
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Products');
+
+      // Add headers
+      worksheet.columns = [
+        { header: 'Product ID', key: 'id', width: 10 },
+        { header: 'Product Name', key: 'name', width: 35 },
+        { header: 'Model', key: 'model', width: 25 },
+        { header: 'Description', key: 'description', width: 40 },
+        { header: 'Category', key: 'category', width: 20 },
+        { header: 'Sub-Category', key: 'subcategory', width: 20 },
+        { header: 'Type', key: 'type', width: 20 },
+        { header: 'Series', key: 'series', width: 20 },
+        { header: 'OEM', key: 'oem', width: 20 },
+        { header: 'Capacity', key: 'capacity', width: 15 },
+        { header: 'Speed', key: 'speed', width: 15 },
+        { header: 'Interface', key: 'interface', width: 15 },
+        { header: 'Form Factor', key: 'form_factor', width: 15 },
+        { header: 'Specifications', key: 'specifications', width: 50 },
+        { header: 'Warranty (Months)', key: 'warranty', width: 18 },
+        { header: 'Status', key: 'status', width: 12 },
+        { header: 'Created Date', key: 'created_at', width: 20 }
+      ];
+
+      // Style headers
+      worksheet.getRow(1).font = { bold: true };
+      worksheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' }
+      };
+
+      // Add data rows
+      result.recordset.forEach((product, index) => {
+        worksheet.addRow({
+          id: String(index + 1).padStart(3, '0'),
+          name: product.name || '',
+          model: product.model || '',
+          description: product.description || '',
+          category: product.category_name || '',
+          subcategory: product.subcategory_name || '',
+          type: product.type_name || '',
+          series: product.series_name || '',
+          oem: product.oem_name || '',
+          capacity: product.capacity_value && product.capacity_unit
+            ? `${product.capacity_value} ${product.capacity_unit}`
+            : '',
+          speed: product.speed_value && product.speed_unit
+            ? `${product.speed_value} ${product.speed_unit}`
+            : '',
+          interface: product.interface_type || '',
+          form_factor: product.form_factor || '',
+          specifications: product.specifications || '',
+          warranty: product.warranty_period || '',
+          status: product.is_active ? 'Active' : 'Inactive',
+          created_at: product.created_at ? new Date(product.created_at).toLocaleDateString() : ''
+        });
+      });
+
+      // Set response headers for download
+      const fileName = `products_export_${new Date().toISOString().split('T')[0]}.xlsx`;
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+
+      // Write to response
+      await workbook.xlsx.write(res);
+      res.end();
+    } else {
+      return sendError(res, 'Invalid export format. Only xlsx is supported.', 400);
+    }
   })
 );
 
@@ -952,139 +1225,6 @@ router.post('/bulk-upload',
       }
       throw error;
     }
-  })
-);
-
-// GET /masters/products/bulk-upload/template - Download template file
-router.get('/bulk-upload/template',
-  requireDynamicPermission(),
-  asyncHandler(async (req, res) => {
-    // Create sample template data
-    const templateData = [
-      {
-        name: 'Kingston HyperX Fury 16GB DDR4 3200MHz',
-        model: 'HX432C16FB3/16',
-        description: '16GB DDR4 Desktop RAM Module',
-        type: 'RAM/Memory',
-        category: 'DDR4 Memory',
-        subcategory: 'Desktop RAM',
-        oem: 'Kingston',
-        series: 'HyperX Fury',
-        capacity_value: 16,
-        capacity_unit: 'GB',
-        speed_value: 3200,
-        speed_unit: 'MHz',
-        interface_type: 'DDR4',
-        form_factor: 'DIMM',
-        specifications: 'Non-ECC, CL16, 1.35V, Black heatspreader',
-        warranty_period: 36
-      },
-      {
-        name: 'Intel Core i7-13700K',
-        model: 'BX8071513700K',
-        description: '13th Gen Desktop Processor',
-        type: 'Processor/CPU',
-        category: 'Desktop Processor',
-        subcategory: '',
-        oem: 'Intel',
-        series: 'Core i7',
-        capacity_value: 16,
-        capacity_unit: 'Cores',
-        speed_value: 3.4,
-        speed_unit: 'GHz',
-        interface_type: 'LGA1700',
-        form_factor: '',
-        specifications: '8P+8E cores, Turbo up to 5.4GHz, 30MB Cache, 125W TDP',
-        warranty_period: 36
-      },
-      {
-        name: 'Samsung 980 PRO 1TB',
-        model: 'MZ-V8P1T0BW',
-        description: '1TB NVMe M.2 SSD',
-        type: 'Storage - SSD/NVMe',
-        category: 'SSD NVMe',
-        subcategory: 'SSD M.2',
-        oem: 'Samsung',
-        series: '980 PRO',
-        capacity_value: 1024,
-        capacity_unit: 'GB',
-        speed_value: 7000,
-        speed_unit: 'MB/s',
-        interface_type: 'NVMe',
-        form_factor: 'M.2',
-        specifications: 'PCIe 4.0 x4, Read: 7000MB/s, Write: 5000MB/s',
-        warranty_period: 60
-      },
-      {
-        name: 'Dell OptiPlex 7090 Desktop',
-        model: 'OPTIPLEX-7090-MT',
-        description: 'Complete Desktop System with i7 processor',
-        type: 'Complete System',
-        category: 'Desktop Computer',
-        subcategory: 'Business Desktop',
-        oem: 'Dell',
-        series: 'OptiPlex 7000',
-        capacity_value: '',
-        capacity_unit: '',
-        speed_value: '',
-        speed_unit: '',
-        interface_type: '',
-        form_factor: 'Mid Tower',
-        specifications: 'Intel i7-11700, 16GB DDR4, 512GB NVMe SSD, Intel UHD Graphics 750, Windows 11 Pro, 3-Year Warranty',
-        warranty_period: 36
-      },
-      {
-        name: 'HP Pavilion Gaming Laptop',
-        model: 'PAVILION-15-EC2XXX',
-        description: 'Gaming Laptop with RTX Graphics',
-        type: 'Complete System',
-        category: 'Laptop',
-        subcategory: 'Gaming Laptop',
-        oem: 'HP',
-        series: 'Pavilion Gaming',
-        capacity_value: '',
-        capacity_unit: '',
-        speed_value: '',
-        speed_unit: '',
-        interface_type: '',
-        form_factor: '15.6 inch',
-        specifications: 'AMD Ryzen 7 5800H, 16GB DDR4, 512GB NVMe SSD, NVIDIA RTX 3060 6GB, 15.6" FHD 144Hz, Windows 11 Home',
-        warranty_period: 12
-      }
-    ];
-
-    // Create workbook
-    const ws = XLSX.utils.json_to_sheet(templateData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Products');
-
-    // Set column widths
-    ws['!cols'] = [
-      { wch: 40 }, // name
-      { wch: 20 }, // model
-      { wch: 35 }, // description
-      { wch: 20 }, // type
-      { wch: 20 }, // category
-      { wch: 20 }, // subcategory
-      { wch: 15 }, // oem
-      { wch: 20 }, // series
-      { wch: 15 }, // capacity_value
-      { wch: 15 }, // capacity_unit
-      { wch: 12 }, // speed_value
-      { wch: 12 }, // speed_unit
-      { wch: 15 }, // interface_type
-      { wch: 15 }, // form_factor
-      { wch: 50 }, // specifications
-      { wch: 15 }  // warranty_period
-    ];
-
-    // Generate Excel file
-    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-
-    // Send file
-    res.setHeader('Content-Disposition', 'attachment; filename=products-bulk-upload-template.xlsx');
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.send(buffer);
   })
 );
 

@@ -18,6 +18,7 @@ module.exports = {
   USER_ROLES: {
     SUPERADMIN: 'superadmin',
     ADMIN: 'admin',
+    IT_HEAD: 'it_head',
     DEPARTMENT_HEAD: 'department_head',
     COORDINATOR: 'coordinator',
     DEPARTMENT_COORDINATOR: 'department_coordinator',

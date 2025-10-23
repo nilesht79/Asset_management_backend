@@ -23,6 +23,10 @@ const router = express.Router();
 const bulkUploadRouter = require('./bulk-upload');
 router.use('/bulk-upload', bulkUploadRouter);
 
+// Mount engineers routes
+const engineersRouter = require('./engineers');
+router.use('/engineers', engineersRouter);
+
 // Apply authentication to all routes
 router.use(authenticateToken);
 
@@ -71,7 +75,7 @@ router.get('/',
   validatePagination,
   asyncHandler(async (req, res) => {
     const { page, limit, offset, sortBy, sortOrder } = req.pagination;
-    const { search, status, role, department_id, location_id } = req.query;
+    const { search, status, role, department_id, location_id, board_id } = req.query;
 
     const pool = await connectDB();
 
@@ -92,6 +96,16 @@ router.get('/',
     if (role) {
       whereClause += ' AND u.role = @role';
       params.push({ name: 'role', type: sql.VarChar(50), value: role });
+    }
+
+    if (board_id) {
+      // Filter users by board - users whose department belongs to the specified board
+      whereClause += ` AND u.department_id IN (
+        SELECT department_id
+        FROM BOARD_DEPARTMENTS
+        WHERE board_id = @boardId
+      )`;
+      params.push({ name: 'boardId', type: sql.UniqueIdentifier, value: board_id });
     }
 
     if (department_id) {
@@ -277,6 +291,75 @@ router.get('/export',
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename=users_export_${new Date().toISOString().split('T')[0]}.xlsx`);
     res.send(buffer);
+  })
+);
+
+// GET /users/:id/assets - Get assets assigned to a specific user
+// IMPORTANT: This route must come BEFORE /:id to avoid route conflicts
+router.get('/:id/assets',
+  requireDynamicPermission(),
+  validateUUID('id'),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { status, is_active } = req.query;
+
+    const pool = await connectDB();
+
+    // Check if user exists
+    const userCheck = await pool.request()
+      .input('userId', sql.UniqueIdentifier, id)
+      .query('SELECT user_id FROM USER_MASTER WHERE user_id = @userId');
+
+    if (userCheck.recordset.length === 0) {
+      return sendNotFound(res, 'User not found');
+    }
+
+    // Build WHERE clause for assets
+    let whereClause = 'a.assigned_to = @userId';
+    const params = [{ name: 'userId', type: sql.UniqueIdentifier, value: id }];
+
+    // Filter by status if provided (default to 'assigned')
+    const assetStatus = status || 'assigned';
+    whereClause += ' AND a.status = @status';
+    params.push({ name: 'status', type: sql.VarChar(20), value: assetStatus });
+
+    // Filter by is_active if provided (default to true)
+    const activeFilter = is_active !== undefined ? is_active === 'true' : true;
+    whereClause += ' AND a.is_active = @isActive';
+    params.push({ name: 'isActive', type: sql.Bit, value: activeFilter });
+
+    // Query to get user's assets
+    const dataRequest = pool.request();
+    params.forEach(param => dataRequest.input(param.name, param.type, param.value));
+
+    const result = await dataRequest.query(`
+      SELECT
+        a.id, a.asset_tag, a.tag_no, a.serial_number, a.status, a.condition_status,
+        a.purchase_date, a.warranty_end_date, a.purchase_cost, a.notes,
+        a.created_at, a.updated_at, a.product_id, a.assigned_to,
+        a.asset_type, a.parent_asset_id, a.installation_date, a.removal_date,
+        p.name as product_name, p.model as product_model,
+        c.id as category_id, c.name as category_name,
+        o.id as oem_id, o.name as oem_name,
+        CASE
+          WHEN a.warranty_end_date IS NULL THEN 'No Warranty'
+          WHEN a.warranty_end_date < GETUTCDATE() THEN 'Expired'
+          WHEN a.warranty_end_date BETWEEN GETUTCDATE() AND DATEADD(day, 30, GETUTCDATE()) THEN 'Expiring Soon'
+          ELSE 'Active'
+        END as warranty_status
+      FROM assets a
+      INNER JOIN products p ON a.product_id = p.id
+      LEFT JOIN categories c ON p.category_id = c.id
+      LEFT JOIN oems o ON p.oem_id = o.id
+      WHERE ${whereClause}
+      ORDER BY a.created_at DESC
+    `);
+
+    sendSuccess(res, {
+      assets: result.recordset,
+      total: result.recordset.length,
+      userId: id
+    }, 'User assets retrieved successfully');
   })
 );
 

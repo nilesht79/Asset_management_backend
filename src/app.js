@@ -17,6 +17,7 @@ const { validateCookieSettings } = require('./config/cookies');
 const routes = require('./routes');
 const { errorHandler } = require('./middleware/error-handler');
 const { sendError } = require('./utils/response');
+const { initializeScheduler, stopScheduler } = require('./config/scheduler');
 
 const app = express();
 
@@ -66,6 +67,10 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Serve uploaded files (with authentication)
+const path = require('path');
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
 // API routes
 app.use(`/api/${appConfig.app.apiVersion}`, routes);
 
@@ -98,6 +103,9 @@ const startServer = async () => {
     // Initialize Redis connection
     await connectRedis();
 
+    // Initialize job scheduler
+    initializeScheduler();
+
     // Start the server
     const server = app.listen(appConfig.app.port, () => {
       console.log(`🚀 Server running on port ${appConfig.app.port}`);
@@ -109,6 +117,10 @@ const startServer = async () => {
     // Graceful shutdown
     const gracefulShutdown = (signal) => {
       console.log(`\n${signal} received. Starting graceful shutdown...`);
+
+      // Stop all scheduled jobs
+      stopScheduler();
+
       server.close(() => {
         console.log('HTTP server closed.');
         process.exit(0);

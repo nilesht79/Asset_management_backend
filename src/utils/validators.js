@@ -146,15 +146,15 @@ const validators = {
 
     update: Joi.object({
       name: Joi.string().min(2).max(200).optional(),
-      description: Joi.string().max(1000).optional(),
-      model: Joi.string().max(100).optional(),
-      type_id: Joi.string().uuid().optional(),
-      category_id: Joi.string().uuid().optional(),
-      subcategory_id: Joi.string().uuid().optional(),
-      series_id: Joi.string().uuid().optional(),
-      oem_id: Joi.string().uuid().optional(),
+      description: Joi.string().max(1000).allow(null, '').optional(),
+      model: Joi.string().max(100).allow(null, '').optional(),
+      type_id: Joi.string().uuid().allow(null).optional(),
+      category_id: Joi.string().uuid().allow(null).optional(),
+      subcategory_id: Joi.string().uuid().allow(null).optional(),
+      series_id: Joi.string().uuid().allow(null).optional(),
+      oem_id: Joi.string().uuid().allow(null).optional(),
       specifications: Joi.string().max(5000).allow(null, '').optional(),
-      warranty_period: Joi.number().integer().positive().optional(),
+      warranty_period: Joi.number().integer().positive().allow(null).optional(),
       capacity_value: Joi.number().positive().allow(null).optional(),
       capacity_unit: Joi.string().max(20).allow(null, '').optional(),
       speed_value: Joi.number().positive().allow(null).optional(),
@@ -381,7 +381,7 @@ const validators = {
   // Asset validations
   asset: {
     create: Joi.object({
-      asset_tag: Joi.string().min(1).max(50).required(),
+      asset_tag: Joi.string().min(1).max(50).optional(), // CHANGED: Optional - auto-generated from product
       serial_number: Joi.string().min(1).max(100).required(),
       product_id: Joi.string().uuid().required(),
       assigned_to: Joi.string().uuid().optional().allow(null),
@@ -391,7 +391,13 @@ const validators = {
       warranty_end_date: Joi.date().optional().allow(null),
       purchase_cost: Joi.number().positive().precision(2).optional().allow(null),
       notes: Joi.string().max(1000).optional().allow(null),
-      is_active: Joi.boolean().default(true)
+      is_active: Joi.boolean().default(true),
+      // New fields for component hierarchy
+      asset_type: Joi.string().valid('standalone', 'parent', 'component').default('standalone'),
+      parent_asset_id: Joi.string().uuid().optional().allow(null),
+      installation_date: Joi.date().optional().allow(null),
+      installation_notes: Joi.string().max(1000).optional().allow(null),
+      installed_by: Joi.string().uuid().optional().allow(null)
     }),
 
     update: Joi.object({
@@ -405,7 +411,25 @@ const validators = {
       warranty_end_date: Joi.date().optional().allow(null),
       purchase_cost: Joi.number().positive().precision(2).optional().allow(null),
       notes: Joi.string().max(1000).optional().allow(null),
-      is_active: Joi.boolean().optional()
+      is_active: Joi.boolean().optional(),
+      // New fields for component hierarchy
+      asset_type: Joi.string().valid('standalone', 'parent', 'component').optional(),
+      parent_asset_id: Joi.string().uuid().optional().allow(null),
+      installation_date: Joi.date().optional().allow(null),
+      installation_notes: Joi.string().max(1000).optional().allow(null),
+      installed_by: Joi.string().uuid().optional().allow(null)
+    }),
+
+    // New validator for component installation
+    installComponent: Joi.object({
+      component_asset_id: Joi.string().uuid().required(),
+      installation_notes: Joi.string().max(1000).optional().allow(null, ''),
+      installed_by: Joi.string().uuid().optional().allow(null)
+    }),
+
+    // New validator for component removal
+    removeComponent: Joi.object({
+      removal_notes: Joi.string().max(1000).optional().allow(null, '')
     })
   },
 

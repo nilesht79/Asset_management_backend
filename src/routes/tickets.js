@@ -10,7 +10,7 @@ const { authenticateOAuth } = require('../middleware/oauth-auth');
 const { requireRole } = require('../middleware/permissions');
 
 // Roles that can manage tickets
-const TICKET_MANAGERS = ['coordinator', 'superadmin', 'department_coordinator'];
+const TICKET_MANAGERS = ['it_head', 'coordinator', 'superadmin', 'department_coordinator'];
 
 /**
  * @route   GET /api/tickets/stats

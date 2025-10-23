@@ -13,13 +13,19 @@ const { getPaginationInfo } = require('../../utils/helpers');
 const validators = require('../../utils/validators');
 const { logAssetAssignmentChange } = require('../../controllers/assetMovementController');
 const { generateAssetBulkTemplate, parseAssetBulkFile, generateLegacyAssetTemplate, parseLegacyAssetFile } = require('../../utils/excel-template');
-const { generateUniqueTagNo } = require('../../utils/tag-generator');
+const { generateUniqueTagNo, generateUniqueAssetTag } = require('../../utils/tag-generator');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
+// Import component routes
+const componentRoutes = require('./components');
+
 // Apply authentication to all asset routes
 router.use(authenticateToken);
+
+// Mount component routes - MUST be before other /:id routes to avoid conflicts
+router.use('/:id/components', componentRoutes);
 
 // GET /assets - List all assets with pagination, search, and filtering
 router.get('/',
@@ -35,14 +41,17 @@ router.get('/',
       assigned_to,
       product_id,
       category_id,
+      product_type_id,
       oem_id,
-      warranty_expiring
+      warranty_expiring,
+      board_id
     } = req.query;
 
     const pool = await connectDB();
 
     // Build WHERE clause
-    let whereClause = 'a.is_active = 1';
+    // Exclude standby assets from regular inventory (they have their own standby pool view)
+    let whereClause = 'a.is_active = 1 AND (a.is_standby_asset = 0 OR a.is_standby_asset IS NULL)';
     const params = [];
 
     if (search) {
@@ -80,6 +89,11 @@ router.get('/',
       params.push({ name: 'categoryId', type: sql.UniqueIdentifier, value: category_id });
     }
 
+    if (product_type_id) {
+      whereClause += ' AND p.type_id = @productTypeId';
+      params.push({ name: 'productTypeId', type: sql.UniqueIdentifier, value: product_type_id });
+    }
+
     if (oem_id) {
       whereClause += ' AND p.oem_id = @oemId';
       params.push({ name: 'oemId', type: sql.UniqueIdentifier, value: oem_id });
@@ -88,6 +102,12 @@ router.get('/',
     // Warranty expiring filter (within 30 days)
     if (warranty_expiring === 'true') {
       whereClause += ' AND a.warranty_end_date IS NOT NULL AND a.warranty_end_date BETWEEN GETUTCDATE() AND DATEADD(day, 30, GETUTCDATE())';
+    }
+
+    // Board filter (via user's department)
+    if (board_id) {
+      whereClause += ' AND bd.board_id = @boardId';
+      params.push({ name: 'boardId', type: sql.UniqueIdentifier, value: board_id });
     }
 
     // Get total count
@@ -99,8 +119,11 @@ router.get('/',
       FROM assets a
       INNER JOIN products p ON a.product_id = p.id
       LEFT JOIN categories c ON p.category_id = c.id
+      LEFT JOIN product_types pt ON p.type_id = pt.id
       LEFT JOIN oems o ON p.oem_id = o.id
       LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
+      LEFT JOIN DEPARTMENT_MASTER dept ON u.department_id = dept.department_id
+      LEFT JOIN BOARD_DEPARTMENTS bd ON dept.department_id = bd.department_id
       WHERE ${whereClause}
     `);
 
@@ -121,8 +144,10 @@ router.get('/',
         a.id, a.asset_tag, a.tag_no, a.serial_number, a.status, a.condition_status, a.purchase_date, a.warranty_end_date,
         a.purchase_cost, a.notes, a.created_at, a.updated_at,
         a.product_id, a.assigned_to,
+        a.asset_type, a.parent_asset_id, a.installation_date, a.removal_date,
         p.name as product_name, p.model as product_model,
         c.id as category_id, c.name as category_name,
+        pt.id as product_type_id, pt.name as product_type_name,
         o.id as oem_id, o.name as oem_name,
         u.location_id,
         u.first_name + ' ' + u.last_name as assigned_user_name,
@@ -132,6 +157,7 @@ router.get('/',
         l.address as location_address,
         l.building as location_building,
         l.floor as location_floor,
+        (SELECT COUNT(*) FROM assets comp WHERE comp.parent_asset_id = a.id AND comp.is_active = 1 AND comp.removal_date IS NULL) as installed_component_count,
         CASE
           WHEN a.warranty_end_date IS NULL THEN 'No Warranty'
           WHEN a.warranty_end_date < GETUTCDATE() THEN 'Expired'
@@ -141,10 +167,12 @@ router.get('/',
       FROM assets a
       INNER JOIN products p ON a.product_id = p.id
       LEFT JOIN categories c ON p.category_id = c.id
+      LEFT JOIN product_types pt ON p.type_id = pt.id
       LEFT JOIN oems o ON p.oem_id = o.id
       LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
       LEFT JOIN DEPARTMENT_MASTER d ON u.department_id = d.department_id
       LEFT JOIN locations l ON u.location_id = l.id
+      LEFT JOIN BOARD_DEPARTMENTS bd ON d.department_id = bd.department_id
       WHERE ${whereClause}
       ORDER BY ${safeSortBy} ${safeSortOrder}
       OFFSET @offset ROWS
@@ -277,6 +305,7 @@ router.get('/export',
       assigned_to,
       product_id,
       category_id,
+      product_type_id,
       oem_id,
       warranty_expiring
     } = req.query;
@@ -322,6 +351,11 @@ router.get('/export',
       params.push({ name: 'categoryId', type: sql.UniqueIdentifier, value: category_id });
     }
 
+    if (product_type_id) {
+      whereClause += ' AND p.type_id = @productTypeId';
+      params.push({ name: 'productTypeId', type: sql.UniqueIdentifier, value: product_type_id });
+    }
+
     if (oem_id) {
       whereClause += ' AND p.oem_id = @oemId';
       params.push({ name: 'oemId', type: sql.UniqueIdentifier, value: oem_id });
@@ -341,12 +375,15 @@ router.get('/export',
       SELECT
         a.id, a.asset_tag, a.tag_no, a.serial_number, a.status, a.condition_status,
         a.purchase_date, a.warranty_end_date, a.purchase_cost, a.notes, a.created_at, a.updated_at,
+        a.asset_type, a.parent_asset_id, a.installation_date, a.removal_date, a.installation_notes,
         p.name as product_name, p.model as product_model,
         l.name as location_name, l.building as location_building, l.floor as location_floor, l.address as location_address,
         u.first_name + ' ' + u.last_name as assigned_user_name, u.email as assigned_user_email,
         d.department_name as department_name,
         c.name as category_name,
-        o.name as oem_name
+        o.name as oem_name,
+        parent.asset_tag as parent_asset_tag,
+        (SELECT COUNT(*) FROM assets comp WHERE comp.parent_asset_id = a.id AND comp.is_active = 1 AND comp.removal_date IS NULL) as component_count
       FROM assets a
       INNER JOIN products p ON a.product_id = p.id
       LEFT JOIN categories c ON p.category_id = c.id
@@ -354,6 +391,7 @@ router.get('/export',
       LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
       LEFT JOIN locations l ON u.location_id = l.id
       LEFT JOIN DEPARTMENT_MASTER d ON u.department_id = d.department_id
+      LEFT JOIN assets parent ON a.parent_asset_id = parent.id
       WHERE ${whereClause}
       ORDER BY a.created_at DESC
     `);
@@ -372,6 +410,12 @@ router.get('/export',
         'Product Model': asset.product_model || '',
         'OEM': asset.oem_name || '',
         'Category': asset.category_name || '',
+        'Asset Type': asset.asset_type || 'standalone',
+        'Parent Asset Tag': asset.parent_asset_tag || '',
+        'Component Count': asset.component_count || 0,
+        'Installation Date': asset.installation_date ? new Date(asset.installation_date).toLocaleDateString() : '',
+        'Removal Date': asset.removal_date ? new Date(asset.removal_date).toLocaleDateString() : '',
+        'Installation Notes': asset.installation_notes || '',
         'Department': asset.department_name || '',
         'Location': asset.location_name || '',
         'Building': asset.location_building || '',
@@ -719,7 +763,45 @@ router.post('/legacy-import',
 
       for (const asset of batch) {
         try {
+          // Extract component hierarchy fields
+          const asset_type = asset.asset_type || 'standalone';
+          const parent_serial_number = asset.parent_serial_number; // CHANGED: from parent_asset_tag
+          const installation_notes = asset.installation_notes;
+
+          // Resolve parent_serial_number to parent_asset_id if provided
+          let parentAssetId = null;
+          if (parent_serial_number) {
+            const parentResult = await pool.request()
+              .input('serialNumber', sql.VarChar(100), parent_serial_number)
+              .query('SELECT id, asset_type FROM assets WHERE serial_number = @serialNumber AND is_active = 1');
+
+            if (parentResult.recordset.length === 0) {
+              throw new Error(`Parent asset not found with serial number: ${parent_serial_number}`);
+            }
+
+            const parentAsset = parentResult.recordset[0];
+            if (parentAsset.asset_type === 'component') {
+              throw new Error('Cannot install component into another component');
+            }
+
+            parentAssetId = parentAsset.id;
+          }
+
           const assetId = uuidv4();
+
+          // Validate component installation if it's a component
+          if (asset_type === 'component' && parentAssetId) {
+            const validationResult = await pool.request()
+              .input('component_id', sql.UniqueIdentifier, assetId)
+              .input('parent_id', sql.UniqueIdentifier, parentAssetId)
+              .output('is_valid', sql.Bit)
+              .output('error_message', sql.VarChar(500))
+              .execute('sp_validate_component_installation');
+
+            if (!validationResult.output.is_valid) {
+              throw new Error(validationResult.output.error_message);
+            }
+          }
 
           // Get product name for asset_tag generation
           const productResult = await pool.request()
@@ -731,8 +813,9 @@ router.post('/legacy-import',
           }
 
           const productName = productResult.recordset[0].name;
-          // Generate asset_tag from product name (e.g., "Dell Laptop" -> "DELL-LAPTOP")
-          const assetTag = productName.toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+
+          // Auto-generate asset_tag from product name
+          const assetTag = await generateUniqueAssetTag(productName, asset.product_id);
 
           // Get location from assigned user if available
           let userLocationId = null;
@@ -748,6 +831,9 @@ router.post('/legacy-import',
           // Generate unique tag_no
           const tagNo = await generateUniqueTagNo(assetTag, userLocationId);
 
+          // Determine final status for components
+          const finalStatus = asset_type === 'component' ? 'in_use' : asset.status;
+
           await pool.request()
             .input('id', sql.UniqueIdentifier, assetId)
             .input('assetTag', sql.VarChar(50), assetTag)
@@ -755,21 +841,29 @@ router.post('/legacy-import',
             .input('serialNumber', sql.VarChar(100), asset.serial_number)
             .input('productId', sql.UniqueIdentifier, asset.product_id)
             .input('assignedTo', sql.UniqueIdentifier, asset.assigned_to)
-            .input('status', sql.VarChar(20), asset.status)
+            .input('status', sql.VarChar(20), finalStatus)
             .input('conditionStatus', sql.VarChar(20), asset.condition_status)
             .input('purchaseDate', sql.Date, asset.purchase_date)
             .input('purchaseCost', sql.Decimal(10, 2), asset.purchase_cost)
             .input('warrantyEndDate', sql.Date, asset.warranty_end_date)
             .input('notes', sql.NVarChar(sql.MAX), asset.notes)
+            .input('assetType', sql.VarChar(20), asset_type)
+            .input('parentAssetId', sql.UniqueIdentifier, parentAssetId)
+            .input('installationDate', sql.DateTime, asset_type === 'component' ? new Date() : null)
+            .input('installationNotes', sql.Text, installation_notes)
             .query(`
               INSERT INTO assets (
                 id, asset_tag, tag_no, serial_number, product_id, assigned_to,
                 status, condition_status, purchase_date, purchase_cost, warranty_end_date,
-                notes, is_active, created_at, updated_at
+                notes, is_active,
+                asset_type, parent_asset_id, installation_date, installation_notes,
+                created_at, updated_at
               ) VALUES (
                 @id, @assetTag, @tagNo, @serialNumber, @productId, @assignedTo,
                 @status, @conditionStatus, @purchaseDate, @purchaseCost, @warrantyEndDate,
-                @notes, 1, GETUTCDATE(), GETUTCDATE()
+                @notes, 1,
+                @assetType, @parentAssetId, @installationDate, @installationNotes,
+                GETUTCDATE(), GETUTCDATE()
               )
             `);
 
@@ -793,6 +887,100 @@ router.post('/legacy-import',
       failed: results.failed.length,
       details: results
     }, 'Legacy import completed');
+  })
+);
+
+// GET /assets/dropdown - Get assets for dropdown/selection
+// IMPORTANT: This must be BEFORE /:id routes to avoid treating "dropdown" as a UUID
+router.get('/dropdown',
+  requireDynamicPermission(),
+  asyncHandler(async (req, res) => {
+    const {
+      status,
+      category_id,
+      location_id,
+      available_only,
+      asset_type,
+      exclude_standby,        // NEW: Exclude standby pool assets
+      exclude_components,     // NEW: Exclude already-installed components
+      exclude_assigned        // NEW: Exclude assigned assets
+    } = req.query;
+
+    const pool = await connectDB();
+    const request = pool.request();
+
+    let query = `
+      SELECT
+        a.id,
+        a.asset_tag as label,
+        a.id as value,
+        a.status,
+        a.asset_type,
+        a.serial_number,
+        a.assigned_to,
+        a.parent_asset_id,
+        a.is_standby_asset,
+        p.name as product_name,
+        l.name as location_name
+      FROM assets a
+      INNER JOIN products p ON a.product_id = p.id
+      LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
+      LEFT JOIN locations l ON u.location_id = l.id
+      WHERE a.is_active = 1
+    `;
+
+    // Base filters
+    if (available_only === 'true') {
+      query += ' AND a.status = \'available\'';
+      query += ' AND a.assigned_to IS NULL';  // Must not be assigned
+    }
+
+    if (status) {
+      query += ' AND a.status = @status';
+      request.input('status', sql.VarChar(20), status);
+    }
+
+    if (asset_type) {
+      query += ' AND a.asset_type = @assetType';
+      request.input('assetType', sql.VarChar(20), asset_type);
+    }
+
+    if (category_id) {
+      query += ' AND p.category_id = @categoryId';
+      request.input('categoryId', sql.UniqueIdentifier, category_id);
+    }
+
+    if (location_id) {
+      query += ' AND u.location_id = @locationId';
+      request.input('locationId', sql.UniqueIdentifier, location_id);
+    }
+
+    // NEW: Component Installation Specific Filters
+    if (exclude_standby === 'true') {
+      query += ' AND a.is_standby_asset = 0';  // Not in standby pool
+    }
+
+    if (exclude_components === 'true') {
+      query += ' AND a.parent_asset_id IS NULL';  // Not already a component
+    }
+
+    if (exclude_assigned === 'true') {
+      query += ' AND a.assigned_to IS NULL';  // Not assigned to user
+    }
+
+    // Exclude assets with active standby assignments (they're loaned out)
+    query += `
+      AND NOT EXISTS (
+        SELECT 1 FROM STANDBY_ASSIGNMENTS sa
+        WHERE sa.standby_asset_id = a.id AND sa.status = 'active'
+      )
+    `;
+
+    query += ' ORDER BY a.asset_tag';
+
+    const result = await request.query(query);
+
+    sendSuccess(res, result.recordset, 'Assets dropdown retrieved successfully');
   })
 );
 
@@ -910,7 +1098,11 @@ router.post('/bulk',
           purchase_date,
           warranty_end_date,
           purchase_cost,
-          notes
+          notes,
+          // Component hierarchy fields
+          asset_type = 'standalone',
+          parent_serial_number, // CHANGED: from parent_asset_tag to parent_serial_number
+          installation_notes
         } = asset;
 
         if (!serial_number) {
@@ -921,6 +1113,36 @@ router.post('/bulk',
         if (!product_id) {
           errors.push({ asset, error: 'Product ID is required' });
           continue;
+        }
+
+        // Validate component requirements
+        // Note: Components can exist without a parent (spare/stock components)
+        // Parent is only required if the component status indicates it's installed
+
+        if (asset_type === 'component' && asset.assigned_to) {
+          errors.push({ asset, error: 'Components cannot be assigned to users' });
+          continue;
+        }
+
+        // Resolve parent_serial_number to parent_asset_id if provided
+        let parentAssetId = null;
+        if (parent_serial_number) {
+          const parentResult = await pool.request()
+            .input('serialNumber', sql.VarChar(100), parent_serial_number)
+            .query('SELECT id, asset_type FROM assets WHERE serial_number = @serialNumber AND is_active = 1');
+
+          if (parentResult.recordset.length === 0) {
+            errors.push({ asset, error: `Parent asset not found with serial number: ${parent_serial_number}` });
+            continue;
+          }
+
+          const parentAsset = parentResult.recordset[0];
+          if (parentAsset.asset_type === 'component') {
+            errors.push({ asset, error: 'Cannot install component into another component' });
+            continue;
+          }
+
+          parentAssetId = parentAsset.id;
         }
 
         // Get product name for asset_tag generation
@@ -934,8 +1156,9 @@ router.post('/bulk',
         }
 
         const productName = productResult.recordset[0].name;
-        // Generate asset_tag from product name (e.g., "Dell Laptop" -> "DELL-LAPTOP")
-        const assetTag = productName.toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+
+        // Auto-generate asset_tag from product name
+        const assetTag = await generateUniqueAssetTag(productName, product_id);
 
         // Get location from assigned user if asset has assigned_to
         let userLocationId = null;
@@ -951,30 +1174,59 @@ router.post('/bulk',
         // Generate unique tag_no
         const tagNo = await generateUniqueTagNo(assetTag, userLocationId);
 
+        // Generate asset ID upfront for validation
+        const assetId = uuidv4();
+
+        // Validate component installation if it's a component
+        if (asset_type === 'component' && parentAssetId) {
+          const validationResult = await pool.request()
+            .input('component_id', sql.UniqueIdentifier, assetId)
+            .input('parent_id', sql.UniqueIdentifier, parentAssetId)
+            .output('is_valid', sql.Bit)
+            .output('error_message', sql.VarChar(500))
+            .execute('sp_validate_component_installation');
+
+          if (!validationResult.output.is_valid) {
+            errors.push({ asset, error: validationResult.output.error_message });
+            continue;
+          }
+        }
+
+        // Determine final status for components
+        const finalStatus = asset_type === 'component' ? 'in_use' : status;
+
         const request = pool.request()
-          .input('id', sql.UniqueIdentifier, uuidv4())
+          .input('id', sql.UniqueIdentifier, assetId)
           .input('assetTag', sql.VarChar(50), assetTag)
           .input('tagNo', sql.VarChar(100), tagNo)
           .input('serialNumber', sql.VarChar(100), serial_number)
           .input('productId', sql.UniqueIdentifier, product_id)
           .input('assignedTo', sql.UniqueIdentifier, asset.assigned_to || null)
-          .input('status', sql.VarChar(20), status)
+          .input('status', sql.VarChar(20), finalStatus)
           .input('conditionStatus', sql.VarChar(20), condition_status)
           .input('purchaseDate', sql.Date, purchase_date || null)
           .input('warrantyEndDate', sql.Date, warranty_end_date || null)
           .input('purchaseCost', sql.Decimal(10, 2), purchase_cost || null)
           .input('notes', sql.Text, notes || null)
-          .input('isActive', sql.Bit, true);
+          .input('isActive', sql.Bit, true)
+          .input('assetType', sql.VarChar(20), asset_type)
+          .input('parentAssetId', sql.UniqueIdentifier, parentAssetId)
+          .input('installationDate', sql.DateTime, asset_type === 'component' ? new Date() : null)
+          .input('installationNotes', sql.Text, installation_notes || null);
 
         const result = await request.query(`
           INSERT INTO assets (
             id, asset_tag, tag_no, serial_number, product_id, assigned_to, status, condition_status,
-            purchase_date, warranty_end_date, purchase_cost, notes, is_active, created_at, updated_at
+            purchase_date, warranty_end_date, purchase_cost, notes, is_active,
+            asset_type, parent_asset_id, installation_date, installation_notes,
+            created_at, updated_at
           )
           OUTPUT INSERTED.*
           VALUES (
             @id, @assetTag, @tagNo, @serialNumber, @productId, @assignedTo, @status, @conditionStatus,
-            @purchaseDate, @warrantyEndDate, @purchaseCost, @notes, @isActive, GETUTCDATE(), GETUTCDATE()
+            @purchaseDate, @warrantyEndDate, @purchaseCost, @notes, @isActive,
+            @assetType, @parentAssetId, @installationDate, @installationNotes,
+            GETUTCDATE(), GETUTCDATE()
           )
         `);
 
@@ -1009,18 +1261,28 @@ router.post('/',
       warranty_end_date,
       purchase_cost,
       notes,
-      is_active = true
+      is_active = true,
+      // Component hierarchy fields
+      asset_type = 'standalone',
+      parent_asset_id,
+      installation_notes,
+      installed_by
     } = req.body;
 
     const pool = await connectDB();
 
-    // Check if asset tag already exists
-    const existingResult = await pool.request()
-      .input('assetTag', sql.VarChar(50), asset_tag.trim())
-      .query('SELECT id FROM assets WHERE asset_tag = @assetTag');
+    // Validate component-specific rules
+    if (asset_type === 'component') {
+      // Note: parent_asset_id is optional - components can be spare/stock without a parent
+      // Parent is only required when installing the component
+      if (assigned_to) {
+        return sendError(res, 'Components cannot be assigned to users', 400);
+      }
+    }
 
-    if (existingResult.recordset.length > 0) {
-      return sendConflict(res, 'Asset tag already exists');
+    // Validate non-component cannot have parent
+    if (asset_type !== 'component' && parent_asset_id) {
+      return sendError(res, 'Only components can have a parent asset', 400);
     }
 
     // Check if serial number already exists
@@ -1034,13 +1296,14 @@ router.post('/',
       }
     }
 
-    // Verify that referenced entities exist
+    // Verify that referenced entities exist and get product name for asset_tag generation
     const referencesResult = await pool.request()
       .input('productId', sql.UniqueIdentifier, product_id)
       .input('assignedTo', sql.UniqueIdentifier, assigned_to)
       .query(`
         SELECT
           (SELECT COUNT(*) FROM products WHERE id = @productId AND is_active = 1) as product_exists,
+          (SELECT name FROM products WHERE id = @productId AND is_active = 1) as product_name,
           (SELECT COUNT(*) FROM USER_MASTER WHERE user_id = @assignedTo AND is_active = 1) as user_exists
       `);
 
@@ -1053,6 +1316,11 @@ router.post('/',
     if (assigned_to && refs.user_exists === 0) {
       return sendNotFound(res, 'User not found or inactive');
     }
+
+    // Auto-generate asset_tag if not provided
+    const finalAssetTag = asset_tag && asset_tag.trim()
+      ? asset_tag.trim()
+      : await generateUniqueAssetTag(refs.product_name, product_id);
 
     // Validate status logic
     if (status === 'assigned' && !assigned_to) {
@@ -1073,47 +1341,80 @@ router.post('/',
         userLocationId = userResult.recordset[0].location_id;
       }
     }
-    const tagNo = await generateUniqueTagNo(asset_tag.trim(), userLocationId);
+    const tagNo = await generateUniqueTagNo(finalAssetTag, userLocationId);
 
+    // Generate asset ID upfront
     const assetId = uuidv4();
+
+    // Validate component installation if it's a component
+    if (asset_type === 'component' && parent_asset_id) {
+      const validationResult = await pool.request()
+        .input('component_id', sql.UniqueIdentifier, assetId)
+        .input('parent_id', sql.UniqueIdentifier, parent_asset_id)
+        .output('is_valid', sql.Bit)
+        .output('error_message', sql.VarChar(500))
+        .execute('sp_validate_component_installation');
+
+      if (!validationResult.output.is_valid) {
+        return sendError(res, validationResult.output.error_message, 400);
+      }
+    }
+
+    // Determine final status for components (always 'in_use' when installed)
+    const finalStatus = asset_type === 'component' ? 'in_use' : status;
+    const performedBy = installed_by || req.user?.user_id;
     const result = await pool.request()
       .input('id', sql.UniqueIdentifier, assetId)
-      .input('assetTag', sql.VarChar(50), asset_tag.trim())
+      .input('assetTag', sql.VarChar(50), finalAssetTag)
       .input('tagNo', sql.VarChar(100), tagNo)
       .input('serialNumber', sql.VarChar(100), serial_number ? serial_number.trim() : null)
       .input('productId', sql.UniqueIdentifier, product_id)
       .input('assignedTo', sql.UniqueIdentifier, assigned_to)
-      .input('status', sql.VarChar(20), status)
+      .input('status', sql.VarChar(20), finalStatus)
       .input('conditionStatus', sql.VarChar(20), condition_status)
       .input('purchaseDate', sql.Date, purchase_date)
       .input('warrantyEndDate', sql.Date, warranty_end_date)
       .input('purchaseCost', sql.Decimal(10, 2), purchase_cost)
       .input('notes', sql.NVarChar(sql.MAX), notes)
       .input('isActive', sql.Bit, is_active)
+      .input('assetType', sql.VarChar(20), asset_type)
+      .input('parentAssetId', sql.UniqueIdentifier, parent_asset_id)
+      .input('installationDate', sql.DateTime, asset_type === 'component' ? new Date() : null)
+      .input('installationNotes', sql.Text, installation_notes)
+      .input('installedBy', sql.UniqueIdentifier, performedBy)
       .query(`
         INSERT INTO assets (
           id, asset_tag, tag_no, serial_number, product_id, assigned_to, status, condition_status,
-          purchase_date, warranty_end_date, purchase_cost, notes, is_active, created_at, updated_at
+          purchase_date, warranty_end_date, purchase_cost, notes, is_active,
+          asset_type, parent_asset_id, installation_date, installation_notes, installed_by,
+          created_at, updated_at
         )
         VALUES (
           @id, @assetTag, @tagNo, @serialNumber, @productId, @assignedTo, @status, @conditionStatus,
-          @purchaseDate, @warrantyEndDate, @purchaseCost, @notes, @isActive, GETUTCDATE(), GETUTCDATE()
+          @purchaseDate, @warrantyEndDate, @purchaseCost, @notes, @isActive,
+          @assetType, @parentAssetId, @installationDate, @installationNotes, @installedBy,
+          GETUTCDATE(), GETUTCDATE()
         );
 
         SELECT
           a.id, a.asset_tag, a.serial_number, a.status, a.condition_status, a.purchase_date, a.warranty_end_date,
-          a.purchase_cost, a.notes, a.created_at, a.updated_at,
+          a.purchase_cost, a.notes, a.asset_type, a.parent_asset_id, a.installation_date,
+          a.installation_notes, a.created_at, a.updated_at,
           p.name as product_name, p.model as product_model,
           l.name as location_name,
           u.first_name + ' ' + u.last_name as assigned_user_name, u.email as assigned_user_email,
           c.name as category_name,
-          o.name as oem_name
+          o.name as oem_name,
+          parent.asset_tag as parent_asset_tag,
+          installer.first_name + ' ' + installer.last_name as installed_by_name
         FROM assets a
         INNER JOIN products p ON a.product_id = p.id
         LEFT JOIN categories c ON p.category_id = c.id
         LEFT JOIN oems o ON p.oem_id = o.id
         LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
         LEFT JOIN locations l ON u.location_id = l.id
+        LEFT JOIN assets parent ON a.parent_asset_id = parent.id
+        LEFT JOIN USER_MASTER installer ON a.installed_by = installer.user_id
         WHERE a.id = @id;
       `);
 
@@ -1139,21 +1440,75 @@ router.put('/:id',
       warranty_end_date,
       purchase_cost,
       notes,
-      is_active
+      is_active,
+      // Component hierarchy fields
+      asset_type,
+      parent_asset_id,
+      installation_notes,
+      installed_by
     } = req.body;
 
     const pool = await connectDB();
 
-    // Check if asset exists
+    // Check if asset exists and get current children count
     const existingResult = await pool.request()
       .input('id', sql.UniqueIdentifier, id)
-      .query('SELECT * FROM assets WHERE id = @id AND is_active = 1');
+      .query(`
+        SELECT
+          a.*,
+          (SELECT COUNT(*) FROM assets WHERE parent_asset_id = a.id AND is_active = 1 AND removal_date IS NULL) as children_count
+        FROM assets a
+        WHERE a.id = @id AND a.is_active = 1
+      `);
 
     if (existingResult.recordset.length === 0) {
       return sendNotFound(res, 'Asset not found');
     }
 
     const existingAsset = existingResult.recordset[0];
+
+    // Validate component hierarchy changes
+    if (asset_type !== undefined) {
+      // Prevent changing asset_type if asset has children installed
+      if (existingAsset.children_count > 0 && asset_type !== 'parent') {
+        return sendError(res, 'Cannot change asset type - this asset has installed components. Remove all components first.', 400);
+      }
+
+      // Validate component-specific rules
+      if (asset_type === 'component') {
+        const finalParentId = parent_asset_id !== undefined ? parent_asset_id : existingAsset.parent_asset_id;
+        if (!finalParentId) {
+          return sendError(res, 'Components must have a parent_asset_id', 400);
+        }
+        if (assigned_to !== undefined && assigned_to !== null) {
+          return sendError(res, 'Components cannot be assigned to users', 400);
+        }
+      }
+
+      // Validate non-component cannot have parent
+      if (asset_type !== 'component') {
+        if (parent_asset_id !== undefined && parent_asset_id !== null) {
+          return sendError(res, 'Only components can have a parent asset', 400);
+        }
+      }
+    }
+
+    // Validate parent_asset_id change if asset is already a component
+    if (parent_asset_id !== undefined && existingAsset.asset_type === 'component') {
+      // Changing parent for an existing component - validate using stored procedure
+      if (parent_asset_id !== existingAsset.parent_asset_id) {
+        const validationResult = await pool.request()
+          .input('component_id', sql.UniqueIdentifier, id)
+          .input('parent_id', sql.UniqueIdentifier, parent_asset_id)
+          .output('is_valid', sql.Bit)
+          .output('error_message', sql.VarChar(500))
+          .execute('sp_validate_component_installation');
+
+        if (!validationResult.output.is_valid) {
+          return sendError(res, validationResult.output.error_message, 400);
+        }
+      }
+    }
 
     // Check for asset tag conflict if being updated
     if (asset_tag && asset_tag.trim() !== existingAsset.asset_tag) {
@@ -1268,6 +1623,27 @@ router.put('/:id',
       updateFields.push('is_active = @isActive');
       updateRequest.input('isActive', sql.Bit, is_active);
     }
+    // Component hierarchy fields
+    if (asset_type !== undefined) {
+      updateFields.push('asset_type = @assetType');
+      updateRequest.input('assetType', sql.VarChar(20), asset_type);
+    }
+    if (parent_asset_id !== undefined) {
+      updateFields.push('parent_asset_id = @parentAssetId');
+      updateRequest.input('parentAssetId', sql.UniqueIdentifier, parent_asset_id);
+      // If moving component to new parent, update installation_date
+      if (parent_asset_id && existingAsset.asset_type === 'component') {
+        updateFields.push('installation_date = GETUTCDATE()');
+      }
+    }
+    if (installation_notes !== undefined) {
+      updateFields.push('installation_notes = @installationNotes');
+      updateRequest.input('installationNotes', sql.Text, installation_notes);
+    }
+    if (installed_by !== undefined) {
+      updateFields.push('installed_by = @installedBy');
+      updateRequest.input('installedBy', sql.UniqueIdentifier, installed_by);
+    }
 
     if (updateFields.length === 0) {
       return sendError(res, 'No fields to update', 400);
@@ -1282,19 +1658,24 @@ router.put('/:id',
 
       SELECT
         a.id, a.asset_tag, a.serial_number, a.status, a.condition_status, a.purchase_date, a.warranty_end_date,
-        a.purchase_cost, a.notes, a.created_at, a.updated_at,
+        a.purchase_cost, a.notes, a.asset_type, a.parent_asset_id, a.installation_date,
+        a.installation_notes, a.created_at, a.updated_at,
         u.location_id, a.assigned_to,
         p.name as product_name, p.model as product_model,
         l.name as location_name,
         u.first_name + ' ' + u.last_name as assigned_user_name, u.email as assigned_user_email,
         c.name as category_name,
-        o.name as oem_name
+        o.name as oem_name,
+        parent.asset_tag as parent_asset_tag,
+        installer.first_name + ' ' + installer.last_name as installed_by_name
       FROM assets a
       INNER JOIN products p ON a.product_id = p.id
       LEFT JOIN categories c ON p.category_id = c.id
       LEFT JOIN oems o ON p.oem_id = o.id
       LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
       LEFT JOIN locations l ON u.location_id = l.id
+      LEFT JOIN assets parent ON a.parent_asset_id = parent.id
+      LEFT JOIN USER_MASTER installer ON a.installed_by = installer.user_id
       WHERE a.id = @id;
     `);
 
@@ -1371,7 +1752,7 @@ router.post('/:id/assign',
     const assetResult = await pool.request()
       .input('id', sql.UniqueIdentifier, id)
       .query(`
-        SELECT id, asset_tag, status, assigned_to
+        SELECT id, asset_tag, status, assigned_to, asset_type
         FROM assets
         WHERE id = @id AND is_active = 1
       `);
@@ -1381,6 +1762,11 @@ router.post('/:id/assign',
     }
 
     const asset = assetResult.recordset[0];
+
+    // Components cannot be assigned to users - they must be installed into parent assets
+    if (asset.asset_type === 'component') {
+      return sendConflict(res, 'Components cannot be assigned directly to users. Components must be installed into parent assets.');
+    }
 
     // Allow assignment if status is: available, in_use, or assigned (for reassignment)
     if (asset.status !== 'available' && asset.status !== 'in_use' && asset.status !== 'assigned') {
@@ -1538,51 +1924,6 @@ router.post('/:id/restore',
       `);
 
     sendSuccess(res, null, 'Asset restored successfully');
-  })
-);
-
-// GET /assets/dropdown - Get assets for dropdown/selection
-router.get('/dropdown',
-  requireDynamicPermission(),
-  asyncHandler(async (req, res) => {
-    const { status, category_id, location_id, available_only } = req.query;
-    const pool = await connectDB();
-
-    const request = pool.request();
-    let query = `
-      SELECT a.id, a.asset_tag as label, a.id as value,
-             a.status, p.name as product_name, l.name as location_name
-      FROM assets a
-      INNER JOIN products p ON a.product_id = p.id
-      LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
-      LEFT JOIN locations l ON u.location_id = l.id
-      WHERE a.is_active = 1
-    `;
-
-    if (available_only === 'true') {
-      query += ' AND a.status = \'available\'';
-    }
-
-    if (status) {
-      query += ' AND a.status = @status';
-      request.input('status', sql.VarChar(20), status);
-    }
-
-    if (category_id) {
-      query += ' AND p.category_id = @categoryId';
-      request.input('categoryId', sql.UniqueIdentifier, category_id);
-    }
-
-    if (location_id) {
-      query += ' AND u.location_id = @locationId';
-      request.input('locationId', sql.UniqueIdentifier, location_id);
-    }
-
-    query += ' ORDER BY a.asset_tag';
-
-    const result = await request.query(query);
-
-    sendSuccess(res, result.recordset, 'Assets dropdown retrieved successfully');
   })
 );
 
