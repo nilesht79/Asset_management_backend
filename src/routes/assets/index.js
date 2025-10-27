@@ -1066,13 +1066,6 @@ router.post('/bulk',
 
     // Check for existing serial numbers in database
     if (serialNumbers.length > 0) {
-      const existingCheck = await pool.request()
-        .query(`
-          SELECT serial_number
-          FROM assets
-          WHERE serial_number IN (${serialNumbers.map((_, i) => `@serial${i}`).join(',')})
-        `);
-
       const request = pool.request();
       serialNumbers.forEach((sn, i) => request.input(`serial${i}`, sql.VarChar(100), sn));
       const existingResult = await request.query(`
@@ -1214,14 +1207,13 @@ router.post('/bulk',
           .input('installationDate', sql.DateTime, asset_type === 'component' ? new Date() : null)
           .input('installationNotes', sql.Text, installation_notes || null);
 
-        const result = await request.query(`
+        await request.query(`
           INSERT INTO assets (
             id, asset_tag, tag_no, serial_number, product_id, assigned_to, status, condition_status,
             purchase_date, warranty_end_date, purchase_cost, notes, is_active,
             asset_type, parent_asset_id, installation_date, installation_notes,
             created_at, updated_at
           )
-          OUTPUT INSERTED.*
           VALUES (
             @id, @assetTag, @tagNo, @serialNumber, @productId, @assignedTo, @status, @conditionStatus,
             @purchaseDate, @warrantyEndDate, @purchaseCost, @notes, @isActive,
@@ -1230,7 +1222,7 @@ router.post('/bulk',
           )
         `);
 
-        createdAssets.push(result.recordset[0]);
+        createdAssets.push({ id: assetId, asset_tag: assetTag, serial_number });
       } catch (error) {
         console.error('Error creating asset:', error);
         errors.push({ asset, error: error.message });

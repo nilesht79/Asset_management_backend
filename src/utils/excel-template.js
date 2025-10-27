@@ -1325,12 +1325,12 @@ async function generateDepartmentBulkTemplate() {
 
 /**
  * Parse department bulk upload file
- * @param {string} filePath - Path to uploaded Excel file
+ * @param {Buffer} fileBuffer - Excel file buffer
  * @returns {Promise<Array>} Parsed departments array
  */
-async function parseDepartmentBulkFile(filePath) {
+async function parseDepartmentBulkFile(fileBuffer) {
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.readFile(filePath);
+  await workbook.xlsx.load(fileBuffer);
 
   const worksheet = workbook.getWorksheet('Departments');
   if (!worksheet) {
@@ -1592,12 +1592,12 @@ async function generateOEMBulkTemplate() {
 
 /**
  * Parse OEM bulk upload file
- * @param {string} filePath - Path to uploaded Excel file
+ * @param {Buffer} fileBuffer - Excel file buffer
  * @returns {Promise<Array>} Parsed OEMs array
  */
-async function parseOEMBulkFile(filePath) {
+async function parseOEMBulkFile(fileBuffer) {
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.readFile(filePath);
+  await workbook.xlsx.load(fileBuffer);
 
   const worksheet = workbook.getWorksheet('OEMs');
   if (!worksheet) {

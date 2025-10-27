@@ -311,11 +311,11 @@ router.post('/bulk-upload',
       return sendError(res, 'No file uploaded', 400);
     }
 
-    const filePath = req.file.path;
+    const fileBuffer = req.file.buffer;
 
     try {
       // Parse Excel file
-      const departments = await parseDepartmentBulkFile(filePath);
+      const departments = await parseDepartmentBulkFile(fileBuffer);
 
       const pool = await connectDB();
       const results = {
@@ -397,15 +397,8 @@ router.post('/bulk-upload',
         }
       }
 
-      // Clean up uploaded file
-      fs.unlinkSync(filePath);
-
       sendSuccess(res, results, 'Department bulk upload completed');
     } catch (error) {
-      // Clean up uploaded file on error
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
 
       if (error.validationErrors) {
         return sendError(res, 'Validation failed', 400, {
