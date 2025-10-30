@@ -247,17 +247,17 @@ router.delete('/:id',
       return sendNotFound(res, 'Product type not found');
     }
 
-    // Check if product type is being used by categories
+    // Check if product type is being used by products
     const usageResult = await pool.request()
       .input('id', sql.UniqueIdentifier, id)
       .query(`
-        SELECT 
-          (SELECT COUNT(*) FROM categories WHERE product_type_id = @id) as category_count
+        SELECT
+          (SELECT COUNT(*) FROM products WHERE type_id = @id) as product_count
       `);
 
     const usage = usageResult.recordset[0];
-    if (usage.category_count > 0) {
-      return sendConflict(res, 'Cannot delete product type as it is being used by categories');
+    if (usage.product_count > 0) {
+      return sendConflict(res, 'Cannot delete product type as it is being used by products');
     }
 
     // Delete the product type

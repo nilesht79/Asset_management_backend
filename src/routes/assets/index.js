@@ -44,7 +44,8 @@ router.get('/',
       product_type_id,
       oem_id,
       warranty_expiring,
-      board_id
+      board_id,
+      serial_number
     } = req.query;
 
     const pool = await connectDB();
@@ -55,7 +56,7 @@ router.get('/',
     const params = [];
 
     if (search) {
-      whereClause += ' AND (a.asset_tag LIKE @search OR p.name LIKE @search OR p.model LIKE @search OR a.notes LIKE @search)';
+      whereClause += ' AND (a.asset_tag LIKE @search OR a.serial_number LIKE @search OR p.name LIKE @search OR p.model LIKE @search OR a.notes LIKE @search)';
       params.push({ name: 'search', type: sql.VarChar(255), value: `%${search}%` });
     }
 
@@ -108,6 +109,12 @@ router.get('/',
     if (board_id) {
       whereClause += ' AND bd.board_id = @boardId';
       params.push({ name: 'boardId', type: sql.UniqueIdentifier, value: board_id });
+    }
+
+    // Serial number filter
+    if (serial_number) {
+      whereClause += ' AND a.serial_number = @serialNumber';
+      params.push({ name: 'serialNumber', type: sql.VarChar(255), value: serial_number });
     }
 
     // Get total count
