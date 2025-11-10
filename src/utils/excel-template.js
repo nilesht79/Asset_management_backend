@@ -224,7 +224,16 @@ async function generateAssetBulkTemplate({ quantity, product }) {
     { header: 'Condition', key: 'condition_status', width: 15 },
     { header: 'Purchase Date', key: 'purchase_date', width: 18 },
     { header: 'Purchase Cost', key: 'purchase_cost', width: 18 },
-    { header: 'Warranty End Date', key: 'warranty_end_date', width: 18 },
+    { header: 'Warranty Start', key: 'warranty_start_date', width: 18 },
+    { header: 'Warranty End', key: 'warranty_end_date', width: 18 },
+    { header: 'Expected EOL', key: 'eol_date', width: 18 },
+    { header: 'Expected EOS', key: 'eos_date', width: 18 },
+    { header: 'OS Name', key: 'os_name', width: 25 },
+    { header: 'OS License Key', key: 'os_license_key', width: 30 },
+    { header: 'OS License Type', key: 'os_license_type', width: 18 },
+    { header: 'Office Name', key: 'office_name', width: 25 },
+    { header: 'Office License Key', key: 'office_license_key', width: 30 },
+    { header: 'Office License Type', key: 'office_license_type', width: 18 },
     { header: 'Installation Notes', key: 'installation_notes', width: 35 },
     { header: 'Notes', key: 'notes', width: 35 }
   ];
@@ -257,7 +266,16 @@ async function generateAssetBulkTemplate({ quantity, product }) {
       condition_status: 'new',
       purchase_date: '',
       purchase_cost: '',
+      warranty_start_date: '',
       warranty_end_date: '',
+      eol_date: '',
+      eos_date: '',
+      os_name: '',
+      os_license_key: '',
+      os_license_type: 'oem',
+      office_name: '',
+      office_license_key: '',
+      office_license_type: 'retail',
       installation_notes: '',
       notes: ''
     });
@@ -279,7 +297,16 @@ async function generateAssetBulkTemplate({ quantity, product }) {
       condition_status: 'new',
       purchase_date: '',
       purchase_cost: '',
+      warranty_start_date: '',
       warranty_end_date: '',
+      eol_date: '',
+      eos_date: '',
+      os_name: '',
+      os_license_key: '',
+      os_license_type: 'oem',
+      office_name: '',
+      office_license_key: '',
+      office_license_type: 'retail',
       installation_notes: '',
       notes: ''
     });
@@ -351,6 +378,112 @@ async function generateAssetBulkTemplate({ quantity, product }) {
         showErrorMessage: true,
         errorTitle: 'Invalid Condition',
         error: 'Please select a valid condition from the list'
+      };
+    }
+  });
+
+  // Add data validation for OS License Type column (column 21)
+  worksheet.getColumn(21).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
+    if (rowNumber > 1) {
+      cell.dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: ['"oem,retail,volume,subscription"'],
+        showErrorMessage: true,
+        errorTitle: 'Invalid License Type',
+        error: 'Please select a valid license type from the list'
+      };
+    }
+  });
+
+  // Add data validation for Office License Type column (column 24)
+  worksheet.getColumn(24).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
+    if (rowNumber > 1) {
+      cell.dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: ['"oem,retail,volume,subscription"'],
+        showErrorMessage: true,
+        errorTitle: 'Invalid License Type',
+        error: 'Please select a valid license type from the list'
+      };
+    }
+  });
+
+  // Create Additional Software sheet
+  const softwareSheet = workbook.addWorksheet('Additional Software');
+  softwareSheet.columns = [
+    { header: 'Row', key: 'row_number', width: 8 },
+    { header: 'Serial Number*', key: 'serial_number', width: 20 },
+    { header: 'Software Type*', key: 'software_type', width: 18 },
+    { header: 'Software Name*', key: 'software_name', width: 30 },
+    { header: 'License Key', key: 'license_key', width: 35 },
+    { header: 'License Type', key: 'license_type', width: 18 },
+    { header: 'Activation Date', key: 'activation_date', width: 18 },
+    { header: 'Expiration Date', key: 'expiration_date', width: 18 },
+    { header: 'Notes', key: 'notes', width: 35 }
+  ];
+
+  // Style header row for software sheet
+  const softwareHeaderRow = softwareSheet.getRow(1);
+  softwareHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  softwareHeaderRow.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FF70AD47' }
+  };
+  softwareHeaderRow.alignment = { vertical: 'middle', horizontal: 'center' };
+  softwareHeaderRow.height = 25;
+
+  // Add sample rows for additional software
+  softwareSheet.addRow({
+    row_number: 1,
+    serial_number: '', // Match to asset serial number
+    software_type: 'application',
+    software_name: 'Adobe Acrobat Pro',
+    license_key: '',
+    license_type: 'retail',
+    activation_date: '',
+    expiration_date: '',
+    notes: ''
+  });
+
+  softwareSheet.addRow({
+    row_number: 2,
+    serial_number: '', // Match to asset serial number
+    software_type: 'application',
+    software_name: 'AutoCAD 2024',
+    license_key: '',
+    license_type: 'subscription',
+    activation_date: '',
+    expiration_date: '2025-12-31',
+    notes: ''
+  });
+
+  // Add data validation for Software Type column
+  softwareSheet.getColumn(3).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
+    if (rowNumber > 1) {
+      cell.dataValidation = {
+        type: 'list',
+        allowBlank: false,
+        formulae: ['"operating_system,application,utility,driver"'],
+        showErrorMessage: true,
+        errorTitle: 'Invalid Software Type',
+        error: 'Please select a valid software type from the list'
+      };
+    }
+  });
+
+  // Add data validation for License Type column
+  softwareSheet.getColumn(6).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
+    if (rowNumber > 1) {
+      cell.dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: ['"oem,retail,volume,subscription"'],
+        showErrorMessage: true,
+        errorTitle: 'Invalid License Type',
+        error: 'Please select a valid license type from the list'
       };
     }
   });
@@ -434,10 +567,20 @@ async function parseAssetBulkFile(fileBuffer, productId) {
       condition_status: row.getCell(12).value?.toString().trim() || 'new',
       purchase_date: row.getCell(13).value || null,
       purchase_cost: row.getCell(14).value || null,
-      warranty_end_date: row.getCell(15).value || null,
-      installation_notes: row.getCell(16).value?.toString().trim() || null,
-      notes: row.getCell(17).value?.toString().trim() || null,
-      product_id: productId
+      warranty_start_date: row.getCell(15).value || null,
+      warranty_end_date: row.getCell(16).value || null,
+      eol_date: row.getCell(17).value || null,
+      eos_date: row.getCell(18).value || null,
+      os_name: row.getCell(19).value?.toString().trim() || null,
+      os_license_key: row.getCell(20).value?.toString().trim() || null,
+      os_license_type: row.getCell(21).value?.toString().trim() || 'oem',
+      office_name: row.getCell(22).value?.toString().trim() || null,
+      office_license_key: row.getCell(23).value?.toString().trim() || null,
+      office_license_type: row.getCell(24).value?.toString().trim() || 'retail',
+      installation_notes: row.getCell(25).value?.toString().trim() || null,
+      notes: row.getCell(26).value?.toString().trim() || null,
+      product_id: productId,
+      additional_software: [] // Will be populated from Additional Software sheet
     };
 
     // Validate serial number
@@ -485,6 +628,48 @@ async function parseAssetBulkFile(fileBuffer, productId) {
     throw new Error(`Duplicate serial numbers found: ${[...new Set(duplicates)].join(', ')}`);
   }
 
+  // Parse Additional Software sheet if it exists
+  const softwareSheet = workbook.getWorksheet('Additional Software');
+  if (softwareSheet) {
+    const additionalSoftware = [];
+
+    softwareSheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+      // Skip header row
+      if (rowNumber === 1) return;
+
+      const serialNumber = row.getCell(2).value?.toString().trim();
+      const softwareType = row.getCell(3).value?.toString().trim();
+      const softwareName = row.getCell(4).value?.toString().trim();
+
+      // Skip empty rows
+      if (!serialNumber || !softwareName) return;
+
+      const softwareData = {
+        row_number: row.getCell(1).value,
+        serial_number: serialNumber,
+        software_type: softwareType || 'application',
+        software_name: softwareName,
+        license_key: row.getCell(5).value?.toString().trim() || null,
+        license_type: row.getCell(6).value?.toString().trim() || 'retail',
+        activation_date: row.getCell(7).value || null,
+        expiration_date: row.getCell(8).value || null,
+        notes: row.getCell(9).value?.toString().trim() || null
+      };
+
+      additionalSoftware.push(softwareData);
+    });
+
+    // Map additional software to assets by serial number
+    additionalSoftware.forEach(software => {
+      const asset = assets.find(a => a.serial_number === software.serial_number);
+      if (asset) {
+        asset.additional_software.push(software);
+      } else {
+        console.warn(`Warning: Additional software for serial number '${software.serial_number}' not found in Assets sheet`);
+      }
+    });
+  }
+
   return assets;
 }
 
@@ -516,8 +701,17 @@ async function generateLegacyAssetTemplate({ products, users }) {
     { header: 'Condition', key: 'condition_status', width: 15 },
     { header: 'Purchase Date', key: 'purchase_date', width: 18 },
     { header: 'Purchase Cost', key: 'purchase_cost', width: 18 },
-    { header: 'Warranty End Date', key: 'warranty_end_date', width: 18 },
+    { header: 'Warranty Start', key: 'warranty_start_date', width: 18 },
+    { header: 'Warranty End', key: 'warranty_end_date', width: 18 },
+    { header: 'Expected EOL', key: 'eol_date', width: 18 },
+    { header: 'Expected EOS', key: 'eos_date', width: 18 },
     { header: 'Assigned To (Email/Employee ID)', key: 'assigned_to', width: 35 },
+    { header: 'OS Name', key: 'os_name', width: 25 },
+    { header: 'OS License Key', key: 'os_license_key', width: 30 },
+    { header: 'OS License Type', key: 'os_license_type', width: 18 },
+    { header: 'Office Name', key: 'office_name', width: 25 },
+    { header: 'Office License Key', key: 'office_license_key', width: 30 },
+    { header: 'Office License Type', key: 'office_license_type', width: 18 },
     { header: 'Installation Notes', key: 'installation_notes', width: 35 },
     { header: 'Notes', key: 'notes', width: 40 }
   ];
@@ -546,8 +740,17 @@ async function generateLegacyAssetTemplate({ products, users }) {
     condition_status: 'good',
     purchase_date: '2023-01-15',
     purchase_cost: 45000,
+    warranty_start_date: '2023-01-15',
     warranty_end_date: '2026-01-15',
+    eol_date: '2028-01-15',
+    eos_date: '2027-01-15',
     assigned_to: '',
+    os_name: 'Windows 11 Pro',
+    os_license_key: 'XXXXX-XXXXX-XXXXX-XXXXX',
+    os_license_type: 'oem',
+    office_name: 'Microsoft Office 2021',
+    office_license_key: 'YYYYY-YYYYY-YYYYY-YYYYY',
+    office_license_type: 'retail',
     installation_notes: '',
     notes: 'Legacy asset from old system. Asset tag and tag number will be auto-generated.'
   });
@@ -564,8 +767,17 @@ async function generateLegacyAssetTemplate({ products, users }) {
     condition_status: 'excellent',
     purchase_date: '2023-03-20',
     purchase_cost: 52000,
+    warranty_start_date: '2023-03-20',
     warranty_end_date: '2026-03-20',
+    eol_date: '',
+    eos_date: '',
     assigned_to: users.length > 0 ? users[0].email : '',
+    os_name: '',
+    os_license_key: '',
+    os_license_type: 'oem',
+    office_name: '',
+    office_license_key: '',
+    office_license_type: 'retail',
     installation_notes: '',
     notes: 'Asset inherits location from assigned user'
   });
@@ -744,6 +956,83 @@ async function generateLegacyAssetTemplate({ products, users }) {
     instructionsSheet.addRow({ field: '', required: '', description: note });
   });
 
+  // Create Additional Software sheet
+  const softwareSheet = workbook.addWorksheet('Additional Software');
+  softwareSheet.columns = [
+    { header: 'Row', key: 'row_number', width: 8 },
+    { header: 'Serial Number*', key: 'serial_number', width: 20 },
+    { header: 'Software Type*', key: 'software_type', width: 18 },
+    { header: 'Software Name*', key: 'software_name', width: 30 },
+    { header: 'License Key', key: 'license_key', width: 35 },
+    { header: 'License Type', key: 'license_type', width: 18 },
+    { header: 'Activation Date', key: 'activation_date', width: 18 },
+    { header: 'Expiration Date', key: 'expiration_date', width: 18 },
+    { header: 'Notes', key: 'notes', width: 35 }
+  ];
+
+  const softwareHeaderRow = softwareSheet.getRow(1);
+  softwareHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  softwareHeaderRow.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FF70AD47' }
+  };
+  softwareHeaderRow.alignment = { vertical: 'middle', horizontal: 'center' };
+  softwareHeaderRow.height = 25;
+
+  // Add sample rows
+  softwareSheet.addRow({
+    row_number: 1,
+    serial_number: 'SN-2023-001',
+    software_type: 'application',
+    software_name: 'Adobe Acrobat Pro',
+    license_key: 'AAAAA-BBBBB-CCCCC-DDDDD',
+    license_type: 'retail',
+    activation_date: '2023-01-20',
+    expiration_date: '',
+    notes: 'Additional software beyond OS and Office'
+  });
+
+  softwareSheet.addRow({
+    row_number: 2,
+    serial_number: 'SN-2023-001',
+    software_type: 'application',
+    software_name: 'AutoCAD 2024',
+    license_key: '',
+    license_type: 'subscription',
+    activation_date: '2024-01-01',
+    expiration_date: '2025-12-31',
+    notes: 'Annual subscription'
+  });
+
+  // Add data validation for Software Type
+  softwareSheet.getColumn(3).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
+    if (rowNumber > 1) {
+      cell.dataValidation = {
+        type: 'list',
+        allowBlank: false,
+        formulae: ['"operating_system,application,utility,driver"'],
+        showErrorMessage: true,
+        errorTitle: 'Invalid Software Type',
+        error: 'Please select a valid software type from the list'
+      };
+    }
+  });
+
+  // Add data validation for License Type
+  softwareSheet.getColumn(6).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
+    if (rowNumber > 1) {
+      cell.dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: ['"oem,retail,volume,subscription"'],
+        showErrorMessage: true,
+        errorTitle: 'Invalid License Type',
+        error: 'Please select a valid license type from the list'
+      };
+    }
+  });
+
   // Create Products reference sheet
   const productsSheet = workbook.addWorksheet('Products Reference');
   productsSheet.columns = [
@@ -865,10 +1154,20 @@ async function parseLegacyAssetFile(fileBuffer, referenceData) {
       condition_status: row.getCell(9).value?.toString().trim().toLowerCase() || 'good',
       purchase_date: row.getCell(10).value || null,
       purchase_cost: row.getCell(11).value || null,
-      warranty_end_date: row.getCell(12).value || null,
-      assigned_to_input: row.getCell(13).value?.toString().trim() || '',
-      installation_notes: row.getCell(14).value?.toString().trim() || null,
-      notes: row.getCell(15).value?.toString().trim() || null
+      warranty_start_date: row.getCell(12).value || null,
+      warranty_end_date: row.getCell(13).value || null,
+      eol_date: row.getCell(14).value || null,
+      eos_date: row.getCell(15).value || null,
+      assigned_to_input: row.getCell(16).value?.toString().trim() || '',
+      os_name: row.getCell(17).value?.toString().trim() || null,
+      os_license_key: row.getCell(18).value?.toString().trim() || null,
+      os_license_type: row.getCell(19).value?.toString().trim() || 'oem',
+      office_name: row.getCell(20).value?.toString().trim() || null,
+      office_license_key: row.getCell(21).value?.toString().trim() || null,
+      office_license_type: row.getCell(22).value?.toString().trim() || 'retail',
+      installation_notes: row.getCell(23).value?.toString().trim() || null,
+      notes: row.getCell(24).value?.toString().trim() || null,
+      additional_software: [] // Will be populated from Additional Software sheet
     };
 
     const errors = [];
@@ -987,6 +1286,49 @@ async function parseLegacyAssetFile(fileBuffer, referenceData) {
       validRows.push(finalRowData);
     }
   });
+
+  // Parse Additional Software sheet if it exists
+  const softwareSheet = workbook.getWorksheet('Additional Software');
+  if (softwareSheet) {
+    const additionalSoftware = [];
+
+    softwareSheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+      // Skip header row
+      if (rowNumber === 1) return;
+
+      const serialNumber = row.getCell(2).value?.toString().trim();
+      const softwareType = row.getCell(3).value?.toString().trim();
+      const softwareName = row.getCell(4).value?.toString().trim();
+
+      // Skip empty rows
+      if (!serialNumber || !softwareName) return;
+
+      const softwareData = {
+        row_number: row.getCell(1).value,
+        serial_number: serialNumber,
+        software_type: softwareType || 'application',
+        software_name: softwareName,
+        license_key: row.getCell(5).value?.toString().trim() || null,
+        license_type: row.getCell(6).value?.toString().trim() || 'retail',
+        activation_date: row.getCell(7).value || null,
+        expiration_date: row.getCell(8).value || null,
+        notes: row.getCell(9).value?.toString().trim() || null
+      };
+
+      additionalSoftware.push(softwareData);
+    });
+
+    // Map additional software to assets by serial number (across all categories)
+    const allRows = [...validRows, ...warningRows, ...errorRows];
+    additionalSoftware.forEach(software => {
+      const asset = allRows.find(a => a.serial_number === software.serial_number);
+      if (asset) {
+        asset.additional_software.push(software);
+      } else {
+        console.warn(`Warning: Additional software for serial number '${software.serial_number}' not found in Assets sheet`);
+      }
+    });
+  }
 
   return {
     valid: validRows,

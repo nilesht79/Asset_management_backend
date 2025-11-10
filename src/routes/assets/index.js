@@ -27,6 +27,60 @@ router.use(authenticateToken);
 // Mount component routes - MUST be before other /:id routes to avoid conflicts
 router.use('/:id/components', componentRoutes);
 
+// Helper function to find software product by name (fuzzy matching)
+async function findSoftwareProductByName(pool, softwareName) {
+  if (!softwareName) return null;
+
+  const result = await pool.request()
+    .input('productName', sql.VarChar(200), softwareName)
+    .query(`
+      SELECT TOP 1 p.id
+      FROM products p
+      INNER JOIN categories c ON p.category_id = c.id
+      WHERE p.name LIKE '%' + @productName + '%'
+      AND (c.name = 'Software' OR c.parent_category_id =
+           (SELECT id FROM categories WHERE name = 'Software'))
+      AND p.is_active = 1
+      ORDER BY
+        CASE WHEN LOWER(p.name) = LOWER(@productName) THEN 1 ELSE 2 END,
+        p.created_at DESC
+    `);
+
+  return result.recordset.length > 0 ? result.recordset[0].id : null;
+}
+
+// Helper function to install software on an asset
+async function installSoftware(pool, assetId, softwareProductId, softwareType, licenseKey, licenseType, activationDate, expirationDate, notes) {
+  try {
+    await pool.request()
+      .input('id', sql.UniqueIdentifier, uuidv4())
+      .input('assetId', sql.UniqueIdentifier, assetId)
+      .input('softwareProductId', sql.UniqueIdentifier, softwareProductId)
+      .input('softwareType', sql.VarChar(50), softwareType || 'application')
+      .input('licenseKey', sql.NVarChar(500), licenseKey || null)
+      .input('licenseType', sql.VarChar(50), licenseType || 'oem')
+      .input('activationDate', sql.Date, activationDate || null)
+      .input('expirationDate', sql.Date, expirationDate || null)
+      .input('notes', sql.Text, notes || null)
+      .query(`
+        INSERT INTO asset_software_installations (
+          id, asset_id, software_product_id, software_type,
+          license_key, license_type, activation_date, expiration_date,
+          installation_method, notes,
+          installation_date, created_at, updated_at
+        ) VALUES (
+          @id, @assetId, @softwareProductId, @softwareType,
+          @licenseKey, @licenseType, @activationDate, @expirationDate,
+          'bulk_upload', @notes,
+          GETUTCDATE(), GETUTCDATE(), GETUTCDATE()
+        )
+      `);
+  } catch (error) {
+    console.error(`Error installing software ${softwareProductId} on asset ${assetId}:`, error.message);
+    // Continue even if software installation fails
+  }
+}
+
 // GET /assets - List all assets with pagination, search, and filtering
 router.get('/',
   requireDynamicPermission(),
@@ -148,8 +202,10 @@ router.get('/',
 
     const result = await dataRequest.query(`
       SELECT
-        a.id, a.asset_tag, a.tag_no, a.serial_number, a.status, a.condition_status, a.purchase_date, a.warranty_end_date,
+        a.id, a.asset_tag, a.tag_no, a.serial_number, a.status, a.condition_status, a.purchase_date,
+        a.warranty_start_date, a.warranty_end_date,
         a.purchase_cost, a.notes, a.created_at, a.updated_at,
+        a.eol_date, a.eos_date,
         a.product_id, a.assigned_to,
         a.asset_type, a.parent_asset_id, a.installation_date, a.removal_date,
         p.name as product_name, p.model as product_model,
@@ -210,6 +266,10 @@ router.get('/statistics',
         SUM(CASE WHEN status = 'under_repair' THEN 1 ELSE 0 END) as under_repair_assets,
         SUM(CASE WHEN warranty_end_date IS NOT NULL AND warranty_end_date BETWEEN GETUTCDATE() AND DATEADD(day, 30, GETUTCDATE()) THEN 1 ELSE 0 END) as warranty_expiring_soon,
         SUM(CASE WHEN warranty_end_date IS NOT NULL AND warranty_end_date < GETUTCDATE() THEN 1 ELSE 0 END) as warranty_expired,
+        SUM(CASE WHEN eol_date IS NOT NULL AND eol_date BETWEEN CAST(GETUTCDATE() AS DATE) AND DATEADD(month, 6, CAST(GETUTCDATE() AS DATE)) THEN 1 ELSE 0 END) as eol_approaching,
+        SUM(CASE WHEN eol_date IS NOT NULL AND eol_date < CAST(GETUTCDATE() AS DATE) THEN 1 ELSE 0 END) as eol_reached,
+        SUM(CASE WHEN eos_date IS NOT NULL AND eos_date BETWEEN CAST(GETUTCDATE() AS DATE) AND DATEADD(month, 3, CAST(GETUTCDATE() AS DATE)) THEN 1 ELSE 0 END) as eos_approaching,
+        SUM(CASE WHEN eos_date IS NOT NULL AND eos_date < CAST(GETUTCDATE() AS DATE) THEN 1 ELSE 0 END) as eos_reached,
         SUM(CASE WHEN created_at >= DATEADD(month, -1, GETUTCDATE()) THEN 1 ELSE 0 END) as added_this_month,
         AVG(CASE WHEN purchase_cost IS NOT NULL THEN purchase_cost ELSE 0 END) as average_cost,
         SUM(CASE WHEN purchase_cost IS NOT NULL THEN purchase_cost ELSE 0 END) as total_value
@@ -245,11 +305,22 @@ router.get('/statistics',
 
     const overview = result.recordset[0];
 
+    // Get software license expiration alerts
+    const licenseResult = await pool.request().query(`
+      SELECT
+        SUM(CASE WHEN expiration_date IS NOT NULL AND expiration_date BETWEEN CAST(GETUTCDATE() AS DATE) AND DATEADD(day, 30, CAST(GETUTCDATE() AS DATE)) THEN 1 ELSE 0 END) as licenses_expiring_soon,
+        SUM(CASE WHEN expiration_date IS NOT NULL AND expiration_date < CAST(GETUTCDATE() AS DATE) THEN 1 ELSE 0 END) as licenses_expired
+      FROM asset_software_installations
+      WHERE is_active = 1
+    `);
+
+    const licenseStats = licenseResult.recordset[0];
+
     sendSuccess(res, {
       // Main statistics
       totalAssets: overview.total_assets,
       activeAssets: overview.available_assets + overview.assigned_assets + overview.in_use_assets,
-      assetsAtRisk: overview.under_repair_assets + overview.warranty_expiring_soon + overview.warranty_expired,
+      assetsAtRisk: overview.under_repair_assets + overview.warranty_expiring_soon + overview.warranty_expired + overview.eol_approaching + overview.eos_reached,
       addedThisMonth: overview.added_this_month,
 
       // Additional overview data
@@ -259,6 +330,12 @@ router.get('/statistics',
       underRepairAssets: overview.under_repair_assets,
       warrantyExpiringSoon: overview.warranty_expiring_soon,
       warrantyExpired: overview.warranty_expired,
+      eolApproaching: overview.eol_approaching,
+      eolReached: overview.eol_reached,
+      eosApproaching: overview.eos_approaching,
+      eosReached: overview.eos_reached,
+      licensesExpiringSoon: licenseStats.licenses_expiring_soon || 0,
+      licensesExpired: licenseStats.licenses_expired || 0,
       averageCost: overview.average_cost,
       totalValue: overview.total_value,
 
@@ -286,6 +363,42 @@ router.get('/statistics',
           type: 'warranty_expired',
           message: `${overview.warranty_expired} assets have expired warranty`,
           count: overview.warranty_expired,
+          severity: 'error'
+        }] : []),
+        ...(overview.eol_approaching > 0 ? [{
+          type: 'eol_approaching',
+          message: `${overview.eol_approaching} assets approaching End of Life (within 6 months)`,
+          count: overview.eol_approaching,
+          severity: 'warning'
+        }] : []),
+        ...(overview.eol_reached > 0 ? [{
+          type: 'eol_reached',
+          message: `${overview.eol_reached} assets have reached End of Life`,
+          count: overview.eol_reached,
+          severity: 'error'
+        }] : []),
+        ...(overview.eos_approaching > 0 ? [{
+          type: 'eos_approaching',
+          message: `${overview.eos_approaching} assets approaching End of Support (within 3 months)`,
+          count: overview.eos_approaching,
+          severity: 'warning'
+        }] : []),
+        ...(overview.eos_reached > 0 ? [{
+          type: 'eos_reached',
+          message: `${overview.eos_reached} assets have reached End of Support`,
+          count: overview.eos_reached,
+          severity: 'error'
+        }] : []),
+        ...((licenseStats.licenses_expiring_soon || 0) > 0 ? [{
+          type: 'license_expiring',
+          message: `${licenseStats.licenses_expiring_soon} software licenses expiring within 30 days`,
+          count: licenseStats.licenses_expiring_soon,
+          severity: 'warning'
+        }] : []),
+        ...((licenseStats.licenses_expired || 0) > 0 ? [{
+          type: 'license_expired',
+          message: `${licenseStats.licenses_expired} software licenses have expired`,
+          count: licenseStats.licenses_expired,
           severity: 'error'
         }] : []),
         ...(overview.under_repair_assets > 0 ? [{
@@ -852,7 +965,10 @@ router.post('/legacy-import',
             .input('conditionStatus', sql.VarChar(20), asset.condition_status)
             .input('purchaseDate', sql.Date, asset.purchase_date)
             .input('purchaseCost', sql.Decimal(10, 2), asset.purchase_cost)
+            .input('warrantyStartDate', sql.Date, asset.warranty_start_date || null)
             .input('warrantyEndDate', sql.Date, asset.warranty_end_date)
+            .input('eolDate', sql.Date, asset.eol_date || null)
+            .input('eosDate', sql.Date, asset.eos_date || null)
             .input('notes', sql.NVarChar(sql.MAX), asset.notes)
             .input('assetType', sql.VarChar(20), asset_type)
             .input('parentAssetId', sql.UniqueIdentifier, parentAssetId)
@@ -861,18 +977,58 @@ router.post('/legacy-import',
             .query(`
               INSERT INTO assets (
                 id, asset_tag, tag_no, serial_number, product_id, assigned_to,
-                status, condition_status, purchase_date, purchase_cost, warranty_end_date,
+                status, condition_status, purchase_date, purchase_cost,
+                warranty_start_date, warranty_end_date, eol_date, eos_date,
                 notes, is_active,
                 asset_type, parent_asset_id, installation_date, installation_notes,
                 created_at, updated_at
               ) VALUES (
                 @id, @assetTag, @tagNo, @serialNumber, @productId, @assignedTo,
-                @status, @conditionStatus, @purchaseDate, @purchaseCost, @warrantyEndDate,
+                @status, @conditionStatus, @purchaseDate, @purchaseCost,
+                @warrantyStartDate, @warrantyEndDate, @eolDate, @eosDate,
                 @notes, 1,
                 @assetType, @parentAssetId, @installationDate, @installationNotes,
                 GETUTCDATE(), GETUTCDATE()
               )
             `);
+
+          // Install OS software if provided
+          if (asset.os_name) {
+            const osProductId = await findSoftwareProductByName(pool, asset.os_name);
+            if (osProductId) {
+              await installSoftware(pool, assetId, osProductId, 'operating_system', asset.os_license_key, asset.os_license_type || 'oem', null, null, null);
+            }
+          }
+
+          // Install Office software if provided
+          if (asset.office_name) {
+            const officeProductId = await findSoftwareProductByName(pool, asset.office_name);
+            if (officeProductId) {
+              await installSoftware(pool, assetId, officeProductId, 'application', asset.office_license_key, asset.office_license_type || 'retail', null, null, null);
+            }
+          }
+
+          // Install additional software
+          if (asset.additional_software && asset.additional_software.length > 0) {
+            for (const software of asset.additional_software) {
+              if (software.software_name) {
+                const softwareProductId = await findSoftwareProductByName(pool, software.software_name);
+                if (softwareProductId) {
+                  await installSoftware(
+                    pool,
+                    assetId,
+                    softwareProductId,
+                    software.software_type || 'application',
+                    software.license_key,
+                    software.license_type || 'retail',
+                    software.activation_date,
+                    software.expiration_date,
+                    software.notes
+                  );
+                }
+              }
+            }
+          }
 
           results.successful.push({
             row: asset.row_number,
@@ -991,6 +1147,68 @@ router.get('/dropdown',
   })
 );
 
+// GET /assets/:id/software - Get all software installed on an asset
+// NOTE: This route MUST come before GET /:id to avoid route conflicts
+router.get('/:id/software',
+  requireDynamicPermission(),
+  validateUUID('id'),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    const pool = await connectDB();
+
+    // Check if asset exists
+    const assetCheck = await pool.request()
+      .input('id', sql.UniqueIdentifier, id)
+      .query('SELECT id FROM assets WHERE id = @id AND is_active = 1');
+
+    if (assetCheck.recordset.length === 0) {
+      return sendNotFound(res, 'Asset not found');
+    }
+
+    // Get all software installations for this asset
+    const result = await pool.request()
+      .input('assetId', sql.UniqueIdentifier, id)
+      .query(`
+        SELECT
+          si.id,
+          si.asset_id,
+          si.software_product_id,
+          si.software_type,
+          si.license_key,
+          si.license_type,
+          si.activation_date,
+          si.expiration_date,
+          si.installation_date,
+          si.installation_method,
+          si.notes,
+          si.is_active,
+          p.name as software_name,
+          p.model as software_version,
+          p.description as software_description,
+          c.name as category_name,
+          sc.name as subcategory_name,
+          installer.first_name + ' ' + installer.last_name as installed_by_name,
+          CASE
+            WHEN si.expiration_date IS NULL THEN 'Perpetual'
+            WHEN si.expiration_date < CAST(GETUTCDATE() AS DATE) THEN 'Expired'
+            WHEN si.expiration_date BETWEEN CAST(GETUTCDATE() AS DATE) AND DATEADD(day, 30, CAST(GETUTCDATE() AS DATE)) THEN 'Expiring Soon'
+            ELSE 'Active'
+          END as license_status,
+          DATEDIFF(day, CAST(GETUTCDATE() AS DATE), si.expiration_date) as days_until_expiration
+        FROM asset_software_installations si
+        INNER JOIN products p ON si.software_product_id = p.id
+        LEFT JOIN categories c ON p.category_id = c.id
+        LEFT JOIN categories sc ON p.subcategory_id = sc.id
+        LEFT JOIN USER_MASTER installer ON si.installed_by = installer.user_id
+        WHERE si.asset_id = @assetId AND si.is_active = 1
+        ORDER BY si.software_type, p.name
+      `);
+
+    sendSuccess(res, result.recordset, 'Software installations retrieved successfully');
+  })
+);
+
 // GET /assets/:id - Get asset by ID
 router.get('/:id',
   requireDynamicPermission(),
@@ -1003,8 +1221,10 @@ router.get('/:id',
       .input('id', sql.UniqueIdentifier, id)
       .query(`
         SELECT
-          a.id, a.asset_tag, a.status, a.condition_status, a.purchase_date, a.warranty_end_date,
+          a.id, a.asset_tag, a.status, a.condition_status, a.purchase_date,
+          a.warranty_start_date, a.warranty_end_date,
           a.purchase_cost, a.notes, a.created_at, a.updated_at,
+          a.eol_date, a.eos_date,
           a.product_id, p.name as product_name, p.model as product_model, p.description as product_description,
           p.specifications, p.warranty_period,
           u.location_id, l.name as location_name, l.address as location_address,
@@ -1096,13 +1316,24 @@ router.post('/bulk',
           status = 'available',
           condition_status = 'good',
           purchase_date,
+          warranty_start_date,
           warranty_end_date,
+          eol_date,
+          eos_date,
           purchase_cost,
           notes,
           // Component hierarchy fields
           asset_type = 'standalone',
           parent_serial_number, // CHANGED: from parent_asset_tag to parent_serial_number
-          installation_notes
+          installation_notes,
+          // Software fields
+          os_name,
+          os_license_key,
+          os_license_type,
+          office_name,
+          office_license_key,
+          office_license_type,
+          additional_software = []
         } = asset;
 
         if (!serial_number) {
@@ -1205,7 +1436,10 @@ router.post('/bulk',
           .input('status', sql.VarChar(20), finalStatus)
           .input('conditionStatus', sql.VarChar(20), condition_status)
           .input('purchaseDate', sql.Date, purchase_date || null)
+          .input('warrantyStartDate', sql.Date, warranty_start_date || null)
           .input('warrantyEndDate', sql.Date, warranty_end_date || null)
+          .input('eolDate', sql.Date, eol_date || null)
+          .input('eosDate', sql.Date, eos_date || null)
           .input('purchaseCost', sql.Decimal(10, 2), purchase_cost || null)
           .input('notes', sql.Text, notes || null)
           .input('isActive', sql.Bit, true)
@@ -1217,17 +1451,55 @@ router.post('/bulk',
         await request.query(`
           INSERT INTO assets (
             id, asset_tag, tag_no, serial_number, product_id, assigned_to, status, condition_status,
-            purchase_date, warranty_end_date, purchase_cost, notes, is_active,
+            purchase_date, warranty_start_date, warranty_end_date, eol_date, eos_date,
+            purchase_cost, notes, is_active,
             asset_type, parent_asset_id, installation_date, installation_notes,
             created_at, updated_at
           )
           VALUES (
             @id, @assetTag, @tagNo, @serialNumber, @productId, @assignedTo, @status, @conditionStatus,
-            @purchaseDate, @warrantyEndDate, @purchaseCost, @notes, @isActive,
+            @purchaseDate, @warrantyStartDate, @warrantyEndDate, @eolDate, @eosDate,
+            @purchaseCost, @notes, @isActive,
             @assetType, @parentAssetId, @installationDate, @installationNotes,
             GETUTCDATE(), GETUTCDATE()
           )
         `);
+
+        // Install OS software if provided
+        if (os_name) {
+          const osProductId = await findSoftwareProductByName(pool, os_name);
+          if (osProductId) {
+            await installSoftware(pool, assetId, osProductId, 'operating_system', os_license_key, os_license_type || 'oem', null, null, null);
+          }
+        }
+
+        // Install Office software if provided
+        if (office_name) {
+          const officeProductId = await findSoftwareProductByName(pool, office_name);
+          if (officeProductId) {
+            await installSoftware(pool, assetId, officeProductId, 'application', office_license_key, office_license_type || 'retail', null, null, null);
+          }
+        }
+
+        // Install additional software
+        for (const software of additional_software) {
+          if (software.software_name) {
+            const softwareProductId = await findSoftwareProductByName(pool, software.software_name);
+            if (softwareProductId) {
+              await installSoftware(
+                pool,
+                assetId,
+                softwareProductId,
+                software.software_type || 'application',
+                software.license_key,
+                software.license_type || 'retail',
+                software.activation_date,
+                software.expiration_date,
+                software.notes
+              );
+            }
+          }
+        }
 
         createdAssets.push({ id: assetId, asset_tag: assetTag, serial_number });
       } catch (error) {
@@ -1258,6 +1530,9 @@ router.post('/',
       condition_status = 'good',
       purchase_date,
       warranty_end_date,
+      warranty_start_date,
+      eol_date,
+      eos_date,
       purchase_cost,
       notes,
       is_active = true,
@@ -1265,7 +1540,9 @@ router.post('/',
       asset_type = 'standalone',
       parent_asset_id,
       installation_notes,
-      installed_by
+      installed_by,
+      // Software installations
+      software_installations = []
     } = req.body;
 
     const pool = await connectDB();
@@ -1373,6 +1650,9 @@ router.post('/',
       .input('conditionStatus', sql.VarChar(20), condition_status)
       .input('purchaseDate', sql.Date, purchase_date)
       .input('warrantyEndDate', sql.Date, warranty_end_date)
+      .input('warrantyStartDate', sql.Date, warranty_start_date)
+      .input('eolDate', sql.Date, eol_date)
+      .input('eosDate', sql.Date, eos_date)
       .input('purchaseCost', sql.Decimal(10, 2), purchase_cost)
       .input('notes', sql.NVarChar(sql.MAX), notes)
       .input('isActive', sql.Bit, is_active)
@@ -1384,13 +1664,15 @@ router.post('/',
       .query(`
         INSERT INTO assets (
           id, asset_tag, tag_no, serial_number, product_id, assigned_to, status, condition_status,
-          purchase_date, warranty_end_date, purchase_cost, notes, is_active,
+          purchase_date, warranty_end_date, warranty_start_date, eol_date, eos_date,
+          purchase_cost, notes, is_active,
           asset_type, parent_asset_id, installation_date, installation_notes, installed_by,
           created_at, updated_at
         )
         VALUES (
           @id, @assetTag, @tagNo, @serialNumber, @productId, @assignedTo, @status, @conditionStatus,
-          @purchaseDate, @warrantyEndDate, @purchaseCost, @notes, @isActive,
+          @purchaseDate, @warrantyEndDate, @warrantyStartDate, @eolDate, @eosDate,
+          @purchaseCost, @notes, @isActive,
           @assetType, @parentAssetId, @installationDate, @installationNotes, @installedBy,
           GETUTCDATE(), GETUTCDATE()
         );
@@ -1417,6 +1699,49 @@ router.post('/',
         WHERE a.id = @id;
       `);
 
+    // Install software if provided
+    if (software_installations && software_installations.length > 0) {
+      for (const software of software_installations) {
+        if (!software.software_product_id) {
+          console.warn('Skipping software installation: missing software_product_id');
+          continue;
+        }
+
+        try {
+          await pool.request()
+            .input('id', sql.UniqueIdentifier, uuidv4())
+            .input('assetId', sql.UniqueIdentifier, assetId)
+            .input('softwareProductId', sql.UniqueIdentifier, software.software_product_id)
+            .input('softwareType', sql.VarChar(50), software.software_type || 'application')
+            .input('licenseKey', sql.NVarChar(500), software.license_key || null)
+            .input('licenseType', sql.VarChar(50), software.license_type || 'oem')
+            .input('activationDate', sql.Date, software.activation_date || null)
+            .input('expirationDate', sql.Date, software.expiration_date || null)
+            .input('installedBy', sql.UniqueIdentifier, req.user.user_id)
+            .input('installationMethod', sql.VarChar(50), 'manual')
+            .input('notes', sql.Text, software.notes || null)
+            .query(`
+              INSERT INTO asset_software_installations (
+                id, asset_id, software_product_id, software_type,
+                license_key, license_type, activation_date, expiration_date,
+                installed_by, installation_method, notes,
+                installation_date, created_at, updated_at
+              ) VALUES (
+                @id, @assetId, @softwareProductId, @softwareType,
+                @licenseKey, @licenseType, @activationDate, @expirationDate,
+                @installedBy, @installationMethod, @notes,
+                GETUTCDATE(), GETUTCDATE(), GETUTCDATE()
+              )
+            `);
+
+          console.log(`Installed software: ${software.software_product_id} on asset ${assetId}`);
+        } catch (error) {
+          console.error('Error installing software:', error);
+          // Continue with other software installations even if one fails
+        }
+      }
+    }
+
     sendCreated(res, result.recordset[0], 'Asset created successfully');
   })
 );
@@ -1436,7 +1761,10 @@ router.put('/:id',
       status,
       condition_status,
       purchase_date,
+      warranty_start_date,
       warranty_end_date,
+      eol_date,
+      eos_date,
       purchase_cost,
       notes,
       is_active,
@@ -1444,7 +1772,9 @@ router.put('/:id',
       asset_type,
       parent_asset_id,
       installation_notes,
-      installed_by
+      installed_by,
+      // Software installations
+      software_installations
     } = req.body;
 
     const pool = await connectDB();
@@ -1606,9 +1936,21 @@ router.put('/:id',
       updateFields.push('purchase_date = @purchaseDate');
       updateRequest.input('purchaseDate', sql.Date, purchase_date);
     }
+    if (warranty_start_date !== undefined) {
+      updateFields.push('warranty_start_date = @warrantyStartDate');
+      updateRequest.input('warrantyStartDate', sql.Date, warranty_start_date);
+    }
     if (warranty_end_date !== undefined) {
       updateFields.push('warranty_end_date = @warrantyEndDate');
       updateRequest.input('warrantyEndDate', sql.Date, warranty_end_date);
+    }
+    if (eol_date !== undefined) {
+      updateFields.push('eol_date = @eolDate');
+      updateRequest.input('eolDate', sql.Date, eol_date);
+    }
+    if (eos_date !== undefined) {
+      updateFields.push('eos_date = @eosDate');
+      updateRequest.input('eosDate', sql.Date, eos_date);
     }
     if (purchase_cost !== undefined) {
       updateFields.push('purchase_cost = @purchaseCost');
@@ -1656,7 +1998,8 @@ router.put('/:id',
       WHERE id = @id;
 
       SELECT
-        a.id, a.asset_tag, a.serial_number, a.status, a.condition_status, a.purchase_date, a.warranty_end_date,
+        a.id, a.asset_tag, a.serial_number, a.status, a.condition_status, a.purchase_date,
+        a.warranty_start_date, a.warranty_end_date, a.eol_date, a.eos_date,
         a.purchase_cost, a.notes, a.asset_type, a.parent_asset_id, a.installation_date,
         a.installation_notes, a.created_at, a.updated_at,
         u.location_id, a.assigned_to,
@@ -1689,6 +2032,52 @@ router.put('/:id',
         existingAsset,
         req.user.user_id
       );
+    }
+
+    // Update software installations if provided
+    if (software_installations !== undefined) {
+      // Delete all existing software installations
+      await pool.request()
+        .input('assetId', sql.UniqueIdentifier, id)
+        .query('UPDATE asset_software_installations SET is_active = 0 WHERE asset_id = @assetId');
+
+      // Insert new software installations
+      if (Array.isArray(software_installations) && software_installations.length > 0) {
+        for (const software of software_installations) {
+          if (!software.software_product_id) continue;
+
+          try {
+            await pool.request()
+              .input('id', sql.UniqueIdentifier, uuidv4())
+              .input('assetId', sql.UniqueIdentifier, id)
+              .input('softwareProductId', sql.UniqueIdentifier, software.software_product_id)
+              .input('softwareType', sql.VarChar(50), software.software_type || 'application')
+              .input('licenseKey', sql.NVarChar(500), software.license_key || null)
+              .input('licenseType', sql.VarChar(50), software.license_type || 'oem')
+              .input('activationDate', sql.Date, software.activation_date || null)
+              .input('expirationDate', sql.Date, software.expiration_date || null)
+              .input('installedBy', sql.UniqueIdentifier, req.user?.user_id)
+              .input('installationMethod', sql.VarChar(50), 'manual')
+              .input('notes', sql.Text, software.notes || null)
+              .query(`
+                INSERT INTO asset_software_installations (
+                  id, asset_id, software_product_id, software_type,
+                  license_key, license_type, activation_date, expiration_date,
+                  installed_by, installation_method, notes,
+                  installation_date, created_at, updated_at, is_active
+                ) VALUES (
+                  @id, @assetId, @softwareProductId, @softwareType,
+                  @licenseKey, @licenseType, @activationDate, @expirationDate,
+                  @installedBy, @installationMethod, @notes,
+                  GETUTCDATE(), GETUTCDATE(), GETUTCDATE(), 1
+                )
+              `);
+          } catch (error) {
+            console.error(`Error updating software installation:`, error.message);
+            // Continue with other installations even if one fails
+          }
+        }
+      }
     }
 
     sendSuccess(res, updatedAsset, 'Asset updated successfully');

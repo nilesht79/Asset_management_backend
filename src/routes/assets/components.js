@@ -229,8 +229,8 @@ router.post('/',
         .input('assetTag', sql.VarChar(50), component.asset_tag)
         .input('movementType', sql.VarChar(20), 'component_install')
         .input('status', sql.VarChar(20), 'in-use')
-        .input('locationName', sql.NVarChar(200), `Parent: ${parent.asset_tag}`)
-        .input('previousLocationName', sql.NVarChar(200), 'Standalone/Available')
+        .input('parentAssetId', sql.UniqueIdentifier, parentId)
+        .input('parentAssetTag', sql.VarChar(50), parent.asset_tag)
         .input('reason', sql.Text, `Component installed into parent asset ${parent.asset_tag}`)
         .input('notes', sql.Text, installation_notes)
         .input('performedBy', sql.UniqueIdentifier, performedBy)
@@ -238,12 +238,12 @@ router.post('/',
         .query(`
           INSERT INTO ASSET_MOVEMENTS (
             asset_id, asset_tag, movement_type, status,
-            location_name, previous_location_name,
+            parent_asset_id, parent_asset_tag,
             reason, notes, performed_by, performed_by_name, movement_date, created_at
           )
           VALUES (
             @assetId, @assetTag, @movementType, @status,
-            @locationName, @previousLocationName,
+            @parentAssetId, @parentAssetTag,
             @reason, @notes, @performedBy, @performedByName, GETUTCDATE(), GETUTCDATE()
           )
         `);
@@ -362,8 +362,8 @@ router.delete('/:componentId',
         .input('assetTag', sql.VarChar(50), component.asset_tag)
         .input('movementType', sql.VarChar(20), 'component_remove')
         .input('status', sql.VarChar(20), 'available')
-        .input('locationName', sql.NVarChar(200), 'Standalone/Available')
-        .input('previousLocationName', sql.NVarChar(200), `Parent: ${parent.asset_tag}`)
+        .input('parentAssetId', sql.UniqueIdentifier, parentId)
+        .input('parentAssetTag', sql.VarChar(50), parent.asset_tag)
         .input('reason', sql.Text, `Component removed from parent asset ${parent.asset_tag}`)
         .input('notes', sql.Text, removal_notes)
         .input('performedBy', sql.UniqueIdentifier, performedBy)
@@ -371,12 +371,12 @@ router.delete('/:componentId',
         .query(`
           INSERT INTO ASSET_MOVEMENTS (
             asset_id, asset_tag, movement_type, status,
-            location_name, previous_location_name,
+            parent_asset_id, parent_asset_tag,
             reason, notes, performed_by, performed_by_name, movement_date, created_at
           )
           VALUES (
             @assetId, @assetTag, @movementType, @status,
-            @locationName, @previousLocationName,
+            @parentAssetId, @parentAssetTag,
             @reason, @notes, @performedBy, @performedByName, GETUTCDATE(), GETUTCDATE()
           )
         `);

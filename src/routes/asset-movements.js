@@ -14,6 +14,13 @@ const assetMovementController = require('../controllers/assetMovementController'
 router.use(authenticateToken);
 
 /**
+ * @route   GET /api/v1/asset-movements/export/excel
+ * @desc    Export asset movements to Excel with filters
+ * @access  Authenticated users
+ */
+router.get('/export/excel', assetMovementController.exportToExcel);
+
+/**
  * @route   GET /api/v1/asset-movements/recent
  * @desc    Get recent asset movements (all assets)
  * @access  Authenticated users

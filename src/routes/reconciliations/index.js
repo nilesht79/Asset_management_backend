@@ -39,6 +39,15 @@ const startReconciliationSchema = Joi.object({
 });
 
 const completeReconciliationSchema = Joi.object({
+  notes: Joi.string().max(5000).allow(null, '').optional(),
+  force: Joi.boolean().optional()
+});
+
+const pauseReconciliationSchema = Joi.object({
+  notes: Joi.string().max(5000).allow(null, '').optional()
+});
+
+const resumeReconciliationSchema = Joi.object({
   notes: Joi.string().max(5000).allow(null, '').optional()
 });
 
@@ -460,7 +469,7 @@ router.put('/:id/complete',
   validateBody(completeReconciliationSchema),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { notes } = req.body;
+    const { notes, force } = req.body;
 
     const pool = await connectDB();
 
@@ -492,8 +501,10 @@ router.put('/:id/complete',
       `);
 
     const pendingCount = pendingCheck.recordset[0].pending_count;
-    if (pendingCount > 0) {
-      return sendError(res, `Cannot complete reconciliation. ${pendingCount} asset(s) are still pending reconciliation`, 400);
+
+    // If there are pending assets and force is not true, return error
+    if (pendingCount > 0 && !force) {
+      return sendError(res, `Cannot complete reconciliation. ${pendingCount} asset(s) are still pending reconciliation. Use force=true to complete anyway.`, 400);
     }
 
     // Get reconciliation statistics for final update
@@ -515,6 +526,8 @@ router.put('/:id/complete',
       .input('notes', sql.Text, notes || null)
       .input('totalAssets', sql.Int, stats.total_assets || 0)
       .input('reconciledAssets', sql.Int, stats.reconciled_assets || 0)
+      .input('forcedCompletion', sql.Bit, force ? 1 : 0)
+      .input('pendingAtCompletion', sql.Int, pendingCount)
       .query(`
         UPDATE RECONCILIATION_PROCESSES
         SET
@@ -522,7 +535,9 @@ router.put('/:id/complete',
           completed_at = GETUTCDATE(),
           notes = CASE WHEN @notes IS NOT NULL THEN @notes ELSE notes END,
           total_assets = @totalAssets,
-          reconciled_assets = @reconciledAssets
+          reconciled_assets = @reconciledAssets,
+          forced_completion = @forcedCompletion,
+          pending_at_completion = @pendingAtCompletion
         WHERE id = @id
       `);
 
@@ -543,6 +558,144 @@ router.put('/:id/complete',
       `);
 
     sendSuccess(res, result.recordset[0], 'Reconciliation process completed successfully');
+  })
+);
+
+// ============================================================================
+// ROUTE: PUT /reconciliations/:id/pause
+// Pause a reconciliation process (change status from in_progress to paused)
+// Access: Admin, SuperAdmin, Engineer
+// ============================================================================
+router.put('/:id/pause',
+  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER]),
+  validateUUID('id'),
+  validateBody(pauseReconciliationSchema),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { notes } = req.body;
+    const userId = req.user.id;
+
+    const pool = await connectDB();
+
+    // Check if reconciliation exists and is in progress
+    const existing = await pool.request()
+      .input('id', sql.UniqueIdentifier, id)
+      .query('SELECT id, status, pause_count FROM RECONCILIATION_PROCESSES WHERE id = @id AND is_active = 1');
+
+    if (existing.recordset.length === 0) {
+      return sendNotFound(res, 'Reconciliation process not found');
+    }
+
+    const reconciliation = existing.recordset[0];
+    if (reconciliation.status !== 'in_progress') {
+      return sendError(res, `Cannot pause reconciliation. Current status: ${reconciliation.status}. Only in_progress reconciliations can be paused.`, 400);
+    }
+
+    // Update status to paused
+    await pool.request()
+      .input('id', sql.UniqueIdentifier, id)
+      .input('pausedBy', sql.UniqueIdentifier, userId)
+      .input('pauseCount', sql.Int, (reconciliation.pause_count || 0) + 1)
+      .input('notes', sql.Text, notes || null)
+      .query(`
+        UPDATE RECONCILIATION_PROCESSES
+        SET
+          status = 'paused',
+          paused_by = @pausedBy,
+          paused_at = GETUTCDATE(),
+          pause_count = @pauseCount,
+          notes = CASE WHEN @notes IS NOT NULL THEN @notes ELSE notes END
+        WHERE id = @id
+      `);
+
+    // Fetch updated reconciliation
+    const result = await pool.request()
+      .input('id', sql.UniqueIdentifier, id)
+      .query(`
+        SELECT
+          rp.*,
+          CONCAT(creator.first_name, ' ', creator.last_name) as created_by_name,
+          creator.email as created_by_email,
+          CONCAT(starter.first_name, ' ', starter.last_name) as started_by_name,
+          starter.email as started_by_email,
+          CONCAT(pauser.first_name, ' ', pauser.last_name) as paused_by_name,
+          pauser.email as paused_by_email
+        FROM RECONCILIATION_PROCESSES rp
+        LEFT JOIN USER_MASTER creator ON rp.created_by = creator.user_id
+        LEFT JOIN USER_MASTER starter ON rp.started_by = starter.user_id
+        LEFT JOIN USER_MASTER pauser ON rp.paused_by = pauser.user_id
+        WHERE rp.id = @id
+      `);
+
+    sendSuccess(res, result.recordset[0], 'Reconciliation process paused successfully');
+  })
+);
+
+// ============================================================================
+// ROUTE: PUT /reconciliations/:id/resume
+// Resume a paused reconciliation process (change status from paused to in_progress)
+// Access: Admin, SuperAdmin, Engineer
+// ============================================================================
+router.put('/:id/resume',
+  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER]),
+  validateUUID('id'),
+  validateBody(resumeReconciliationSchema),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { notes } = req.body;
+    const userId = req.user.id;
+
+    const pool = await connectDB();
+
+    // Check if reconciliation exists and is paused
+    const existing = await pool.request()
+      .input('id', sql.UniqueIdentifier, id)
+      .query('SELECT id, status FROM RECONCILIATION_PROCESSES WHERE id = @id AND is_active = 1');
+
+    if (existing.recordset.length === 0) {
+      return sendNotFound(res, 'Reconciliation process not found');
+    }
+
+    const reconciliation = existing.recordset[0];
+    if (reconciliation.status !== 'paused') {
+      return sendError(res, `Cannot resume reconciliation. Current status: ${reconciliation.status}. Only paused reconciliations can be resumed.`, 400);
+    }
+
+    // Update status to in_progress
+    await pool.request()
+      .input('id', sql.UniqueIdentifier, id)
+      .input('resumedBy', sql.UniqueIdentifier, userId)
+      .input('notes', sql.Text, notes || null)
+      .query(`
+        UPDATE RECONCILIATION_PROCESSES
+        SET
+          status = 'in_progress',
+          resumed_by = @resumedBy,
+          resumed_at = GETUTCDATE(),
+          notes = CASE WHEN @notes IS NOT NULL THEN @notes ELSE notes END
+        WHERE id = @id
+      `);
+
+    // Fetch updated reconciliation
+    const result = await pool.request()
+      .input('id', sql.UniqueIdentifier, id)
+      .query(`
+        SELECT
+          rp.*,
+          CONCAT(creator.first_name, ' ', creator.last_name) as created_by_name,
+          creator.email as created_by_email,
+          CONCAT(starter.first_name, ' ', starter.last_name) as started_by_name,
+          starter.email as started_by_email,
+          CONCAT(resumer.first_name, ' ', resumer.last_name) as resumed_by_name,
+          resumer.email as resumed_by_email
+        FROM RECONCILIATION_PROCESSES rp
+        LEFT JOIN USER_MASTER creator ON rp.created_by = creator.user_id
+        LEFT JOIN USER_MASTER starter ON rp.started_by = starter.user_id
+        LEFT JOIN USER_MASTER resumer ON rp.resumed_by = resumer.user_id
+        WHERE rp.id = @id
+      `);
+
+    sendSuccess(res, result.recordset[0], 'Reconciliation process resumed successfully');
   })
 );
 

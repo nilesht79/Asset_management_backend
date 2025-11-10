@@ -378,6 +378,127 @@ router.put('/:discrepancyId/resolve',
 );
 
 // ============================================================================
+// ROUTE: GET /reconciliations/:id/discrepancies/export
+// Export discrepancies to CSV format
+// Access: Admin, SuperAdmin, Engineer
+// ============================================================================
+router.get('/export',
+  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER]),
+  asyncHandler(async (req, res) => {
+    const { id: reconciliationId } = req.params;
+    const { format = 'csv' } = req.query;
+
+    const pool = await connectDB();
+
+    // Verify reconciliation exists
+    const reconciliationCheck = await pool.request()
+      .input('id', sql.UniqueIdentifier, reconciliationId)
+      .query('SELECT reconciliation_name FROM RECONCILIATION_PROCESSES WHERE id = @id AND is_active = 1');
+
+    if (reconciliationCheck.recordset.length === 0) {
+      return sendNotFound(res, 'Reconciliation process not found');
+    }
+
+    const reconciliationName = reconciliationCheck.recordset[0].reconciliation_name;
+
+    // Fetch all discrepancies with full details
+    const result = await pool.request()
+      .input('reconciliationId', sql.UniqueIdentifier, reconciliationId)
+      .query(`
+        SELECT
+          a.asset_tag,
+          p.name as product_name,
+          d.field_display_name,
+          d.discrepancy_type,
+          d.severity,
+          d.system_value,
+          d.physical_value,
+          CASE WHEN d.is_resolved = 1 THEN 'Resolved' ELSE 'Pending' END as status,
+          CONCAT(detector.first_name, ' ', detector.last_name) as detected_by,
+          detector.email as detected_by_email,
+          FORMAT(d.detected_at, 'yyyy-MM-dd HH:mm:ss') as detected_at,
+          CONCAT(resolver.first_name, ' ', resolver.last_name) as resolved_by,
+          resolver.email as resolved_by_email,
+          FORMAT(d.resolved_at, 'yyyy-MM-dd HH:mm:ss') as resolved_at,
+          d.resolution_action,
+          d.resolution_notes
+        FROM RECONCILIATION_DISCREPANCIES d
+        INNER JOIN RECONCILIATION_RECORDS rr ON d.reconciliation_record_id = rr.id
+        LEFT JOIN assets a ON rr.asset_id = a.id
+        LEFT JOIN products p ON a.product_id = p.id
+        LEFT JOIN USER_MASTER detector ON d.detected_by = detector.user_id
+        LEFT JOIN USER_MASTER resolver ON d.resolved_by = resolver.user_id
+        WHERE rr.reconciliation_id = @reconciliationId
+        ORDER BY d.severity DESC, d.detected_at ASC
+      `);
+
+    const discrepancies = result.recordset;
+
+    if (discrepancies.length === 0) {
+      return sendError(res, 'No discrepancies found for this reconciliation', 404);
+    }
+
+    // Generate CSV format
+    if (format === 'csv') {
+      // CSV Headers
+      const headers = [
+        'Asset Tag',
+        'Product',
+        'Field',
+        'Type',
+        'Severity',
+        'System Value',
+        'Physical Value',
+        'Status',
+        'Detected By',
+        'Detected Email',
+        'Detected At',
+        'Resolved By',
+        'Resolved Email',
+        'Resolved At',
+        'Resolution Action',
+        'Resolution Notes'
+      ];
+
+      // Build CSV content
+      let csvContent = headers.join(',') + '\n';
+
+      discrepancies.forEach(row => {
+        const values = [
+          `"${row.asset_tag || ''}"`,
+          `"${row.product_name || ''}"`,
+          `"${row.field_display_name || ''}"`,
+          `"${row.discrepancy_type || ''}"`,
+          `"${row.severity || ''}"`,
+          `"${(row.system_value || '').replace(/"/g, '""')}"`,
+          `"${(row.physical_value || '').replace(/"/g, '""')}"`,
+          `"${row.status || ''}"`,
+          `"${row.detected_by || ''}"`,
+          `"${row.detected_by_email || ''}"`,
+          `"${row.detected_at || ''}"`,
+          `"${row.resolved_by || ''}"`,
+          `"${row.resolved_by_email || ''}"`,
+          `"${row.resolved_at || ''}"`,
+          `"${row.resolution_action || ''}"`,
+          `"${(row.resolution_notes || '').replace(/"/g, '""')}"`
+        ];
+        csvContent += values.join(',') + '\n';
+      });
+
+      // Set headers for file download
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const filename = `${reconciliationName.replace(/[^a-zA-Z0-9]/g, '_')}_discrepancies_${timestamp}.csv`;
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.send(csvContent);
+    } else {
+      return sendError(res, 'Unsupported export format. Use format=csv', 400);
+    }
+  })
+);
+
+// ============================================================================
 // ROUTE: GET /discrepancies/:discrepancyId
 // Get single discrepancy details
 // Access: Admin, SuperAdmin, Engineer

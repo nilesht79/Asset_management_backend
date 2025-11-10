@@ -1,0 +1,51 @@
+-- ============================================================================
+-- Rollback: Remove Pause/Resume Functionality from Reconciliation
+-- Description: Removes columns and constraints added by add-pause-functionality.sql
+-- Date: 2025-11-08
+-- ============================================================================
+
+USE asset_management;
+GO
+
+-- Drop check constraint
+IF EXISTS (SELECT * FROM sys.check_constraints WHERE name = 'CHK_RECONCILIATION_STATUS')
+BEGIN
+    ALTER TABLE RECONCILIATION_PROCESSES DROP CONSTRAINT CHK_RECONCILIATION_STATUS;
+    PRINT 'Dropped constraint: CHK_RECONCILIATION_STATUS';
+END
+
+-- Drop index
+IF EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_RECONCILIATION_STATUS' AND object_id = OBJECT_ID('RECONCILIATION_PROCESSES'))
+BEGIN
+    DROP INDEX IX_RECONCILIATION_STATUS ON RECONCILIATION_PROCESSES;
+    PRINT 'Dropped index: IX_RECONCILIATION_STATUS';
+END
+
+-- Drop foreign key constraints
+IF EXISTS (SELECT * FROM sys.foreign_keys WHERE name = 'FK_RECONCILIATION_PAUSED_BY')
+BEGIN
+    ALTER TABLE RECONCILIATION_PROCESSES DROP CONSTRAINT FK_RECONCILIATION_PAUSED_BY;
+    PRINT 'Dropped constraint: FK_RECONCILIATION_PAUSED_BY';
+END
+
+IF EXISTS (SELECT * FROM sys.foreign_keys WHERE name = 'FK_RECONCILIATION_RESUMED_BY')
+BEGIN
+    ALTER TABLE RECONCILIATION_PROCESSES DROP CONSTRAINT FK_RECONCILIATION_RESUMED_BY;
+    PRINT 'Dropped constraint: FK_RECONCILIATION_RESUMED_BY';
+END
+
+-- Drop new columns
+ALTER TABLE RECONCILIATION_PROCESSES DROP COLUMN IF EXISTS pending_at_completion;
+ALTER TABLE RECONCILIATION_PROCESSES DROP COLUMN IF EXISTS forced_completion;
+ALTER TABLE RECONCILIATION_PROCESSES DROP COLUMN IF EXISTS pause_count;
+ALTER TABLE RECONCILIATION_PROCESSES DROP COLUMN IF EXISTS resumed_by;
+ALTER TABLE RECONCILIATION_PROCESSES DROP COLUMN IF EXISTS resumed_at;
+ALTER TABLE RECONCILIATION_PROCESSES DROP COLUMN IF EXISTS paused_by;
+ALTER TABLE RECONCILIATION_PROCESSES DROP COLUMN IF EXISTS paused_at;
+
+GO
+
+-- Print completion message
+PRINT 'Rollback completed successfully: Pause functionality removed from RECONCILIATION_PROCESSES table';
+
+GO

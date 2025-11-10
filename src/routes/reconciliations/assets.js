@@ -628,10 +628,27 @@ router.put('/:assetId/reconcile',
         `);
 
       // Detect and insert discrepancies
+      // Fetch physical assigned user name if provided
+      let physicalAssignedToName = null;
+      if (physical_assigned_to) {
+        const physicalUserResult = await transaction.request()
+          .input('userId', sql.UniqueIdentifier, physical_assigned_to)
+          .query(`
+            SELECT CONCAT(first_name, ' ', last_name) as full_name
+            FROM USER_MASTER
+            WHERE user_id = @userId
+          `);
+
+        if (physicalUserResult.recordset.length > 0) {
+          physicalAssignedToName = physicalUserResult.recordset[0].full_name;
+        }
+      }
+
       const physicalValues = {
         physical_location,
         physical_condition,
         physical_assigned_to,
+        physical_assigned_to_name: physicalAssignedToName,
         physical_serial_number,
         physical_status
       };

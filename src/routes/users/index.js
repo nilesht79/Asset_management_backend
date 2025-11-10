@@ -75,7 +75,7 @@ router.get('/',
   validatePagination,
   asyncHandler(async (req, res) => {
     const { page, limit, offset, sortBy, sortOrder } = req.pagination;
-    const { search, status, role, department_id, location_id, board_id } = req.query;
+    const { search, status, role, department_id, location_id, board_id, employeeId } = req.query;
 
     const pool = await connectDB();
 
@@ -86,6 +86,12 @@ router.get('/',
     if (search) {
       whereClause += ' AND (u.first_name LIKE @search OR u.last_name LIKE @search OR u.email LIKE @search OR u.employee_id LIKE @search)';
       params.push({ name: 'search', type: sql.VarChar(255), value: `%${search}%` });
+    }
+
+    // Add exact match for employeeId (takes precedence over general search)
+    if (employeeId) {
+      whereClause += ' AND u.employee_id = @employeeId';
+      params.push({ name: 'employeeId', type: sql.VarChar(20), value: employeeId });
     }
 
     if (status) {
@@ -190,7 +196,7 @@ router.get('/',
 router.get('/export',
   requireRole(['superadmin', 'admin', 'coordinator']),
   asyncHandler(async (req, res) => {
-    const { status, role, search } = req.query;
+    const { status, role, search, employeeId } = req.query;
     const pool = await connectDB();
 
     // Build WHERE clause
@@ -211,6 +217,12 @@ router.get('/export',
     if (search) {
       whereClause += ' AND (u.first_name LIKE @search OR u.last_name LIKE @search OR u.email LIKE @search OR u.employee_id LIKE @search)';
       params.push({ name: 'search', type: sql.VarChar(255), value: `%${search}%` });
+    }
+
+    // Add exact match for employeeId
+    if (employeeId) {
+      whereClause += ' AND u.employee_id = @employeeId';
+      params.push({ name: 'employeeId', type: sql.VarChar(20), value: employeeId });
     }
 
     // Fetch users

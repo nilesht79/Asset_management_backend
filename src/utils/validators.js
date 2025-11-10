@@ -385,10 +385,13 @@ const validators = {
       serial_number: Joi.string().min(1).max(100).required(),
       product_id: Joi.string().uuid().required(),
       assigned_to: Joi.string().uuid().optional().allow(null),
-      status: Joi.string().valid('available', 'assigned', 'in_use', 'under_repair', 'disposed').default('available'),
+      status: Joi.string().valid('available', 'assigned', 'in_use', 'under_repair', 'disposed', 'maintenance').default('available'),
       condition_status: Joi.string().valid('excellent', 'good', 'fair', 'needs_repair', 'poor').default('good'),
       purchase_date: Joi.date().optional().allow(null),
+      warranty_start_date: Joi.date().optional().allow(null),
       warranty_end_date: Joi.date().optional().allow(null),
+      eol_date: Joi.date().optional().allow(null),
+      eos_date: Joi.date().optional().allow(null),
       purchase_cost: Joi.number().positive().precision(2).optional().allow(null),
       notes: Joi.string().max(1000).optional().allow(null),
       is_active: Joi.boolean().default(true),
@@ -397,7 +400,19 @@ const validators = {
       parent_asset_id: Joi.string().uuid().optional().allow(null),
       installation_date: Joi.date().optional().allow(null),
       installation_notes: Joi.string().max(1000).optional().allow(null),
-      installed_by: Joi.string().uuid().optional().allow(null)
+      installed_by: Joi.string().uuid().optional().allow(null),
+      // Software installations
+      software_installations: Joi.array().items(
+        Joi.object({
+          software_product_id: Joi.string().uuid().required(),
+          software_type: Joi.string().valid('operating_system', 'application', 'utility', 'driver').optional(),
+          license_key: Joi.string().max(500).optional().allow(null, ''),
+          license_type: Joi.string().valid('oem', 'retail', 'volume', 'subscription').optional(),
+          activation_date: Joi.date().optional().allow(null),
+          expiration_date: Joi.date().optional().allow(null),
+          notes: Joi.string().max(1000).optional().allow(null, '')
+        })
+      ).optional()
     }),
 
     update: Joi.object({
@@ -405,10 +420,13 @@ const validators = {
       serial_number: Joi.string().min(1).max(100).optional().allow(null),
       product_id: Joi.string().uuid().optional(),
       assigned_to: Joi.string().uuid().optional().allow(null),
-      status: Joi.string().valid('available', 'assigned', 'in_use', 'under_repair', 'disposed').optional(),
+      status: Joi.string().valid('available', 'assigned', 'in_use', 'under_repair', 'disposed', 'maintenance').optional(),
       condition_status: Joi.string().valid('excellent', 'good', 'fair', 'needs_repair', 'poor').optional(),
       purchase_date: Joi.date().optional().allow(null),
+      warranty_start_date: Joi.date().optional().allow(null),
       warranty_end_date: Joi.date().optional().allow(null),
+      eol_date: Joi.date().optional().allow(null),
+      eos_date: Joi.date().optional().allow(null),
       purchase_cost: Joi.number().positive().precision(2).optional().allow(null),
       notes: Joi.string().max(1000).optional().allow(null),
       is_active: Joi.boolean().optional(),
@@ -417,7 +435,19 @@ const validators = {
       parent_asset_id: Joi.string().uuid().optional().allow(null),
       installation_date: Joi.date().optional().allow(null),
       installation_notes: Joi.string().max(1000).optional().allow(null),
-      installed_by: Joi.string().uuid().optional().allow(null)
+      installed_by: Joi.string().uuid().optional().allow(null),
+      // Software installations
+      software_installations: Joi.array().items(
+        Joi.object({
+          software_product_id: Joi.string().uuid().required(),
+          software_type: Joi.string().valid('operating_system', 'application', 'utility', 'driver').optional(),
+          license_key: Joi.string().max(500).optional().allow(null, ''),
+          license_type: Joi.string().valid('oem', 'retail', 'volume', 'subscription').optional(),
+          activation_date: Joi.date().optional().allow(null),
+          expiration_date: Joi.date().optional().allow(null),
+          notes: Joi.string().max(1000).optional().allow(null, '')
+        })
+      ).optional()
     }),
 
     // New validator for component installation

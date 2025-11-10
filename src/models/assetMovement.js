@@ -1,5 +1,6 @@
 const { connectDB } = require('../config/database');
 const { v4: uuidv4 } = require('uuid');
+const ExcelJS = require('exceljs');
 
 /**
  * Asset Movement Model
@@ -165,39 +166,105 @@ class AssetMovementModel {
   static async getRecentMovements(options = {}) {
     try {
       const pool = await connectDB();
-      const { limit = 50, offset = 0 } = options;
+      const {
+        limit = 50,
+        offset = 0,
+        assetTag,
+        movementType,
+        status,
+        startDate,
+        endDate
+      } = options;
 
-      const result = await pool.request()
-        .input('limit', limit)
-        .input('offset', offset)
-        .query(`
-          SELECT
-            id,
-            asset_id,
-            asset_tag,
-            assigned_to,
-            assigned_to_name,
-            location_id,
-            location_name,
-            movement_type,
-            status,
-            previous_user_id,
-            previous_user_name,
-            previous_location_id,
-            previous_location_name,
-            movement_date,
-            reason,
-            notes,
-            performed_by,
-            performed_by_name,
-            created_at
-          FROM ASSET_MOVEMENTS
-          ORDER BY movement_date DESC
-          OFFSET @offset ROWS
-          FETCH NEXT @limit ROWS ONLY
-        `);
+      // Build dynamic WHERE clause
+      const whereConditions = [];
 
-      return result.recordset;
+      // Create separate requests for count and data
+      const countRequest = pool.request();
+      const dataRequest = pool.request();
+
+      // Add filters if provided (to both requests)
+      if (assetTag) {
+        whereConditions.push('asset_tag LIKE @assetTag');
+        countRequest.input('assetTag', `%${assetTag}%`);
+        dataRequest.input('assetTag', `%${assetTag}%`);
+      }
+
+      if (movementType) {
+        whereConditions.push('movement_type = @movementType');
+        countRequest.input('movementType', movementType);
+        dataRequest.input('movementType', movementType);
+      }
+
+      if (status) {
+        whereConditions.push('status = @status');
+        countRequest.input('status', status);
+        dataRequest.input('status', status);
+      }
+
+      if (startDate) {
+        whereConditions.push('movement_date >= @startDate');
+        countRequest.input('startDate', startDate);
+        dataRequest.input('startDate', startDate);
+      }
+
+      if (endDate) {
+        // Add one day to endDate to include the entire end date
+        whereConditions.push('movement_date < DATEADD(day, 1, @endDate)');
+        countRequest.input('endDate', endDate);
+        dataRequest.input('endDate', endDate);
+      }
+
+      // Build WHERE clause
+      const whereClause = whereConditions.length > 0
+        ? 'WHERE ' + whereConditions.join(' AND ')
+        : '';
+
+      // Get total count
+      const countResult = await countRequest.query(`
+        SELECT COUNT(*) as total
+        FROM ASSET_MOVEMENTS
+        ${whereClause}
+      `);
+
+      const totalCount = countResult.recordset[0].total;
+
+      // Get paginated data
+      dataRequest.input('limit', limit);
+      dataRequest.input('offset', offset);
+
+      const dataResult = await dataRequest.query(`
+        SELECT
+          id,
+          asset_id,
+          asset_tag,
+          assigned_to,
+          assigned_to_name,
+          location_id,
+          location_name,
+          movement_type,
+          status,
+          previous_user_id,
+          previous_user_name,
+          previous_location_id,
+          previous_location_name,
+          movement_date,
+          reason,
+          notes,
+          performed_by,
+          performed_by_name,
+          created_at
+        FROM ASSET_MOVEMENTS
+        ${whereClause}
+        ORDER BY movement_date DESC
+        OFFSET @offset ROWS
+        FETCH NEXT @limit ROWS ONLY
+      `);
+
+      return {
+        data: dataResult.recordset,
+        total: totalCount
+      };
     } catch (error) {
       console.error('Error fetching recent movements:', error);
       throw error;
@@ -328,6 +395,23 @@ class AssetMovementModel {
         }
       }
 
+      // Validate data quality before insert
+      if (!performedByName || performedByName.trim().length === 0) {
+        throw new Error('Invalid performer name - cannot be empty (database constraint would reject this)');
+      }
+
+      if (performedByName.includes('undefined')) {
+        throw new Error('Invalid performer name - contains "undefined" (database constraint would reject this)');
+      }
+
+      if (assignedTo && (!assignedToName || assignedToName.trim().length === 0)) {
+        throw new Error('assigned_to is set but assigned_to_name is missing (database constraint would reject this)');
+      }
+
+      if (assignedToName && assignedToName.includes('undefined')) {
+        throw new Error('Invalid assigned_to_name - contains "undefined" (database constraint would reject this)');
+      }
+
       // Insert movement record
       const movementId = uuidv4();
       const result = await pool.request()
@@ -452,6 +536,209 @@ class AssetMovementModel {
       return result.recordset[0] || null;
     } catch (error) {
       console.error('Error fetching current assignment:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Export asset movements to Excel
+   * @param {object} options - Filter options (same as getRecentMovements)
+   * @returns {Promise<Buffer>} Excel file buffer
+   */
+  static async exportToExcel(options = {}) {
+    try {
+      const pool = await connectDB();
+      const {
+        assetTag,
+        movementType,
+        status,
+        startDate,
+        endDate
+      } = options;
+
+      // Build dynamic WHERE clause (same logic as getRecentMovements)
+      const whereConditions = [];
+      const request = pool.request();
+
+      if (assetTag) {
+        whereConditions.push('asset_tag LIKE @assetTag');
+        request.input('assetTag', `%${assetTag}%`);
+      }
+
+      if (movementType) {
+        whereConditions.push('movement_type = @movementType');
+        request.input('movementType', movementType);
+      }
+
+      if (status) {
+        whereConditions.push('status = @status');
+        request.input('status', status);
+      }
+
+      if (startDate) {
+        whereConditions.push('movement_date >= @startDate');
+        request.input('startDate', startDate);
+      }
+
+      if (endDate) {
+        whereConditions.push('movement_date < DATEADD(day, 1, @endDate)');
+        request.input('endDate', endDate);
+      }
+
+      const whereClause = whereConditions.length > 0
+        ? `WHERE ${whereConditions.join(' AND ')}`
+        : '';
+
+      // Fetch all matching records (no pagination for export)
+      const result = await request.query(`
+        SELECT
+          asset_tag,
+          movement_type,
+          status,
+          movement_date,
+          assigned_to_name,
+          location_name,
+          previous_user_name,
+          previous_location_name,
+          reason,
+          notes,
+          performed_by_name,
+          parent_asset_tag
+        FROM ASSET_MOVEMENTS
+        ${whereClause}
+        ORDER BY movement_date DESC
+      `);
+
+      const movements = result.recordset;
+
+      // Create Excel workbook
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Asset Movements');
+
+      // Set worksheet properties
+      worksheet.properties.defaultRowHeight = 20;
+
+      // Define columns with headers
+      worksheet.columns = [
+        { header: 'Date & Time', key: 'movement_date', width: 20 },
+        { header: 'Asset Tag', key: 'asset_tag', width: 15 },
+        { header: 'Movement Type', key: 'movement_type', width: 18 },
+        { header: 'Status', key: 'status', width: 12 },
+        { header: 'Assigned To', key: 'assigned_to_name', width: 20 },
+        { header: 'Location', key: 'location_name', width: 25 },
+        { header: 'Previous User', key: 'previous_user_name', width: 20 },
+        { header: 'Previous Location', key: 'previous_location_name', width: 25 },
+        { header: 'Reason', key: 'reason', width: 30 },
+        { header: 'Notes', key: 'notes', width: 30 },
+        { header: 'Performed By', key: 'performed_by_name', width: 20 },
+        { header: 'Parent Asset', key: 'parent_asset_tag', width: 15 }
+      ];
+
+      // Style the header row
+      const headerRow = worksheet.getRow(1);
+      headerRow.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF1890FF' }
+      };
+      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+      headerRow.height = 25;
+
+      // Add data rows
+      movements.forEach((movement) => {
+        const row = worksheet.addRow({
+          movement_date: movement.movement_date,
+          asset_tag: movement.asset_tag,
+          movement_type: movement.movement_type?.replace(/_/g, ' ').toUpperCase(),
+          status: movement.status?.toUpperCase(),
+          assigned_to_name: movement.assigned_to_name || '—',
+          location_name: movement.location_name || '—',
+          previous_user_name: movement.previous_user_name || '—',
+          previous_location_name: movement.previous_location_name || '—',
+          reason: movement.reason || '—',
+          notes: movement.notes || '—',
+          performed_by_name: movement.performed_by_name,
+          parent_asset_tag: movement.parent_asset_tag || '—'
+        });
+
+        // Format date column
+        row.getCell('movement_date').numFmt = 'dd-mmm-yyyy hh:mm:ss';
+
+        // Alternate row colors
+        if (row.number % 2 === 0) {
+          row.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFF5F5F5' }
+          };
+        }
+
+        // Set row alignment
+        row.alignment = { vertical: 'middle', wrapText: true };
+      });
+
+      // Add filters to header row
+      worksheet.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: 1, column: 12 }
+      };
+
+      // Freeze header row
+      worksheet.views = [
+        { state: 'frozen', xSplit: 0, ySplit: 1 }
+      ];
+
+      // Add borders to all cells
+      worksheet.eachRow((row, rowNumber) => {
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+            left: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+            bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+            right: { style: 'thin', color: { argb: 'FFD0D0D0' } }
+          };
+        });
+      });
+
+      // Add summary information at the top (insert rows before data)
+      worksheet.spliceRows(1, 0,
+        ['Asset Movement Export Report'],
+        [`Generated: ${new Date().toLocaleString()}`],
+        [`Total Records: ${movements.length}`]
+      );
+
+      // Style summary section
+      const titleRow = worksheet.getRow(1);
+      titleRow.font = { bold: true, size: 14, color: { argb: 'FF1890FF' } };
+      titleRow.height = 25;
+
+      const dateRow = worksheet.getRow(2);
+      dateRow.font = { italic: true, size: 10 };
+
+      const countRow = worksheet.getRow(3);
+      countRow.font = { bold: true, size: 10 };
+
+      // Add empty row after summary
+      worksheet.spliceRows(4, 0, []);
+
+      // Update freeze pane to account for summary rows (freeze at row 5 which is the header)
+      worksheet.views = [
+        { state: 'frozen', xSplit: 0, ySplit: 5 }
+      ];
+
+      // Update autoFilter to start from row 5 (header row after summary)
+      worksheet.autoFilter = {
+        from: { row: 5, column: 1 },
+        to: { row: 5, column: 12 }
+      };
+
+      // Generate buffer
+      const buffer = await workbook.xlsx.writeBuffer();
+      return buffer;
+
+    } catch (error) {
+      console.error('Error exporting to Excel:', error);
       throw error;
     }
   }

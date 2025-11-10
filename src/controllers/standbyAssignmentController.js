@@ -5,6 +5,7 @@
 
 const { connectDB, sql } = require('../config/database');
 const { sendSuccess, sendCreated, sendError, sendNotFound } = require('../utils/response');
+const { getUserFullName } = require('../utils/userHelpers');
 
 /**
  * Get all standby assignments with filters
@@ -160,6 +161,10 @@ const assignStandbyAsset = async (req, res) => {
     const performedBy = req.user?.id;
 
     const pool = await connectDB();
+
+    // Get performer name safely using helper function
+    const performedByName = await getUserFullName(req.user, pool);
+
     const transaction = pool.transaction();
     await transaction.begin();
 
@@ -247,7 +252,7 @@ const assignStandbyAsset = async (req, res) => {
           .input('status', sql.VarChar(20), 'maintenance')
           .input('reason', sql.Text, `Asset sent for ${reason_category}. Standby asset ${standbyAsset.asset_tag} assigned to user.`)
           .input('performedBy', sql.UniqueIdentifier, performedBy)
-          .input('performedByName', sql.NVarChar(200), `${req.user.firstName} ${req.user.lastName}`)
+          .input('performedByName', sql.NVarChar(200), performedByName)
           .query(`
             INSERT INTO ASSET_MOVEMENTS (
               asset_id, asset_tag, movement_type, status,
@@ -283,7 +288,7 @@ const assignStandbyAsset = async (req, res) => {
         .input('assignedToName', sql.NVarChar(200), `${user.first_name} ${user.last_name}`)
         .input('reason', sql.Text, `Temporary standby assignment. Reason: ${reason}`)
         .input('performedBy', sql.UniqueIdentifier, performedBy)
-        .input('performedByName', sql.NVarChar(200), `${req.user.firstName} ${req.user.lastName}`)
+        .input('performedByName', sql.NVarChar(200), performedByName)
         .query(`
           INSERT INTO ASSET_MOVEMENTS (
             asset_id, asset_tag, movement_type, status,
@@ -354,6 +359,10 @@ const returnStandbyAsset = async (req, res) => {
     const performedBy = req.user?.id;
 
     const pool = await connectDB();
+
+    // Get performer name safely using helper function
+    const performedByName = await getUserFullName(req.user, pool);
+
     const transaction = pool.transaction();
     await transaction.begin();
 
@@ -409,7 +418,7 @@ const returnStandbyAsset = async (req, res) => {
           .input('assignedToName', sql.NVarChar(200), assignment.user_name)
           .input('reason', sql.Text, `Original asset returned from ${assignment.reason_category}. Standby asset ${assignment.standby_asset_tag} returned to pool.`)
           .input('performedBy', sql.UniqueIdentifier, performedBy)
-          .input('performedByName', sql.NVarChar(200), `${req.user.firstName} ${req.user.lastName}`)
+          .input('performedByName', sql.NVarChar(200), performedByName)
           .query(`
             INSERT INTO ASSET_MOVEMENTS (
               asset_id, asset_tag, movement_type, status,
@@ -444,7 +453,7 @@ const returnStandbyAsset = async (req, res) => {
         .input('status', sql.VarChar(20), 'available')
         .input('reason', sql.Text, `Standby asset returned to pool. Original asset ${assignment.original_asset_tag} returned to user.`)
         .input('performedBy', sql.UniqueIdentifier, performedBy)
-        .input('performedByName', sql.NVarChar(200), `${req.user.firstName} ${req.user.lastName}`)
+        .input('performedByName', sql.NVarChar(200), performedByName)
         .query(`
           INSERT INTO ASSET_MOVEMENTS (
             asset_id, asset_tag, movement_type, status,
@@ -501,6 +510,10 @@ const makeAssignmentPermanent = async (req, res) => {
     const performedBy = req.user?.id;
 
     const pool = await connectDB();
+
+    // Get performer name safely using helper function
+    const performedByName = await getUserFullName(req.user, pool);
+
     const transaction = pool.transaction();
     await transaction.begin();
 
@@ -562,7 +575,7 @@ const makeAssignmentPermanent = async (req, res) => {
         .input('status', sql.VarChar(20), 'assigned')
         .input('reason', sql.Text, `Standby assignment made permanent. ${notes || ''}`)
         .input('performedBy', sql.UniqueIdentifier, performedBy)
-        .input('performedByName', sql.NVarChar(200), `${req.user.firstName} ${req.user.lastName}`)
+        .input('performedByName', sql.NVarChar(200), performedByName)
         .query(`
           INSERT INTO ASSET_MOVEMENTS (
             asset_id, asset_tag, movement_type, status,

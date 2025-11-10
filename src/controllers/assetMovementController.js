@@ -12,20 +12,34 @@ const { asyncHandler } = require('../middleware/error-handler');
  * @access  Authenticated users
  */
 exports.getRecentMovements = asyncHandler(async (req, res) => {
-  const { limit = 50, offset = 0 } = req.query;
+  const {
+    limit = 50,
+    offset = 0,
+    assetTag,        // Filter by asset tag (partial match)
+    movementType,    // Filter by movement type (exact match)
+    status,          // Filter by status (exact match)
+    startDate,       // Filter by date range start
+    endDate          // Filter by date range end
+  } = req.query;
 
-  const movements = await AssetMovementModel.getRecentMovements({
+  const result = await AssetMovementModel.getRecentMovements({
     limit: parseInt(limit),
-    offset: parseInt(offset)
+    offset: parseInt(offset),
+    assetTag,
+    movementType,
+    status,
+    startDate,
+    endDate
   });
 
   res.status(200).json({
     success: true,
-    data: movements,
+    data: result.data,
     pagination: {
       limit: parseInt(limit),
       offset: parseInt(offset),
-      count: movements.length
+      count: result.data.length,
+      total: result.total
     }
   });
 });
@@ -207,6 +221,40 @@ exports.getMovementStatistics = asyncHandler(async (req, res) => {
     success: true,
     data: statistics
   });
+});
+
+/**
+ * @route   GET /api/v1/asset-movements/export/excel
+ * @desc    Export asset movements to Excel with filters
+ * @access  Authenticated users
+ */
+exports.exportToExcel = asyncHandler(async (req, res) => {
+  const {
+    assetTag,
+    movementType,
+    status,
+    startDate,
+    endDate
+  } = req.query;
+
+  const buffer = await AssetMovementModel.exportToExcel({
+    assetTag,
+    movementType,
+    status,
+    startDate,
+    endDate
+  });
+
+  // Generate filename with timestamp
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
+  const filename = `Asset_Movements_${timestamp}.xlsx`;
+
+  // Set headers for file download
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Content-Length', buffer.length);
+
+  res.send(buffer);
 });
 
 /**
