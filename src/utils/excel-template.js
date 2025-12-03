@@ -21,6 +21,7 @@ async function generateUserUploadTemplate(departments = []) {
     { header: 'Password', key: 'password', width: 15 },
     { header: 'Role*', key: 'role', width: 20 },
     { header: 'Employee ID', key: 'employee_id', width: 15 },
+    { header: 'Designation', key: 'designation', width: 25 },
     { header: 'Department Name', key: 'department_name', width: 25 },
     { header: 'Location Name', key: 'location_name', width: 25 },
     { header: 'Is Active', key: 'is_active', width: 12 },
@@ -46,6 +47,7 @@ async function generateUserUploadTemplate(departments = []) {
     password: 'Test@123',
     role: 'employee',
     employee_id: 'EMP-12345678',
+    designation: 'Software Engineer',
     department_name: departments.length > 0 ? departments[0].department_name : 'I.T Department',
     location_name: '', // Optional: Must match existing location name
     is_active: 'true',
@@ -59,6 +61,7 @@ async function generateUserUploadTemplate(departments = []) {
     password: '', // Will auto-generate secure password
     role: 'engineer',
     employee_id: '', // Will auto-generate
+    designation: 'Senior Developer',
     department_name: 'Finance', // Will auto-create if doesn't exist
     location_name: '', // Optional: Must match existing location name
     is_active: 'true',
@@ -79,8 +82,8 @@ async function generateUserUploadTemplate(departments = []) {
     }
   });
 
-  // Add data validations for Is Active column (column H)
-  worksheet.getColumn(8).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
+  // Add data validations for Is Active column (column J - after adding Designation)
+  worksheet.getColumn(10).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
     if (rowNumber > 1) {
       cell.dataValidation = {
         type: 'list',
@@ -93,8 +96,8 @@ async function generateUserUploadTemplate(departments = []) {
     }
   });
 
-  // Add data validations for Is VIP column (column I)
-  worksheet.getColumn(9).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
+  // Add data validations for Is VIP column (column K)
+  worksheet.getColumn(11).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
     if (rowNumber > 1) {
       cell.dataValidation = {
         type: 'list',
@@ -133,6 +136,7 @@ async function generateUserUploadTemplate(departments = []) {
     { field: 'Password', required: 'No', description: 'Minimum 8 characters with uppercase, lowercase, number, and special character (auto-generated if left blank)' },
     { field: 'Role', required: 'Yes', description: 'User role: superadmin, admin, department_head, coordinator, engineer, or employee' },
     { field: 'Employee ID', required: 'No', description: 'Employee ID (auto-generated as T-10000, T-10001, etc. if left blank)' },
+    { field: 'Designation', required: 'No', description: 'Job title or designation (e.g., Software Engineer, Manager, etc.)' },
     { field: 'Department Name', required: 'No', description: 'Department name (auto-created if doesn\'t exist, leave blank for no department)' },
     { field: 'Location Name', required: 'No', description: 'Location name (must match existing location in system, leave blank for no location)' },
     { field: 'Is Active', required: 'No', description: 'User active status: true or false (default: true)' },
@@ -222,6 +226,9 @@ async function generateAssetBulkTemplate({ quantity, product }) {
     { header: 'Standby Available', key: 'standby_available', width: 18 },
     { header: 'Status', key: 'status', width: 15 },
     { header: 'Condition', key: 'condition_status', width: 15 },
+    { header: 'Importance', key: 'importance', width: 15 },
+    { header: 'Vendor', key: 'vendor_name', width: 20 },
+    { header: 'Invoice Number', key: 'invoice_number', width: 20 },
     { header: 'Purchase Date', key: 'purchase_date', width: 18 },
     { header: 'Purchase Cost', key: 'purchase_cost', width: 18 },
     { header: 'Warranty Start', key: 'warranty_start_date', width: 18 },
@@ -264,6 +271,9 @@ async function generateAssetBulkTemplate({ quantity, product }) {
       standby_available: '',
       status: 'available',
       condition_status: 'new',
+      importance: 'medium',
+      vendor_name: 'PoleStar',
+      invoice_number: '',
       purchase_date: '',
       purchase_cost: '',
       warranty_start_date: '',
@@ -295,6 +305,9 @@ async function generateAssetBulkTemplate({ quantity, product }) {
       standby_available: '',
       status: 'available',
       condition_status: 'new',
+      importance: 'medium',
+      vendor_name: 'PoleStar',
+      invoice_number: '',
       purchase_date: '',
       purchase_cost: '',
       warranty_start_date: '',
@@ -382,8 +395,22 @@ async function generateAssetBulkTemplate({ quantity, product }) {
     }
   });
 
-  // Add data validation for OS License Type column (column 21)
-  worksheet.getColumn(21).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
+  // Add data validation for Importance column (column 13)
+  worksheet.getColumn(13).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
+    if (rowNumber > 1) {
+      cell.dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: ['"critical,high,medium,low"'],
+        showErrorMessage: true,
+        errorTitle: 'Invalid Importance',
+        error: 'Please select a valid importance level: critical, high, medium, or low'
+      };
+    }
+  });
+
+  // Add data validation for OS License Type column (column 22 - shifted by 1)
+  worksheet.getColumn(22).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
     if (rowNumber > 1) {
       cell.dataValidation = {
         type: 'list',
@@ -396,8 +423,8 @@ async function generateAssetBulkTemplate({ quantity, product }) {
     }
   });
 
-  // Add data validation for Office License Type column (column 24)
-  worksheet.getColumn(24).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
+  // Add data validation for Office License Type column (column 25 - shifted by 1)
+  worksheet.getColumn(25).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
     if (rowNumber > 1) {
       cell.dataValidation = {
         type: 'list',
@@ -565,20 +592,23 @@ async function parseAssetBulkFile(fileBuffer, productId) {
       standby_available: standbyAvailable,
       status: row.getCell(11).value?.toString().trim() || 'available',
       condition_status: row.getCell(12).value?.toString().trim() || 'new',
-      purchase_date: row.getCell(13).value || null,
-      purchase_cost: row.getCell(14).value || null,
-      warranty_start_date: row.getCell(15).value || null,
-      warranty_end_date: row.getCell(16).value || null,
-      eol_date: row.getCell(17).value || null,
-      eos_date: row.getCell(18).value || null,
-      os_name: row.getCell(19).value?.toString().trim() || null,
-      os_license_key: row.getCell(20).value?.toString().trim() || null,
-      os_license_type: row.getCell(21).value?.toString().trim() || 'oem',
-      office_name: row.getCell(22).value?.toString().trim() || null,
-      office_license_key: row.getCell(23).value?.toString().trim() || null,
-      office_license_type: row.getCell(24).value?.toString().trim() || 'retail',
-      installation_notes: row.getCell(25).value?.toString().trim() || null,
-      notes: row.getCell(26).value?.toString().trim() || null,
+      importance: row.getCell(13).value?.toString().trim() || 'medium',
+      vendor_name: row.getCell(14).value?.toString().trim() || 'PoleStar',
+      invoice_number: row.getCell(15).value?.toString().trim() || null,
+      purchase_date: row.getCell(16).value || null,
+      purchase_cost: row.getCell(17).value || null,
+      warranty_start_date: row.getCell(18).value || null,
+      warranty_end_date: row.getCell(19).value || null,
+      eol_date: row.getCell(20).value || null,
+      eos_date: row.getCell(21).value || null,
+      os_name: row.getCell(22).value?.toString().trim() || null,
+      os_license_key: row.getCell(23).value?.toString().trim() || null,
+      os_license_type: row.getCell(24).value?.toString().trim() || 'oem',
+      office_name: row.getCell(25).value?.toString().trim() || null,
+      office_license_key: row.getCell(26).value?.toString().trim() || null,
+      office_license_type: row.getCell(27).value?.toString().trim() || 'retail',
+      installation_notes: row.getCell(28).value?.toString().trim() || null,
+      notes: row.getCell(29).value?.toString().trim() || null,
       product_id: productId,
       additional_software: [] // Will be populated from Additional Software sheet
     };
@@ -699,6 +729,9 @@ async function generateLegacyAssetTemplate({ products, users }) {
     { header: 'Standby Available', key: 'standby_available', width: 18 },
     { header: 'Status', key: 'status', width: 15 },
     { header: 'Condition', key: 'condition_status', width: 15 },
+    { header: 'Importance', key: 'importance', width: 15 },
+    { header: 'Vendor', key: 'vendor_name', width: 20 },
+    { header: 'Invoice Number', key: 'invoice_number', width: 20 },
     { header: 'Purchase Date', key: 'purchase_date', width: 18 },
     { header: 'Purchase Cost', key: 'purchase_cost', width: 18 },
     { header: 'Warranty Start', key: 'warranty_start_date', width: 18 },
@@ -738,6 +771,9 @@ async function generateLegacyAssetTemplate({ products, users }) {
     standby_available: '',
     status: 'available',
     condition_status: 'good',
+    importance: 'medium',
+    vendor_name: 'PoleStar',
+    invoice_number: 'INV-2023-001',
     purchase_date: '2023-01-15',
     purchase_cost: 45000,
     warranty_start_date: '2023-01-15',
@@ -765,6 +801,9 @@ async function generateLegacyAssetTemplate({ products, users }) {
     standby_available: '',
     status: 'assigned',
     condition_status: 'excellent',
+    importance: 'high',
+    vendor_name: 'PoleStar',
+    invoice_number: 'INV-2023-002',
     purchase_date: '2023-03-20',
     purchase_cost: 52000,
     warranty_start_date: '2023-03-20',
@@ -792,6 +831,9 @@ async function generateLegacyAssetTemplate({ products, users }) {
     standby_available: '',
     status: 'in_use',
     condition_status: 'new',
+    importance: 'low',
+    vendor_name: 'PoleStar',
+    invoice_number: '',
     purchase_date: '2023-03-20',
     purchase_cost: 5000,
     warranty_end_date: '2026-03-20',
@@ -871,6 +913,20 @@ async function generateLegacyAssetTemplate({ products, users }) {
     }
   });
 
+  // Importance column (column 10)
+  worksheet.getColumn(10).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
+    if (rowNumber > 1) {
+      cell.dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: ['"critical,high,medium,low"'],
+        showErrorMessage: true,
+        errorTitle: 'Invalid Importance',
+        error: 'Please select a valid importance level: critical, high, medium, or low'
+      };
+    }
+  });
+
   // Create Instructions sheet
   const instructionsSheet = workbook.addWorksheet('Instructions');
   instructionsSheet.columns = [
@@ -899,6 +955,7 @@ async function generateLegacyAssetTemplate({ products, users }) {
     { field: 'Standby Available', required: 'No', description: 'true/false. Only applicable for standby assets. Indicates if the standby asset is available for assignment.' },
     { field: 'Status', required: 'No', description: 'Asset status: available, assigned, in_use, under_repair, disposed (default: available)' },
     { field: 'Condition', required: 'No', description: 'Asset condition: new, excellent, good, fair, poor (default: good)' },
+    { field: 'Importance', required: 'No', description: 'Asset importance level: critical, high, medium, low (default: medium). Critical assets are essential for operations.' },
     { field: 'Purchase Date', required: 'No', description: 'Purchase date in YYYY-MM-DD format (e.g., 2023-01-15)' },
     { field: 'Purchase Cost', required: 'No', description: 'Purchase cost in numbers only (e.g., 45000)' },
     { field: 'Warranty End Date', required: 'No', description: 'Warranty end date in YYYY-MM-DD format' },
@@ -1152,21 +1209,24 @@ async function parseLegacyAssetFile(fileBuffer, referenceData) {
       standby_available: row.getCell(7).value?.toString().trim().toLowerCase() === 'true',
       status: row.getCell(8).value?.toString().trim().toLowerCase() || 'available',
       condition_status: row.getCell(9).value?.toString().trim().toLowerCase() || 'good',
-      purchase_date: row.getCell(10).value || null,
-      purchase_cost: row.getCell(11).value || null,
-      warranty_start_date: row.getCell(12).value || null,
-      warranty_end_date: row.getCell(13).value || null,
-      eol_date: row.getCell(14).value || null,
-      eos_date: row.getCell(15).value || null,
-      assigned_to_input: row.getCell(16).value?.toString().trim() || '',
-      os_name: row.getCell(17).value?.toString().trim() || null,
-      os_license_key: row.getCell(18).value?.toString().trim() || null,
-      os_license_type: row.getCell(19).value?.toString().trim() || 'oem',
-      office_name: row.getCell(20).value?.toString().trim() || null,
-      office_license_key: row.getCell(21).value?.toString().trim() || null,
-      office_license_type: row.getCell(22).value?.toString().trim() || 'retail',
-      installation_notes: row.getCell(23).value?.toString().trim() || null,
-      notes: row.getCell(24).value?.toString().trim() || null,
+      importance: row.getCell(10).value?.toString().trim().toLowerCase() || 'medium',
+      vendor_name: row.getCell(11).value?.toString().trim() || 'PoleStar',
+      invoice_number: row.getCell(12).value?.toString().trim() || null,
+      purchase_date: row.getCell(13).value || null,
+      purchase_cost: row.getCell(14).value || null,
+      warranty_start_date: row.getCell(15).value || null,
+      warranty_end_date: row.getCell(16).value || null,
+      eol_date: row.getCell(17).value || null,
+      eos_date: row.getCell(18).value || null,
+      assigned_to_input: row.getCell(19).value?.toString().trim() || '',
+      os_name: row.getCell(20).value?.toString().trim() || null,
+      os_license_key: row.getCell(21).value?.toString().trim() || null,
+      os_license_type: row.getCell(22).value?.toString().trim() || 'oem',
+      office_name: row.getCell(23).value?.toString().trim() || null,
+      office_license_key: row.getCell(24).value?.toString().trim() || null,
+      office_license_type: row.getCell(25).value?.toString().trim() || 'retail',
+      installation_notes: row.getCell(26).value?.toString().trim() || null,
+      notes: row.getCell(27).value?.toString().trim() || null,
       additional_software: [] // Will be populated from Additional Software sheet
     };
 
@@ -1227,6 +1287,12 @@ async function parseLegacyAssetFile(fileBuffer, referenceData) {
     const validConditions = ['new', 'excellent', 'good', 'fair', 'poor'];
     if (!validConditions.includes(rowData.condition_status)) {
       errors.push(`Invalid condition: ${rowData.condition_status}`);
+    }
+
+    // Validate importance
+    const validImportance = ['critical', 'high', 'medium', 'low'];
+    if (!validImportance.includes(rowData.importance)) {
+      errors.push(`Invalid importance: ${rowData.importance}. Must be 'critical', 'high', 'medium', or 'low'`);
     }
 
     // Validate asset_type

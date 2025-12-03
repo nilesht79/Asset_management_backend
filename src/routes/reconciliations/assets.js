@@ -219,7 +219,8 @@ router.get('/',
       reconciliation_status,
       category_id,
       location_id,
-      assigned_to
+      assigned_to,
+      department_id
     } = req.query;
 
     const pool = await connectDB();
@@ -265,6 +266,11 @@ router.get('/',
     if (reconciliation_status) {
       whereClause += ' AND rr.reconciliation_status = @reconciliationStatus';
       params.push({ name: 'reconciliationStatus', type: sql.VarChar(50), value: reconciliation_status });
+    }
+
+    if (department_id) {
+      whereClause += ' AND u.department_id = @departmentId';
+      params.push({ name: 'departmentId', type: sql.UniqueIdentifier, value: department_id });
     }
 
     // Build ORDER BY clause

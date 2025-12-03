@@ -132,6 +132,7 @@ router.post('/',
               .input('password_hash', sql.VarChar(255), userData.password_hash)
               .input('role', sql.VarChar(50), userData.role)
               .input('employee_id', sql.VarChar(20), userData.employee_id)
+              .input('designation', sql.VarChar(100), userData.designation)
               .input('department_id', sql.UniqueIdentifier, userData.department_id)
               .input('location_id', sql.UniqueIdentifier, userData.location_id)
               .input('is_active', sql.Bit, userData.is_active)
@@ -142,12 +143,12 @@ router.post('/',
               .query(`
                 INSERT INTO USER_MASTER (
                   user_id, first_name, last_name, email, password_hash, role,
-                  employee_id, department_id, location_id, is_active, is_vip, email_verified,
+                  employee_id, designation, department_id, location_id, is_active, is_vip, email_verified,
                   registration_type, user_status, created_at, updated_at
                 )
                 VALUES (
                   @user_id, @first_name, @last_name, @email, @password_hash, @role,
-                  @employee_id, @department_id, @location_id, @is_active, @is_vip, @email_verified,
+                  @employee_id, @designation, @department_id, @location_id, @is_active, @is_vip, @email_verified,
                   @registration_type, @user_status, GETUTCDATE(), GETUTCDATE()
                 )
               `);

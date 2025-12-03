@@ -100,8 +100,18 @@ router.get('/',
     }
 
     if (role) {
-      whereClause += ' AND u.role = @role';
-      params.push({ name: 'role', type: sql.VarChar(50), value: role });
+      // Support comma-separated roles for IN clause (e.g., 'employee,dept_head,it_head')
+      const roles = role.split(',').map(r => r.trim()).filter(r => r);
+      if (roles.length === 1) {
+        whereClause += ' AND u.role = @role';
+        params.push({ name: 'role', type: sql.VarChar(50), value: roles[0] });
+      } else if (roles.length > 1) {
+        const rolePlaceholders = roles.map((_, i) => `@role${i}`).join(', ');
+        whereClause += ` AND u.role IN (${rolePlaceholders})`;
+        roles.forEach((r, i) => {
+          params.push({ name: `role${i}`, type: sql.VarChar(50), value: r });
+        });
+      }
     }
 
     if (board_id) {
@@ -148,7 +158,7 @@ router.get('/',
 
     const result = await dataRequest.query(`
       SELECT u.user_id, u.first_name, u.last_name, u.email, u.role,
-             u.employee_id, u.is_active, u.last_login, u.created_at, u.updated_at,
+             u.employee_id, u.designation, u.is_active, u.is_vip, u.allow_multi_assets, u.last_login, u.created_at, u.updated_at,
              d.department_name, d.department_id,
              l.name as location_name, l.id as location_id
       FROM USER_MASTER u
@@ -170,7 +180,10 @@ router.get('/',
       email: user.email,
       role: user.role,
       employeeId: user.employee_id,
+      designation: user.designation,
       isActive: user.is_active,
+      isVip: user.is_vip,
+      allowMultiAssets: user.allow_multi_assets,
       lastLogin: user.last_login,
       createdAt: user.created_at,
       updatedAt: user.updated_at,
@@ -236,6 +249,7 @@ router.get('/export',
         u.last_name,
         u.email,
         u.employee_id,
+        u.designation,
         u.role,
         u.is_active,
         d.department_name,
@@ -261,6 +275,7 @@ router.get('/export',
       { header: 'First Name', key: 'first_name', width: 20 },
       { header: 'Last Name', key: 'last_name', width: 20 },
       { header: 'Email', key: 'email', width: 30 },
+      { header: 'Designation', key: 'designation', width: 25 },
       { header: 'Role', key: 'role', width: 15 },
       { header: 'Department', key: 'department_name', width: 25 },
       { header: 'Location', key: 'location_name', width: 25 },
@@ -286,6 +301,7 @@ router.get('/export',
         first_name: user.first_name,
         last_name: user.last_name,
         email: user.email,
+        designation: user.designation || '',
         role: user.role,
         department_name: user.department_name || '',
         location_name: user.location_name || '',
@@ -388,7 +404,7 @@ router.get('/:id',
       .input('id', sql.UniqueIdentifier, id)
       .query(`
         SELECT u.user_id, u.first_name, u.last_name, u.email, u.role,
-               u.employee_id, u.is_active, u.last_login, u.created_at, u.updated_at,
+               u.employee_id, u.designation, u.is_active, u.is_vip, u.allow_multi_assets, u.last_login, u.created_at, u.updated_at,
                u.password_changed_at, u.failed_login_attempts, u.locked_until,
                d.department_name, d.department_id,
                l.name as location_name, l.id as location_id
@@ -403,7 +419,7 @@ router.get('/:id',
     }
 
     const user = result.recordset[0];
-    
+
     const userData = {
       id: user.user_id,
       firstName: user.first_name,
@@ -411,7 +427,10 @@ router.get('/:id',
       email: user.email,
       role: user.role,
       employeeId: user.employee_id,
+      designation: user.designation,
       isActive: user.is_active,
+      isVip: user.is_vip,
+      allowMultiAssets: user.allow_multi_assets,
       lastLogin: user.last_login,
       createdAt: user.created_at,
       updatedAt: user.updated_at,
@@ -448,7 +467,10 @@ router.post('/',
       department_id,
       location_id,
       employee_id,
-      is_active = true
+      designation,
+      is_active = true,
+      is_vip = false,
+      allow_multi_assets = false
     } = req.body;
 
     const pool = await connectDB();
@@ -539,23 +561,26 @@ router.post('/',
       .input('departmentId', sql.UniqueIdentifier, department_id)
       .input('locationId', sql.UniqueIdentifier, location_id)
       .input('employeeId', sql.VarChar(20), finalEmployeeId)
+      .input('designation', sql.VarChar(100), designation || null)
       .input('isActive', sql.Bit, is_active)
+      .input('isVip', sql.Bit, is_vip)
+      .input('allowMultiAssets', sql.Bit, allow_multi_assets)
       .input('registrationType', sql.VarChar(20), 'admin-created')
       .input('userStatus', sql.VarChar(20), is_active ? 'active' : 'pending')
       .query(`
         INSERT INTO USER_MASTER (
           user_id, first_name, last_name, email, password_hash, role,
-          department_id, location_id, employee_id, is_active, registration_type, user_status,
+          department_id, location_id, employee_id, designation, is_active, is_vip, allow_multi_assets, registration_type, user_status,
           created_at, updated_at
         )
         VALUES (
           @id, @firstName, @lastName, @email, @passwordHash, @role,
-          @departmentId, @locationId, @employeeId, @isActive, @registrationType, @userStatus,
+          @departmentId, @locationId, @employeeId, @designation, @isActive, @isVip, @allowMultiAssets, @registrationType, @userStatus,
           GETUTCDATE(), GETUTCDATE()
         );
-        
+
         SELECT u.user_id, u.first_name, u.last_name, u.email, u.role,
-               u.employee_id, u.is_active, u.created_at, u.updated_at,
+               u.employee_id, u.designation, u.is_active, u.is_vip, u.allow_multi_assets, u.created_at, u.updated_at,
                d.department_name, d.department_id,
                l.name as location_name, l.id as location_id
         FROM USER_MASTER u
@@ -573,7 +598,10 @@ router.post('/',
       email: user.email,
       role: user.role,
       employeeId: user.employee_id,
+      designation: user.designation,
       isActive: user.is_active,
+      isVip: user.is_vip,
+      allowMultiAssets: user.allow_multi_assets,
       createdAt: user.created_at,
       updatedAt: user.updated_at,
       department: {
@@ -606,7 +634,10 @@ router.put('/:id',
       department_id,
       location_id,
       employee_id,
-      is_active
+      designation,
+      is_active,
+      is_vip,
+      allow_multi_assets
     } = req.body;
 
     const pool = await connectDB();
@@ -722,6 +753,18 @@ router.put('/:id',
         updateFields.push('is_active = @isActive');
         updateRequest.input('isActive', sql.Bit, is_active);
       }
+      if (is_vip !== undefined) {
+        updateFields.push('is_vip = @isVip');
+        updateRequest.input('isVip', sql.Bit, is_vip);
+      }
+      if (allow_multi_assets !== undefined) {
+        updateFields.push('allow_multi_assets = @allowMultiAssets');
+        updateRequest.input('allowMultiAssets', sql.Bit, allow_multi_assets);
+      }
+      if (designation !== undefined) {
+        updateFields.push('designation = @designation');
+        updateRequest.input('designation', sql.VarChar(100), designation || null);
+      }
     }
 
     if (updateFields.length === 0) {
@@ -731,12 +774,12 @@ router.put('/:id',
     updateFields.push('updated_at = GETUTCDATE()');
 
     const result = await updateRequest.query(`
-      UPDATE USER_MASTER 
+      UPDATE USER_MASTER
       SET ${updateFields.join(', ')}
       WHERE user_id = @id;
-      
+
       SELECT u.user_id, u.first_name, u.last_name, u.email, u.role,
-             u.employee_id, u.is_active, u.created_at, u.updated_at,
+             u.employee_id, u.designation, u.is_active, u.is_vip, u.allow_multi_assets, u.created_at, u.updated_at,
              d.department_name, d.department_id,
              l.name as location_name, l.id as location_id
       FROM USER_MASTER u
@@ -754,7 +797,10 @@ router.put('/:id',
       email: user.email,
       role: user.role,
       employeeId: user.employee_id,
+      designation: user.designation,
       isActive: user.is_active,
+      isVip: user.is_vip,
+      allowMultiAssets: user.allow_multi_assets,
       createdAt: user.created_at,
       updatedAt: user.updated_at,
       department: {

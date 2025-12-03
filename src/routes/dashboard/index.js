@@ -41,8 +41,8 @@ router.get('/superadmin',
           (SELECT COUNT(*) FROM DEPARTMENT_MASTER) as total_departments,
           
           (SELECT COUNT(*) FROM USER_MASTER WHERE user_status = 'active') as active_users,
-          (SELECT COUNT(*) FROM USER_MASTER WHERE user_status IN ('active', 'pending')) as total_users,
-          (SELECT COUNT(*) FROM USER_MASTER WHERE user_status = 'pending') as pending_users
+          (SELECT COUNT(*) FROM USER_MASTER) as total_users,
+          (SELECT COUNT(*) FROM USER_MASTER WHERE user_status != 'active') as inactive_users
       `);
 
       const stats = masterDataResult.recordset[0];
@@ -77,7 +77,7 @@ router.get('/superadmin',
         users: {
           total: stats.total_users,
           active: stats.active_users,
-          pending: stats.pending_users
+          inactive: stats.inactive_users
         }
       };
 

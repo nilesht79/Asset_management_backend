@@ -58,6 +58,7 @@ async function parseUserExcel(fileBuffer) {
           'password': 'password',
           'role': 'role',
           'employee id': 'employee_id',
+          'designation': 'designation',
           'department name': 'department_name',
           'location name': 'location_name',
           'is active': 'is_active',
@@ -266,6 +267,7 @@ async function processUserForInsertion(user, departments = [], batchEmails = new
     plain_password: finalPassword, // Store plain password for admin reference (will not be saved to DB)
     role: user.role,
     employee_id: employeeId,
+    designation: user.designation ? user.designation.trim() : null,
     department_id: departmentId,
     location_id: locationId,
     is_active: isActive,

@@ -133,7 +133,7 @@ router.get('/',
       SELECT p.id, p.name, p.description, p.model, p.type_id, p.category_id, p.subcategory_id,
              p.oem_id, p.series_id, p.specifications, p.warranty_period,
              p.capacity_value, p.capacity_unit, p.speed_value, p.speed_unit,
-             p.interface_type, p.form_factor, p.is_active,
+             p.interface_type, p.form_factor, p.software_type, p.is_active,
              p.created_at, p.updated_at,
              pt.name as type_name,
              pc.name as category_name,
@@ -448,7 +448,7 @@ router.get('/:id',
         SELECT p.id, p.name, p.description, p.model, p.type_id, p.category_id, p.subcategory_id,
                p.oem_id, p.series_id, p.specifications, p.warranty_period,
                p.capacity_value, p.capacity_unit, p.speed_value, p.speed_unit,
-               p.interface_type, p.form_factor, p.is_active,
+               p.interface_type, p.form_factor, p.software_type, p.is_active,
                p.created_at, p.updated_at,
                pt.name as type_name,
                pc.name as category_name,
@@ -495,6 +495,7 @@ router.post('/',
       speed_unit,
       interface_type,
       form_factor,
+      software_type,
       is_active = true
     } = req.body;
 
@@ -582,23 +583,24 @@ router.post('/',
       .input('speedUnit', sql.VarChar(20), speed_unit)
       .input('interfaceType', sql.VarChar(50), interface_type)
       .input('formFactor', sql.VarChar(50), form_factor)
+      .input('softwareType', sql.VarChar(50), software_type || null)
       .input('isActive', sql.Bit, is_active)
       .query(`
         INSERT INTO products (
           id, name, description, model, type_id, category_id, subcategory_id, oem_id, series_id,
           specifications, warranty_period, capacity_value, capacity_unit, speed_value, speed_unit,
-          interface_type, form_factor, is_active, created_at, updated_at
+          interface_type, form_factor, software_type, is_active, created_at, updated_at
         )
         VALUES (
           @id, @name, @description, @model, @typeId, @categoryId, @subcategoryId, @oemId, @seriesId,
           @specifications, @warrantyPeriod, @capacityValue, @capacityUnit, @speedValue, @speedUnit,
-          @interfaceType, @formFactor, @isActive, GETUTCDATE(), GETUTCDATE()
+          @interfaceType, @formFactor, @softwareType, @isActive, GETUTCDATE(), GETUTCDATE()
         );
 
         SELECT p.id, p.name, p.description, p.model, p.type_id, p.category_id, p.subcategory_id,
                p.oem_id, p.series_id, p.specifications, p.warranty_period,
                p.capacity_value, p.capacity_unit, p.speed_value, p.speed_unit,
-               p.interface_type, p.form_factor, p.is_active,
+               p.interface_type, p.form_factor, p.software_type, p.is_active,
                p.created_at, p.updated_at,
                pt.name as type_name,
                pc.name as category_name,
@@ -644,6 +646,7 @@ router.put('/:id',
       speed_unit,
       interface_type,
       form_factor,
+      software_type,
       is_active
     } = req.body;
 
@@ -812,6 +815,10 @@ router.put('/:id',
       updateFields.push('form_factor = @formFactor');
       updateRequest.input('formFactor', sql.VarChar(50), form_factor);
     }
+    if (software_type !== undefined) {
+      updateFields.push('software_type = @softwareType');
+      updateRequest.input('softwareType', sql.VarChar(50), software_type);
+    }
     if (is_active !== undefined) {
       updateFields.push('is_active = @isActive');
       updateRequest.input('isActive', sql.Bit, is_active);
@@ -831,7 +838,7 @@ router.put('/:id',
       SELECT p.id, p.name, p.description, p.model, p.type_id, p.category_id, p.subcategory_id,
              p.oem_id, p.series_id, p.specifications, p.warranty_period,
              p.capacity_value, p.capacity_unit, p.speed_value, p.speed_unit,
-             p.interface_type, p.form_factor, p.is_active,
+             p.interface_type, p.form_factor, p.software_type, p.is_active,
              p.created_at, p.updated_at,
              pt.name as type_name,
              pc.name as category_name,

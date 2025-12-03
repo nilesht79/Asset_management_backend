@@ -6,15 +6,20 @@
 const TicketModel = require('../models/ticket');
 const { sendSuccess, sendError, sendCreated, sendNotFound } = require('../utils/response');
 const ExcelJS = require('exceljs');
+const SlaTrackingModel = require('../models/slaTracking');
 
 class TicketController {
   /**
-   * Create new ticket (Coordinator creates on behalf of employee)
+   * Create new ticket (Coordinator creates on behalf of employee or for guest)
    * POST /api/tickets
    */
   static async createTicket(req, res) {
     try {
       const {
+        is_guest,
+        guest_name,
+        guest_email,
+        guest_phone,
         created_by_user_id,
         title,
         description,
@@ -24,17 +29,33 @@ class TicketController {
         due_date
       } = req.body;
 
-      // Validation
-      if (!created_by_user_id || !title) {
-        return sendError(res, 'Employee and title are required', 400);
-      }
-
       // Get coordinator ID from authenticated user
       const created_by_coordinator_id = req.oauth.user.id;
 
+      // Validation based on ticket type
+      if (is_guest) {
+        // Guest ticket validation
+        if (!guest_name || !guest_email) {
+          return sendError(res, 'Guest name and email are required for guest tickets', 400);
+        }
+        if (!title) {
+          return sendError(res, 'Title is required', 400);
+        }
+        // Validate email format
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(guest_email)) {
+          return sendError(res, 'Invalid email format', 400);
+        }
+      } else {
+        // Employee ticket validation
+        if (!created_by_user_id || !title) {
+          return sendError(res, 'Employee and title are required', 400);
+        }
+      }
+
       // Prepare ticket data
       const ticketData = {
-        created_by_user_id,
+        created_by_user_id: is_guest ? null : created_by_user_id,
         created_by_coordinator_id,
         title,
         description,
@@ -44,16 +65,46 @@ class TicketController {
         due_date
       };
 
-      // If engineer is assigned, set status to 'assigned'
+      // If engineer is assigned, set status to 'in_progress'
       if (assigned_to_engineer_id) {
-        ticketData.status = 'assigned';
+        ticketData.status = 'in_progress';
       }
 
-      // Create ticket (dept/location inherited automatically)
-      const ticket = await TicketModel.createTicket(ticketData);
+      let ticket;
 
-      // Fetch full ticket details with user info
+      if (is_guest) {
+        // Create guest ticket
+        const guestData = {
+          guest_name,
+          guest_email,
+          guest_phone: guest_phone || null
+        };
+        ticket = await TicketModel.createGuestTicket(ticketData, guestData);
+      } else {
+        // Create regular employee ticket (dept/location inherited automatically)
+        ticket = await TicketModel.createTicket(ticketData);
+      }
+
+      // Fetch full ticket details with user/guest info
       const fullTicket = await TicketModel.getTicketById(ticket.ticket_id);
+
+      // Initialize SLA tracking for the ticket
+      try {
+        const ticketContext = {
+          ticket_id: ticket.ticket_id,
+          ticket_type: fullTicket.category || 'general',
+          ticket_channel: 'portal', // Default channel
+          priority: fullTicket.priority || 'medium',
+          user_id: fullTicket.created_by_user_id,
+          asset_ids: [] // Can be populated if assets are linked
+        };
+
+        await SlaTrackingModel.initializeTracking(ticket.ticket_id, ticketContext);
+        console.log(`SLA tracking initialized for ticket ${ticket.ticket_number}`);
+      } catch (slaError) {
+        // Log but don't fail the ticket creation if SLA init fails
+        console.error('Failed to initialize SLA tracking:', slaError.message);
+      }
 
       return sendCreated(res, fullTicket, 'Ticket created successfully');
     } catch (error) {
@@ -78,7 +129,8 @@ class TicketController {
         location_id,
         assigned_to_engineer_id,
         created_by_user_id,
-        search
+        search,
+        is_guest
       } = req.query;
 
       const filters = {};
@@ -90,6 +142,7 @@ class TicketController {
       if (assigned_to_engineer_id) filters.assigned_to_engineer_id = assigned_to_engineer_id;
       if (created_by_user_id) filters.created_by_user_id = created_by_user_id;
       if (search) filters.search = search;
+      if (is_guest !== undefined) filters.is_guest = parseInt(is_guest);
 
       const pagination = {
         page: parseInt(page),
@@ -144,11 +197,41 @@ class TicketController {
         return sendNotFound(res, 'Ticket not found');
       }
 
+      const previousStatus = existingTicket.status;
+      const previousPriority = existingTicket.priority;
+
       // Update ticket
       const updatedTicket = await TicketModel.updateTicket(id, updateData);
 
       // Fetch full details
       const fullTicket = await TicketModel.getTicketById(id);
+
+      // Handle SLA pause/resume on status change
+      const pauseStatuses = ['pending_closure', 'awaiting_info', 'on_hold'];
+      const newStatus = updateData.status || previousStatus;
+
+      if (updateData.status && updateData.status !== previousStatus) {
+        try {
+          const wasInPauseStatus = pauseStatuses.includes(previousStatus);
+          const nowInPauseStatus = pauseStatuses.includes(newStatus);
+
+          if (!wasInPauseStatus && nowInPauseStatus) {
+            // Status changed to a pause status - pause SLA
+            await SlaTrackingModel.pauseTimer(
+              id,
+              `Status changed to ${newStatus}`,
+              req.oauth.user.id
+            );
+            console.log(`SLA paused for ticket ${fullTicket.ticket_number} - status: ${newStatus}`);
+          } else if (wasInPauseStatus && !nowInPauseStatus) {
+            // Status changed from a pause status - resume SLA
+            await SlaTrackingModel.resumeTimer(id, req.oauth.user.id);
+            console.log(`SLA resumed for ticket ${fullTicket.ticket_number} - status: ${newStatus}`);
+          }
+        } catch (slaError) {
+          console.error('Failed to update SLA on status change:', slaError.message);
+        }
+      }
 
       return sendSuccess(res, fullTicket, 'Ticket updated successfully');
     } catch (error) {
@@ -210,6 +293,16 @@ class TicketController {
 
       // Close ticket
       await TicketModel.closeTicket(id, resolution_notes);
+
+      // Stop SLA tracking
+      try {
+        const slaResult = await SlaTrackingModel.stopTracking(id, null);
+        if (slaResult) {
+          console.log(`SLA tracking stopped for ticket ${existingTicket.ticket_number} - final status: ${slaResult.final_status}`);
+        }
+      } catch (slaError) {
+        console.error('Failed to stop SLA tracking:', slaError.message);
+      }
 
       // Fetch updated ticket
       const updatedTicket = await TicketModel.getTicketById(id);
@@ -440,6 +533,191 @@ class TicketController {
     } catch (error) {
       console.error('Export tickets error:', error);
       return sendError(res, error.message || 'Failed to export tickets', 500);
+    }
+  }
+
+  /**
+   * Get filter options - returns only values that exist in database
+   * GET /api/tickets/filter-options
+   */
+  static async getFilterOptions(req, res) {
+    try {
+      const filterOptions = await TicketModel.getFilterOptions();
+
+      return sendSuccess(res, filterOptions, 'Filter options fetched successfully');
+    } catch (error) {
+      console.error('Get filter options error:', error);
+      return sendError(res, error.message || 'Failed to fetch filter options', 500);
+    }
+  }
+
+  /**
+   * Get tickets assigned to current engineer
+   * GET /api/tickets/my-tickets
+   */
+  static async getMyTickets(req, res) {
+    try {
+      const engineerId = req.oauth.user.id;
+      const {
+        page = 1,
+        limit = 10,
+        status,
+        priority,
+        search
+      } = req.query;
+
+      const filters = {};
+      if (status) filters.status = status;
+      if (priority) filters.priority = priority;
+      if (search) filters.search = search;
+
+      const pagination = {
+        page: parseInt(page),
+        limit: parseInt(limit)
+      };
+
+      const result = await TicketModel.getEngineerTickets(engineerId, filters, pagination);
+
+      return sendSuccess(res, result, 'Tickets fetched successfully');
+    } catch (error) {
+      console.error('Get my tickets error:', error);
+      return sendError(res, error.message || 'Failed to fetch tickets', 500);
+    }
+  }
+
+  /**
+   * Engineer requests to close a ticket
+   * POST /api/tickets/:id/request-close
+   */
+  static async requestTicketClose(req, res) {
+    try {
+      const { id } = req.params;
+      const { request_notes } = req.body;
+      const engineerId = req.oauth.user.id;
+
+      if (!request_notes) {
+        return sendError(res, 'Resolution notes are required', 400);
+      }
+
+      // Check if ticket exists
+      const existingTicket = await TicketModel.getTicketById(id);
+      if (!existingTicket) {
+        return sendNotFound(res, 'Ticket not found');
+      }
+
+      // Request close
+      await TicketModel.requestTicketClose(id, engineerId, request_notes);
+
+      // Fetch updated ticket
+      const updatedTicket = await TicketModel.getTicketById(id);
+
+      return sendSuccess(res, updatedTicket, 'Close request submitted successfully');
+    } catch (error) {
+      console.error('Request ticket close error:', error);
+      return sendError(res, error.message || 'Failed to submit close request', 500);
+    }
+  }
+
+  /**
+   * Get pending close requests for coordinator
+   * GET /api/tickets/pending-close-requests
+   */
+  static async getPendingCloseRequests(req, res) {
+    try {
+      const { department_id, location_id } = req.query;
+
+      const filters = {};
+      if (department_id) filters.department_id = department_id;
+      if (location_id) filters.location_id = location_id;
+
+      const requests = await TicketModel.getPendingCloseRequests(filters);
+
+      return sendSuccess(res, { requests }, 'Close requests fetched successfully');
+    } catch (error) {
+      console.error('Get pending close requests error:', error);
+      return sendError(res, error.message || 'Failed to fetch close requests', 500);
+    }
+  }
+
+  /**
+   * Get close request count (for badge)
+   * GET /api/tickets/close-requests-count
+   */
+  static async getCloseRequestCount(req, res) {
+    try {
+      const { department_id } = req.query;
+
+      const filters = {};
+      if (department_id) filters.department_id = department_id;
+
+      const count = await TicketModel.getCloseRequestCount(filters);
+
+      return sendSuccess(res, { count }, 'Count fetched successfully');
+    } catch (error) {
+      console.error('Get close request count error:', error);
+      return sendError(res, error.message || 'Failed to fetch count', 500);
+    }
+  }
+
+  /**
+   * Coordinator approves or rejects close request
+   * PUT /api/tickets/:id/review-close-request
+   */
+  static async reviewCloseRequest(req, res) {
+    try {
+      const { id } = req.params; // close_request_id
+      const { action, review_notes } = req.body;
+      const coordinatorId = req.oauth.user.id;
+
+      if (!action || !['approved', 'rejected'].includes(action)) {
+        return sendError(res, 'Valid action (approved/rejected) is required', 400);
+      }
+
+      // Review the close request
+      const updatedTicket = await TicketModel.reviewCloseRequest(
+        id,
+        coordinatorId,
+        action,
+        review_notes
+      );
+
+      // Stop SLA tracking if approved
+      if (action === 'approved' && updatedTicket) {
+        try {
+          const slaResult = await SlaTrackingModel.stopTracking(updatedTicket.ticket_id, null);
+          if (slaResult) {
+            console.log(`SLA tracking stopped for ticket ${updatedTicket.ticket_number} via close request approval`);
+          }
+        } catch (slaError) {
+          console.error('Failed to stop SLA tracking on close request approval:', slaError.message);
+        }
+      }
+
+      const message = action === 'approved'
+        ? 'Ticket closed successfully'
+        : 'Close request rejected';
+
+      return sendSuccess(res, updatedTicket, message);
+    } catch (error) {
+      console.error('Review close request error:', error);
+      return sendError(res, error.message || 'Failed to review close request', 500);
+    }
+  }
+
+  /**
+   * Get close request history for a ticket
+   * GET /api/tickets/:id/close-request-history
+   */
+  static async getCloseRequestHistory(req, res) {
+    try {
+      const { id } = req.params;
+
+      const history = await TicketModel.getCloseRequestHistory(id);
+
+      return sendSuccess(res, { history }, 'Close request history fetched successfully');
+    } catch (error) {
+      console.error('Get close request history error:', error);
+      return sendError(res, error.message || 'Failed to fetch close request history', 500);
     }
   }
 }

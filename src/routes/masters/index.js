@@ -14,6 +14,8 @@ const productTypeRoutes = require('./product-types');
 const productSeriesRoutes = require('./product-series');
 const pincodeLookupRoutes = require('./pincode-lookup');
 const componentFieldTemplatesRoutes = require('./componentFieldTemplates');
+const vendorRoutes = require('./vendors');
+const orgRoutes = require('./org');
 
 const router = express.Router();
 
@@ -32,6 +34,8 @@ router.use('/product-types', productTypeRoutes);
 router.use('/product-series', productSeriesRoutes);
 router.use('/pincode-lookup', pincodeLookupRoutes);
 router.use('/component-field-templates', componentFieldTemplatesRoutes);
+router.use('/vendors', vendorRoutes);
+router.use('/org', orgRoutes);
 
 // Master data overview endpoint
 router.get('/', 
@@ -53,7 +57,9 @@ router.get('/',
             productTypes: '/masters/product-types',
             productSeries: '/masters/product-series',
             pincodeLookup: '/masters/pincode-lookup',
-            componentFieldTemplates: '/masters/component-field-templates'
+            componentFieldTemplates: '/masters/component-field-templates',
+            vendors: '/masters/vendors',
+            org: '/masters/org'
           },
           description: 'Master data management endpoints for the Asset Management System'
         },

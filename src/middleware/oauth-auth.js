@@ -123,13 +123,16 @@ const optionalOAuth = async (req, res, next) => {
   }
 };
 
-const requireOAuthRoles = (allowedRoles) => {
+const requireOAuthRoles = (...allowedRoles) => {
+  // Flatten in case an array is passed
+  const roles = allowedRoles.flat();
+
   return (req, res, next) => {
     if (!req.user || !req.oauth) {
       return sendUnauthorized(res, 'Authentication required');
     }
 
-    if (!allowedRoles.includes(req.user.role)) {
+    if (!roles.includes(req.user.role)) {
       return sendForbidden(res, 'Insufficient permissions');
     }
 

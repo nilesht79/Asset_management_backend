@@ -30,7 +30,10 @@ const validators = {
       department_id: Joi.string().uuid().optional().allow(null),
       location_id: Joi.string().uuid().optional().allow(null),
       employee_id: Joi.string().max(20).optional(),
-      is_active: Joi.boolean().default(true)
+      designation: Joi.string().max(100).optional().allow('', null),
+      is_active: Joi.boolean().default(true),
+      is_vip: Joi.boolean().default(false),
+      allow_multi_assets: Joi.boolean().default(false)
     }),
 
     update: Joi.object({
@@ -41,7 +44,10 @@ const validators = {
       department_id: Joi.string().uuid().optional().allow(null),
       location_id: Joi.string().uuid().optional().allow(null),
       employee_id: Joi.string().max(20).optional(),
-      is_active: Joi.boolean().optional()
+      designation: Joi.string().max(100).optional().allow('', null),
+      is_active: Joi.boolean().optional(),
+      is_vip: Joi.boolean().optional(),
+      allow_multi_assets: Joi.boolean().optional()
     }),
     
     changePassword: Joi.object({
@@ -89,6 +95,20 @@ const validators = {
       phone: Joi.string().pattern(new RegExp('^[+]?[1-9][\\d]{0,15}$')).optional().allow(null, ''),
       website: Joi.string().uri().optional().allow(null, ''),
       address: Joi.string().max(500).optional().allow(null, ''),
+      is_active: Joi.boolean().optional()
+    })
+  },
+
+  vendor: {
+    create: Joi.object({
+      name: Joi.string().min(2).max(255).required(),
+      code: Joi.string().min(2).max(50).optional().allow(null, ''),
+      is_active: Joi.boolean().default(true)
+    }),
+
+    update: Joi.object({
+      name: Joi.string().min(2).max(255).optional(),
+      code: Joi.string().min(2).max(50).optional().allow(null, ''),
       is_active: Joi.boolean().optional()
     })
   },
@@ -141,6 +161,7 @@ const validators = {
       speed_unit: Joi.string().max(20).allow(null, '').optional(),
       interface_type: Joi.string().max(50).allow(null, '').optional(),
       form_factor: Joi.string().max(50).allow(null, '').optional(),
+      software_type: Joi.string().max(50).valid('operating_system', 'application', 'utility', 'driver').allow(null).optional(),
       is_active: Joi.boolean().default(true)
     }),
 
@@ -161,6 +182,7 @@ const validators = {
       speed_unit: Joi.string().max(20).allow(null, '').optional(),
       interface_type: Joi.string().max(50).allow(null, '').optional(),
       form_factor: Joi.string().max(50).allow(null, '').optional(),
+      software_type: Joi.string().max(50).valid('operating_system', 'application', 'utility', 'driver').allow(null).optional(),
       is_active: Joi.boolean().optional()
     })
   },
@@ -387,12 +409,15 @@ const validators = {
       assigned_to: Joi.string().uuid().optional().allow(null),
       status: Joi.string().valid('available', 'assigned', 'in_use', 'under_repair', 'disposed', 'maintenance').default('available'),
       condition_status: Joi.string().valid('excellent', 'good', 'fair', 'needs_repair', 'poor').default('good'),
+      importance: Joi.string().valid('critical', 'high', 'medium', 'low').default('medium'),
       purchase_date: Joi.date().optional().allow(null),
       warranty_start_date: Joi.date().optional().allow(null),
       warranty_end_date: Joi.date().optional().allow(null),
       eol_date: Joi.date().optional().allow(null),
       eos_date: Joi.date().optional().allow(null),
       purchase_cost: Joi.number().positive().precision(2).optional().allow(null),
+      vendor_id: Joi.string().uuid().optional().allow(null),
+      invoice_number: Joi.string().max(100).optional().allow(null, ''),
       notes: Joi.string().max(1000).optional().allow(null),
       is_active: Joi.boolean().default(true),
       // New fields for component hierarchy
@@ -408,8 +433,8 @@ const validators = {
           software_type: Joi.string().valid('operating_system', 'application', 'utility', 'driver').optional(),
           license_key: Joi.string().max(500).optional().allow(null, ''),
           license_type: Joi.string().valid('oem', 'retail', 'volume', 'subscription').optional(),
-          activation_date: Joi.date().optional().allow(null),
-          expiration_date: Joi.date().optional().allow(null),
+          license_id: Joi.string().uuid().optional().allow(null),
+          installation_date: Joi.date().optional().allow(null),
           notes: Joi.string().max(1000).optional().allow(null, '')
         })
       ).optional()
@@ -422,12 +447,15 @@ const validators = {
       assigned_to: Joi.string().uuid().optional().allow(null),
       status: Joi.string().valid('available', 'assigned', 'in_use', 'under_repair', 'disposed', 'maintenance').optional(),
       condition_status: Joi.string().valid('excellent', 'good', 'fair', 'needs_repair', 'poor').optional(),
+      importance: Joi.string().valid('critical', 'high', 'medium', 'low').optional(),
       purchase_date: Joi.date().optional().allow(null),
       warranty_start_date: Joi.date().optional().allow(null),
       warranty_end_date: Joi.date().optional().allow(null),
       eol_date: Joi.date().optional().allow(null),
       eos_date: Joi.date().optional().allow(null),
       purchase_cost: Joi.number().positive().precision(2).optional().allow(null),
+      vendor_id: Joi.string().uuid().optional().allow(null),
+      invoice_number: Joi.string().max(100).optional().allow(null, ''),
       notes: Joi.string().max(1000).optional().allow(null),
       is_active: Joi.boolean().optional(),
       // New fields for component hierarchy
@@ -443,8 +471,8 @@ const validators = {
           software_type: Joi.string().valid('operating_system', 'application', 'utility', 'driver').optional(),
           license_key: Joi.string().max(500).optional().allow(null, ''),
           license_type: Joi.string().valid('oem', 'retail', 'volume', 'subscription').optional(),
-          activation_date: Joi.date().optional().allow(null),
-          expiration_date: Joi.date().optional().allow(null),
+          license_id: Joi.string().uuid().optional().allow(null),
+          installation_date: Joi.date().optional().allow(null),
           notes: Joi.string().max(1000).optional().allow(null, '')
         })
       ).optional()

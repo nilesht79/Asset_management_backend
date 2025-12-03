@@ -20,6 +20,13 @@ const jobRoutes = require('./jobs');
 const requisitionRoutes = require('./requisitions');
 const deliveryTicketRoutes = require('./delivery-tickets');
 const reconciliationRoutes = require('./reconciliations');
+const systemConfigRoutes = require('./settings/system-config');
+const consumableRoutes = require('./consumables');
+const consumableRequestRoutes = require('./consumables/requests');
+const licenseRoutes = require('./licenses');
+const repairHistoryRoutes = require('./repair-history');
+const faultAnalysisRoutes = require('./fault-analysis');
+const slaRoutes = require('./sla');
 
 const router = express.Router();
 
@@ -67,7 +74,14 @@ router.get('/', (req, res) => {
       jobs: '/jobs',
       requisitions: '/requisitions',
       deliveryTickets: '/delivery-tickets',
-      reconciliations: '/reconciliations'
+      reconciliations: '/reconciliations',
+      systemConfig: '/settings/system-config',
+      consumables: '/consumables',
+      consumableRequests: '/consumables/requests',
+      licenses: '/licenses',
+      repairHistory: '/repair-history',
+      faultAnalysis: '/fault-analysis',
+      sla: '/sla'
     },
     documentation: '/docs',
     health: '/health',
@@ -92,6 +106,14 @@ router.use('/jobs', jobRoutes);
 router.use('/requisitions', requisitionRoutes);
 router.use('/delivery-tickets', deliveryTicketRoutes);
 router.use('/reconciliations', reconciliationRoutes);
+router.use('/settings/system-config', systemConfigRoutes);
+// IMPORTANT: Mount specific routes before generic ones to prevent /:id from matching 'requests'
+router.use('/consumables/requests', consumableRequestRoutes);
+router.use('/consumables', consumableRoutes);
+router.use('/licenses', licenseRoutes);
+router.use('/repair-history', repairHistoryRoutes);
+router.use('/fault-analysis', faultAnalysisRoutes);
+router.use('/sla', slaRoutes);
 
 
 // API version info

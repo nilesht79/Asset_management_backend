@@ -5,6 +5,7 @@
 
 const cron = require('node-cron');
 const { runStandbyJobs } = require('../jobs/standbyAutoConversion');
+const slaMonitoringJob = require('../jobs/slaMonitoringJob');
 
 // Track active jobs
 const activeJobs = new Map();
@@ -32,11 +33,31 @@ const initializeScheduler = () => {
 
   activeJobs.set('standbyAutoConversion', standbyJob);
 
+  // SLA Monitoring Job
+  // Runs every 5 minutes to update SLA tracking, process escalations, and send notifications
+  const slaJob = cron.schedule('*/5 * * * *', async () => {
+    console.log('⏰ Running SLA monitoring job...');
+    try {
+      const result = await slaMonitoringJob.run();
+      console.log(`✅ SLA monitoring job completed: ${result.tracking_updates?.success || 0} updated, ${result.escalations?.triggered || 0} escalations`);
+    } catch (error) {
+      console.error('❌ SLA monitoring job failed:', error);
+    }
+  }, {
+    scheduled: true,
+    timezone: process.env.TZ || 'Asia/Kolkata'
+  });
+
+  activeJobs.set('slaMonitoring', slaJob);
+
   // Optional: Run immediately on startup (for testing)
   if (process.env.RUN_JOBS_ON_STARTUP === 'true') {
     console.log('🔄 Running jobs on startup...');
     runStandbyJobs().catch(error => {
-      console.error('❌ Startup job execution failed:', error);
+      console.error('❌ Startup standby job execution failed:', error);
+    });
+    slaMonitoringJob.run().catch(error => {
+      console.error('❌ Startup SLA monitoring job execution failed:', error);
     });
   }
 
@@ -84,6 +105,9 @@ const triggerJob = async (jobName) => {
   switch (jobName) {
     case 'standbyAutoConversion':
       await runStandbyJobs();
+      break;
+    case 'slaMonitoring':
+      await slaMonitoringJob.run();
       break;
     default:
       throw new Error(`Unknown job: ${jobName}`);
