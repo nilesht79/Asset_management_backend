@@ -75,6 +75,8 @@ class TicketModel {
           department_id,
           location_id,
           category,
+          ticket_type,
+          service_type,
           due_date,
           created_at,
           updated_at
@@ -93,6 +95,8 @@ class TicketModel {
           @departmentId,
           @locationId,
           @category,
+          @ticketType,
+          @serviceType,
           @dueDate,
           GETDATE(),
           GETDATE()
@@ -111,6 +115,8 @@ class TicketModel {
         .input('departmentId', sql.UniqueIdentifier, employee.department_id)
         .input('locationId', sql.UniqueIdentifier, employee.location_id)
         .input('category', sql.NVarChar(100), ticketData.category || null)
+        .input('ticketType', sql.NVarChar(30), ticketData.ticket_type || 'internal')
+        .input('serviceType', sql.VarChar(20), ticketData.service_type || 'general')
         .input('dueDate', sql.DateTime, ticketData.due_date || null)
         .query(insertQuery);
 
@@ -155,6 +161,8 @@ class TicketModel {
             department_id,
             location_id,
             category,
+            ticket_type,
+            service_type,
             due_date,
             is_guest,
             created_at,
@@ -174,6 +182,8 @@ class TicketModel {
             NULL,
             NULL,
             @category,
+            @ticketType,
+            @serviceType,
             @dueDate,
             1,
             GETDATE(),
@@ -190,6 +200,8 @@ class TicketModel {
           .input('createdByCoordinatorId', sql.UniqueIdentifier, ticketData.created_by_coordinator_id)
           .input('assignedToEngineerId', sql.UniqueIdentifier, ticketData.assigned_to_engineer_id || null)
           .input('category', sql.NVarChar(100), ticketData.category || null)
+          .input('ticketType', sql.NVarChar(30), ticketData.ticket_type || 'external')
+          .input('serviceType', sql.VarChar(20), ticketData.service_type || 'general')
           .input('dueDate', sql.DateTime, ticketData.due_date || null)
           .query(insertTicketQuery);
 

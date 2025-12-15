@@ -1,18 +1,18 @@
 /**
  * SLA NOTIFICATION SERVICE
  * Handles sending notifications for SLA escalations
- * Supports email notifications (can be extended for other channels)
+ * Supports email notifications via Gmail or SMTP (configured in database)
  */
 
 const { connectDB, sql } = require('../config/database');
 const escalationEngine = require('./escalationEngine');
 const businessHoursCalculator = require('../utils/businessHoursCalculator');
+const emailService = require('./emailService');
 
 class SlaNotificationService {
   constructor() {
-    // Email transport would be configured here in production
-    // For now, we'll log notifications and mark them as sent
-    this.emailEnabled = process.env.EMAIL_ENABLED === 'true';
+    // Email service is now managed via database configuration
+    // No need for environment variable - configuration is in EMAIL_CONFIGURATION table
   }
 
   /**
@@ -83,29 +83,38 @@ class SlaNotificationService {
       include_ticket_details
     });
 
-    // Send to each recipient
+    // Send to each recipient using email service
     const sendResults = [];
 
     for (const recipient of recipients) {
       try {
-        if (this.emailEnabled) {
-          await this.sendEmail(recipient.email, content.subject, content.body);
-        } else {
-          // Log the notification for development
-          console.log('=== SLA NOTIFICATION ===');
-          console.log(`To: ${recipient.email} (${recipient.name})`);
-          console.log(`Subject: ${content.subject}`);
-          console.log(`Body: ${content.body}`);
-          console.log('========================');
-        }
+        // Use the centralized email service
+        const result = await emailService.sendEmail(
+          recipient.email,
+          content.subject,
+          content.body
+        );
 
-        sendResults.push({
-          email: recipient.email,
-          status: 'sent'
-        });
+        if (result.success) {
+          sendResults.push({
+            email: recipient.email,
+            name: recipient.name,
+            status: 'sent',
+            messageId: result.messageId
+          });
+        } else {
+          // Email service returned failure but didn't throw
+          sendResults.push({
+            email: recipient.email,
+            name: recipient.name,
+            status: result.reason === 'Email service not configured or disabled' ? 'logged' : 'failed',
+            error: result.reason || result.error
+          });
+        }
       } catch (err) {
         sendResults.push({
           email: recipient.email,
+          name: recipient.name,
           status: 'failed',
           error: err.message
         });
@@ -257,23 +266,10 @@ Please do not reply to this email.
   }
 
   /**
-   * Send email (placeholder - integrate with actual email service)
+   * Send email using the centralized email service
    */
   async sendEmail(to, subject, body) {
-    // In production, this would use nodemailer or similar
-    // For now, just log and return success
-    console.log(`Email to: ${to}`);
-    console.log(`Subject: ${subject}`);
-
-    // If email transport is configured:
-    // await this.transporter.sendMail({
-    //   from: process.env.EMAIL_FROM,
-    //   to: to,
-    //   subject: subject,
-    //   text: body
-    // });
-
-    return true;
+    return emailService.sendEmail(to, subject, body);
   }
 
   /**
@@ -378,14 +374,14 @@ Please do not reply to this email.
 
       const query = `
         SELECT
-          COUNT(*) AS total_notifications,
-          SUM(CASE WHEN delivery_status = 'sent' THEN 1 ELSE 0 END) AS sent_count,
-          SUM(CASE WHEN delivery_status = 'pending' THEN 1 ELSE 0 END) AS pending_count,
-          SUM(CASE WHEN delivery_status = 'failed' THEN 1 ELSE 0 END) AS failed_count,
-          SUM(CASE WHEN trigger_type = 'warning_zone' THEN 1 ELSE 0 END) AS warning_count,
-          SUM(CASE WHEN trigger_type = 'imminent_breach' THEN 1 ELSE 0 END) AS imminent_count,
-          SUM(CASE WHEN trigger_type = 'breached' THEN 1 ELSE 0 END) AS breach_count,
-          SUM(CASE WHEN trigger_type = 'recurring_breach' THEN 1 ELSE 0 END) AS recurring_count
+          COUNT(*) AS total,
+          SUM(CASE WHEN delivery_status = 'sent' THEN 1 ELSE 0 END) AS sent,
+          SUM(CASE WHEN delivery_status = 'pending' THEN 1 ELSE 0 END) AS pending,
+          SUM(CASE WHEN delivery_status = 'failed' THEN 1 ELSE 0 END) AS failed,
+          SUM(CASE WHEN trigger_type = 'warning_zone' THEN 1 ELSE 0 END) AS warning_triggered,
+          SUM(CASE WHEN trigger_type = 'imminent_breach' THEN 1 ELSE 0 END) AS imminent_triggered,
+          SUM(CASE WHEN trigger_type = 'breached' THEN 1 ELSE 0 END) AS breach_triggered,
+          SUM(CASE WHEN trigger_type = 'recurring_breach' THEN 1 ELSE 0 END) AS recurring_triggered
         FROM ESCALATION_NOTIFICATIONS_LOG enl
         ${whereClause}
       `;

@@ -126,9 +126,43 @@ const uploadSignedForm = multer({
   fileFilter: signedFormFileFilter
 });
 
+// Storage configuration for company logos
+const logoStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(__dirname, '../../uploads/logos');
+    ensureDir(dir);
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'company-logo-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+// File filter for logos (images only)
+const logoFileFilter = (req, file, cb) => {
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/svg+xml'];
+
+  if (allowedTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type. Only JPEG, PNG, and SVG images are allowed for logos.'), false);
+  }
+};
+
+// Multer upload configuration for company logos
+const uploadLogo = multer({
+  storage: logoStorage,
+  limits: {
+    fileSize: 2 * 1024 * 1024 // 2MB limit for logos
+  },
+  fileFilter: logoFileFilter
+});
+
 module.exports = {
   upload,
   handleUploadError,
   uploadSignature,
-  uploadSignedForm
+  uploadSignedForm,
+  uploadLogo
 };

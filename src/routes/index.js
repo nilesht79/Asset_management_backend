@@ -21,12 +21,15 @@ const requisitionRoutes = require('./requisitions');
 const deliveryTicketRoutes = require('./delivery-tickets');
 const reconciliationRoutes = require('./reconciliations');
 const systemConfigRoutes = require('./settings/system-config');
+const companySettingsRoutes = require('./settings/company-settings');
+const emailSettingsRoutes = require('./emailSettings');
 const consumableRoutes = require('./consumables');
 const consumableRequestRoutes = require('./consumables/requests');
 const licenseRoutes = require('./licenses');
 const repairHistoryRoutes = require('./repair-history');
 const faultAnalysisRoutes = require('./fault-analysis');
 const slaRoutes = require('./sla');
+const serviceReportRoutes = require('./serviceReport');
 
 const router = express.Router();
 
@@ -76,12 +79,15 @@ router.get('/', (req, res) => {
       deliveryTickets: '/delivery-tickets',
       reconciliations: '/reconciliations',
       systemConfig: '/settings/system-config',
+      companySettings: '/settings/company',
+      emailSettings: '/settings/email',
       consumables: '/consumables',
       consumableRequests: '/consumables/requests',
       licenses: '/licenses',
       repairHistory: '/repair-history',
       faultAnalysis: '/fault-analysis',
-      sla: '/sla'
+      sla: '/sla',
+      serviceReports: '/service-reports'
     },
     documentation: '/docs',
     health: '/health',
@@ -107,6 +113,8 @@ router.use('/requisitions', requisitionRoutes);
 router.use('/delivery-tickets', deliveryTicketRoutes);
 router.use('/reconciliations', reconciliationRoutes);
 router.use('/settings/system-config', systemConfigRoutes);
+router.use('/settings/company', companySettingsRoutes);
+router.use('/settings/email', emailSettingsRoutes);
 // IMPORTANT: Mount specific routes before generic ones to prevent /:id from matching 'requests'
 router.use('/consumables/requests', consumableRequestRoutes);
 router.use('/consumables', consumableRoutes);
@@ -114,6 +122,7 @@ router.use('/licenses', licenseRoutes);
 router.use('/repair-history', repairHistoryRoutes);
 router.use('/fault-analysis', faultAnalysisRoutes);
 router.use('/sla', slaRoutes);
+router.use('/service-reports', serviceReportRoutes);
 
 
 // API version info

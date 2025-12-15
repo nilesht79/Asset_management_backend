@@ -82,6 +82,12 @@ router.delete('/holidays/:calendarId',
 
 // ==================== ESCALATION RULES ====================
 
+// Get available designations for escalation rules
+router.get('/designations', SlaController.getDesignations);
+
+// Get available roles for escalation rules
+router.get('/roles', SlaController.getRoles);
+
 // Save escalation rule (admin/superadmin only)
 router.post('/escalation-rules',
   requireRoles('admin', 'superadmin'),

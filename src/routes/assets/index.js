@@ -1046,7 +1046,8 @@ router.post('/legacy-import',
           const tagNo = await generateUniqueTagNo(assetTag, userLocationId);
 
           // Determine final status for components
-          const finalStatus = asset_type === 'component' ? 'in_use' : asset.status;
+          // Components with parent = 'in_use', spare components without parent = respect user selection
+          const finalStatus = (asset_type === 'component' && asset.parent_asset_id) ? 'in_use' : asset.status;
 
           await pool.request()
             .input('id', sql.UniqueIdentifier, assetId)
@@ -1803,7 +1804,8 @@ router.post('/bulk',
         }
 
         // Determine final status for components
-        const finalStatus = asset_type === 'component' ? 'in_use' : status;
+        // Components with parent = 'in_use', spare components without parent = respect user selection
+        const finalStatus = (asset_type === 'component' && parentAssetId) ? 'in_use' : status;
 
         const request = pool.request()
           .input('id', sql.UniqueIdentifier, assetId)
@@ -2082,8 +2084,9 @@ router.post('/',
       }
     }
 
-    // Determine final status for components (always 'in_use' when installed)
-    const finalStatus = asset_type === 'component' ? 'in_use' : status;
+    // Determine final status for components
+    // Components with parent = 'in_use', spare components without parent = respect user selection
+    const finalStatus = (asset_type === 'component' && parent_asset_id) ? 'in_use' : status;
     const performedBy = installed_by || req.user?.user_id;
     // Get default vendor (PoleStar) if not provided
     let finalVendorId = vendor_id;
@@ -2317,10 +2320,8 @@ router.put('/:id',
 
       // Validate component-specific rules
       if (asset_type === 'component') {
-        const finalParentId = parent_asset_id !== undefined ? parent_asset_id : existingAsset.parent_asset_id;
-        if (!finalParentId) {
-          return sendError(res, 'Components must have a parent_asset_id', 400);
-        }
+        // Note: parent_asset_id is optional - components can be spare/stock without a parent
+        // Parent is only required when installing the component
         if (assigned_to !== undefined && assigned_to !== null) {
           return sendError(res, 'Components cannot be assigned to users', 400);
         }

@@ -25,6 +25,8 @@ class TicketController {
         description,
         priority,
         category,
+        ticket_type,
+        service_type,
         assigned_to_engineer_id,
         due_date
       } = req.body;
@@ -61,6 +63,8 @@ class TicketController {
         description,
         priority: priority || 'medium',
         category,
+        ticket_type: ticket_type || 'internal',
+        service_type: service_type || 'general',
         assigned_to_engineer_id,
         due_date
       };
@@ -92,7 +96,8 @@ class TicketController {
       try {
         const ticketContext = {
           ticket_id: ticket.ticket_id,
-          ticket_type: fullTicket.category || 'general',
+          ticket_type: fullTicket.ticket_type || 'internal',
+          service_type: fullTicket.service_type || 'general',
           ticket_channel: 'portal', // Default channel
           priority: fullTicket.priority || 'medium',
           user_id: fullTicket.created_by_user_id,

@@ -9,6 +9,7 @@ const slaMatchingEngine = require('../services/slaMatchingEngine');
 const escalationEngine = require('../services/escalationEngine');
 const slaNotificationService = require('../services/slaNotificationService');
 const businessHoursCalculator = require('../utils/businessHoursCalculator');
+const { connectDB } = require('../config/database');
 
 class SlaController {
   // ==================== SLA RULES ====================
@@ -726,6 +727,79 @@ class SlaController {
       res.status(500).json({
         success: false,
         message: 'Failed to update SLA tracking',
+        error: error.message
+      });
+    }
+  }
+
+  // ==================== LOOKUP DATA ====================
+
+  /**
+   * Get available designations for escalation rules
+   */
+  static async getDesignations(req, res) {
+    try {
+      const pool = await connectDB();
+      const result = await pool.request().query(`
+        SELECT DISTINCT designation, COUNT(*) as user_count
+        FROM USER_MASTER
+        WHERE designation IS NOT NULL
+          AND designation != ''
+          AND is_active = 1
+        GROUP BY designation
+        ORDER BY designation
+      `);
+
+      res.json({
+        success: true,
+        data: {
+          designations: result.recordset.map(r => ({
+            value: r.designation,
+            label: r.designation,
+            userCount: r.user_count
+          }))
+        }
+      });
+    } catch (error) {
+      console.error('Error getting designations:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to get designations',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Get available roles for escalation rules
+   */
+  static async getRoles(req, res) {
+    try {
+      const pool = await connectDB();
+      const result = await pool.request().query(`
+        SELECT DISTINCT role, COUNT(*) as user_count
+        FROM USER_MASTER
+        WHERE role IS NOT NULL
+          AND is_active = 1
+        GROUP BY role
+        ORDER BY role
+      `);
+
+      res.json({
+        success: true,
+        data: {
+          roles: result.recordset.map(r => ({
+            value: r.role,
+            label: r.role.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+            userCount: r.user_count
+          }))
+        }
+      });
+    } catch (error) {
+      console.error('Error getting roles:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to get roles',
         error: error.message
       });
     }

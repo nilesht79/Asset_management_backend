@@ -14,8 +14,13 @@ class SlaRulesModel {
       const pool = await connectDB();
 
       let whereClause = 'WHERE 1=1';
-      if (filters.isActive !== undefined) {
-        whereClause += ` AND sr.is_active = ${filters.isActive ? 1 : 0}`;
+      // By default, only show active rules (exclude soft-deleted)
+      // Only show inactive rules when explicitly requested with isActive=false
+      if (filters.isActive === false) {
+        whereClause += ' AND sr.is_active = 0';
+      } else if (filters.includeInactive !== true) {
+        // Default: only show active rules
+        whereClause += ' AND sr.is_active = 1';
       }
 
       const query = `
@@ -142,6 +147,14 @@ class SlaRulesModel {
    */
   static async createRule(ruleData) {
     try {
+      // Validate required fields
+      if (!ruleData.business_hours_schedule_id) {
+        throw new Error('Business hours schedule is required');
+      }
+      if (!ruleData.holiday_calendar_id) {
+        throw new Error('Holiday calendar is required');
+      }
+
       const pool = await connectDB();
 
       const query = `
@@ -221,6 +234,14 @@ class SlaRulesModel {
    */
   static async updateRule(ruleId, ruleData) {
     try {
+      // Validate required fields
+      if (!ruleData.business_hours_schedule_id) {
+        throw new Error('Business hours schedule is required');
+      }
+      if (!ruleData.holiday_calendar_id) {
+        throw new Error('Holiday calendar is required');
+      }
+
       const pool = await connectDB();
 
       const query = `
@@ -334,8 +355,7 @@ class SlaRulesModel {
           (SELECT COUNT(*) FROM BUSINESS_HOURS_DETAILS bhd WHERE bhd.schedule_id = bhs.schedule_id) AS days_configured,
           (SELECT COUNT(*) FROM BREAK_HOURS bh WHERE bh.schedule_id = bhs.schedule_id AND bh.is_active = 1) AS breaks_count
         FROM BUSINESS_HOURS_SCHEDULES bhs
-        WHERE bhs.is_active = 1
-        ORDER BY bhs.schedule_name
+        ORDER BY bhs.is_default DESC, bhs.schedule_name
       `;
 
       const result = await pool.request().query(query);
@@ -406,9 +426,8 @@ class SlaRulesModel {
       const query = `
         SELECT
           hc.*,
-          (SELECT COUNT(*) FROM HOLIDAY_DATES hd WHERE hd.calendar_id = hc.calendar_id) AS holidays_count
+          (SELECT COUNT(*) FROM HOLIDAY_DATES hd WHERE hd.calendar_id = hc.calendar_id) AS holiday_count
         FROM HOLIDAY_CALENDARS hc
-        WHERE hc.is_active = 1
         ORDER BY hc.calendar_year DESC, hc.calendar_name
       `;
 
@@ -456,6 +475,12 @@ class SlaRulesModel {
 
       try {
         let scheduleId = scheduleData.schedule_id;
+
+        // If setting as default, clear other defaults first
+        if (scheduleData.is_default) {
+          await transaction.request()
+            .query(`UPDATE BUSINESS_HOURS_SCHEDULES SET is_default = 0 WHERE is_default = 1`);
+        }
 
         if (scheduleId) {
           // Update existing schedule

@@ -159,12 +159,27 @@ class SlaTrackingModel {
         return tracking;
       }
 
-      // Get pause periods
+      // Get pause periods from action log (pair pause/resume actions)
       const pauseResult = await pool.request()
         .input('trackingId', sql.UniqueIdentifier, tracking.tracking_id)
         .query(`
-          SELECT pause_start, pause_end FROM TICKET_SLA_PAUSE_LOG
-          WHERE tracking_id = @trackingId AND pause_end IS NOT NULL
+          SELECT
+            p.action_at as pause_start,
+            r.action_at as pause_end
+          FROM TICKET_SLA_PAUSE_LOG p
+          LEFT JOIN TICKET_SLA_PAUSE_LOG r ON p.tracking_id = r.tracking_id
+            AND r.action = 'resumed'
+            AND r.action_at > p.action_at
+            AND NOT EXISTS (
+              SELECT 1 FROM TICKET_SLA_PAUSE_LOG p2
+              WHERE p2.tracking_id = p.tracking_id
+                AND p2.action = 'paused'
+                AND p2.action_at > p.action_at
+                AND p2.action_at < r.action_at
+            )
+          WHERE p.tracking_id = @trackingId
+            AND p.action = 'paused'
+            AND r.action_at IS NOT NULL
         `);
 
       const pausePeriods = pauseResult.recordset;
@@ -198,14 +213,16 @@ class SlaTrackingModel {
         WHERE tracking_id = @trackingId
       `;
 
-      const updateResult = await pool.request()
+      await pool.request()
         .input('trackingId', sql.UniqueIdentifier, tracking.tracking_id)
         .input('elapsedMinutes', sql.Int, elapsedMinutes)
         .input('slaStatus', sql.NVarChar(20), slaStatus.status)
         .query(updateQuery);
 
+      // Return full tracking data with SLA rule details
+      const fullTracking = await this.getTracking(ticketId);
       return {
-        ...updateResult.recordset[0],
+        ...fullTracking,
         sla_status_details: slaStatus
       };
     } catch (error) {
@@ -254,17 +271,16 @@ class SlaTrackingModel {
       // Create pause log entry
       const logQuery = `
         INSERT INTO TICKET_SLA_PAUSE_LOG (
-          pause_log_id, tracking_id, pause_start, pause_reason, paused_by, created_at
+          log_id, tracking_id, action, reason, action_at, created_by
         )
         OUTPUT INSERTED.*
         VALUES (
-          NEWID(), @trackingId, @pauseStart, @pauseReason, @pausedBy, GETDATE()
+          NEWID(), @trackingId, 'paused', @pauseReason, GETDATE(), @pausedBy
         )
       `;
 
       const logResult = await pool.request()
         .input('trackingId', sql.UniqueIdentifier, tracking.tracking_id)
-        .input('pauseStart', sql.DateTime, now)
         .input('pauseReason', sql.NVarChar(500), reason)
         .input('pausedBy', sql.UniqueIdentifier, pausedBy)
         .query(logQuery);
@@ -311,14 +327,15 @@ class SlaTrackingModel {
           WHERE tracking_id = @trackingId
         `);
 
-      // Update pause log entry
+      // Create resume log entry
       const logQuery = `
-        UPDATE TICKET_SLA_PAUSE_LOG SET
-          pause_end = GETDATE(),
-          paused_minutes = @pausedMinutes,
-          resumed_by = @resumedBy
+        INSERT INTO TICKET_SLA_PAUSE_LOG (
+          log_id, tracking_id, action, reason, action_at, paused_duration_minutes, created_by
+        )
         OUTPUT INSERTED.*
-        WHERE tracking_id = @trackingId AND pause_end IS NULL
+        VALUES (
+          NEWID(), @trackingId, 'resumed', 'Timer resumed', GETDATE(), @pausedMinutes, @resumedBy
+        )
       `;
 
       const logResult = await pool.request()
@@ -387,14 +404,12 @@ class SlaTrackingModel {
       const query = `
         SELECT
           pl.*,
-          u1.first_name + ' ' + u1.last_name AS paused_by_name,
-          u2.first_name + ' ' + u2.last_name AS resumed_by_name
+          u.first_name + ' ' + u.last_name AS action_by_name
         FROM TICKET_SLA_PAUSE_LOG pl
         INNER JOIN TICKET_SLA_TRACKING tst ON pl.tracking_id = tst.tracking_id
-        LEFT JOIN USER_MASTER u1 ON pl.paused_by = u1.user_id
-        LEFT JOIN USER_MASTER u2 ON pl.resumed_by = u2.user_id
+        LEFT JOIN USER_MASTER u ON pl.created_by = u.user_id
         WHERE tst.ticket_id = @ticketId
-        ORDER BY pl.pause_start DESC
+        ORDER BY pl.action_at DESC
       `;
 
       const result = await pool.request()
@@ -419,7 +434,7 @@ class SlaTrackingModel {
         SELECT
           tst.*,
           t.ticket_number,
-          t.title,
+          t.title AS ticket_title,
           t.priority,
           t.status,
           t.assigned_to_engineer_id,
@@ -428,7 +443,10 @@ class SlaTrackingModel {
           sr.avg_tat_minutes,
           sr.max_tat_minutes,
           sr.max_tat_minutes - tst.business_elapsed_minutes AS remaining_minutes,
-          u.first_name + ' ' + u.last_name AS assigned_engineer_name,
+          CASE WHEN sr.max_tat_minutes > 0
+            THEN CAST(tst.business_elapsed_minutes * 100.0 / sr.max_tat_minutes AS INT)
+            ELSE 0 END AS percent_used,
+          u.first_name + ' ' + u.last_name AS assigned_to_name,
           u.email AS assigned_engineer_email
         FROM TICKET_SLA_TRACKING tst
         INNER JOIN TICKETS t ON tst.ticket_id = t.ticket_id
@@ -464,7 +482,7 @@ class SlaTrackingModel {
         SELECT
           tst.*,
           t.ticket_number,
-          t.title,
+          t.title AS ticket_title,
           t.priority,
           t.status,
           t.assigned_to_engineer_id,
@@ -472,8 +490,10 @@ class SlaTrackingModel {
           sr.min_tat_minutes,
           sr.avg_tat_minutes,
           sr.max_tat_minutes,
-          tst.business_elapsed_minutes - sr.max_tat_minutes AS overage_minutes,
-          u.first_name + ' ' + u.last_name AS assigned_engineer_name,
+          tst.business_elapsed_minutes - sr.max_tat_minutes AS overdue_minutes,
+          tst.breach_triggered_at AS breached_at,
+          ISNULL((SELECT MAX(escalation_level) FROM ESCALATION_NOTIFICATIONS_LOG el WHERE el.tracking_id = tst.tracking_id), 0) AS escalation_level,
+          u.first_name + ' ' + u.last_name AS assigned_to_name,
           u.email AS assigned_engineer_email
         FROM TICKET_SLA_TRACKING tst
         INNER JOIN TICKETS t ON tst.ticket_id = t.ticket_id
@@ -518,7 +538,8 @@ class SlaTrackingModel {
           SUM(CASE WHEN tst.sla_status = 'warning' THEN 1 ELSE 0 END) AS warning_count,
           SUM(CASE WHEN tst.sla_status = 'critical' THEN 1 ELSE 0 END) AS critical_count,
           SUM(CASE WHEN tst.sla_status = 'breached' THEN 1 ELSE 0 END) AS breached_count,
-          SUM(CASE WHEN tst.resolved_at IS NOT NULL AND tst.final_status != 'breached' THEN 1 ELSE 0 END) AS met_sla_count,
+          SUM(CASE WHEN tst.is_paused = 1 THEN 1 ELSE 0 END) AS paused_count,
+          SUM(CASE WHEN tst.resolved_at IS NOT NULL AND tst.final_status != 'breached' THEN 1 ELSE 0 END) AS resolved_within_sla,
           AVG(tst.business_elapsed_minutes) AS avg_resolution_minutes,
           AVG(tst.total_paused_minutes) AS avg_paused_minutes,
           CAST(SUM(CASE WHEN tst.resolved_at IS NOT NULL AND tst.final_status != 'breached' THEN 1.0 ELSE 0 END) * 100.0 /

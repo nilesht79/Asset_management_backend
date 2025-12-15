@@ -235,8 +235,11 @@ class EscalationEngine {
 
       const ticket = ticketResult.recordset[0];
 
+      const limit = rule.number_of_recipients || 3;
+
       switch (rule.recipient_type) {
         case 'assigned_engineer':
+          // Get the engineer assigned to this specific ticket
           if (ticket.engineer_email) {
             recipients.push({
               name: ticket.engineer_name,
@@ -247,6 +250,7 @@ class EscalationEngine {
           break;
 
         case 'coordinator':
+          // First add the ticket's coordinator if exists
           if (ticket.coordinator_email) {
             recipients.push({
               name: ticket.coordinator_name,
@@ -254,82 +258,117 @@ class EscalationEngine {
               type: 'coordinator'
             });
           }
-          // Also get other coordinators
+          // Then add other coordinators up to the limit
           const coordResult = await pool.request()
+            .input('limit', sql.Int, limit)
             .query(`
-              SELECT TOP 3 first_name + ' ' + last_name AS name, email
+              SELECT TOP (@limit) first_name + ' ' + last_name AS name, email
               FROM USER_MASTER
               WHERE role = 'coordinator' AND is_active = 1
               ORDER BY NEWID()
             `);
           for (const coord of coordResult.recordset) {
-            if (!recipients.find(r => r.email === coord.email)) {
+            if (!recipients.find(r => r.email === coord.email) && recipients.length < limit) {
               recipients.push({ ...coord, type: 'coordinator' });
             }
           }
           break;
 
-        case 'team_leader':
-          // Get team leaders/supervisors
-          const tlResult = await pool.request()
-            .input('departmentId', sql.UniqueIdentifier, ticket.department_id)
+        case 'it_head':
+          // Get IT Head users
+          const itHeadResult = await pool.request()
+            .input('limit', sql.Int, limit)
             .query(`
-              SELECT TOP 2 first_name + ' ' + last_name AS name, email
+              SELECT TOP (@limit) first_name + ' ' + last_name AS name, email
               FROM USER_MASTER
-              WHERE (role = 'team_leader' OR role = 'supervisor')
-                AND is_active = 1
-                AND (department_id = @departmentId OR department_id IS NULL)
+              WHERE role = 'it_head' AND is_active = 1
               ORDER BY NEWID()
             `);
-          for (const tl of tlResult.recordset) {
-            recipients.push({ ...tl, type: 'team_leader' });
+          for (const itHead of itHeadResult.recordset) {
+            recipients.push({ ...itHead, type: 'it_head' });
           }
           break;
 
         case 'department_head':
-          // Get department head/admin
+          // Get Department Head users (prioritize same department)
           const dhResult = await pool.request()
+            .input('departmentId', sql.UniqueIdentifier, ticket.department_id)
+            .input('limit', sql.Int, limit)
             .query(`
-              SELECT TOP 2 first_name + ' ' + last_name AS name, email
+              SELECT TOP (@limit) first_name + ' ' + last_name AS name, email
+              FROM USER_MASTER
+              WHERE role = 'department_head' AND is_active = 1
+                AND (department_id = @departmentId OR department_id IS NULL)
+              ORDER BY CASE WHEN department_id = @departmentId THEN 0 ELSE 1 END, NEWID()
+            `);
+          for (const dh of dhResult.recordset) {
+            recipients.push({ ...dh, type: 'department_head' });
+          }
+          break;
+
+        case 'admin':
+          // Get Admin users
+          const adminResult = await pool.request()
+            .input('limit', sql.Int, limit)
+            .query(`
+              SELECT TOP (@limit) first_name + ' ' + last_name AS name, email
               FROM USER_MASTER
               WHERE role = 'admin' AND is_active = 1
               ORDER BY NEWID()
             `);
-          for (const dh of dhResult.recordset) {
-            recipients.push({ ...dh, type: 'admin' });
+          for (const admin of adminResult.recordset) {
+            recipients.push({ ...admin, type: 'admin' });
           }
           break;
 
-        case 'project_owner':
-          // For now, fall back to admin
-          const poResult = await pool.request()
+        case 'superadmin':
+          // Get Super Admin users
+          const superadminResult = await pool.request()
+            .input('limit', sql.Int, limit)
             .query(`
-              SELECT TOP 1 first_name + ' ' + last_name AS name, email
+              SELECT TOP (@limit) first_name + ' ' + last_name AS name, email
               FROM USER_MASTER
-              WHERE role = 'admin' AND is_active = 1
+              WHERE role = 'superadmin' AND is_active = 1
+              ORDER BY NEWID()
             `);
-          if (poResult.recordset.length > 0) {
-            recipients.push({ ...poResult.recordset[0], type: 'project_owner' });
+          for (const sa of superadminResult.recordset) {
+            recipients.push({ ...sa, type: 'superadmin' });
           }
           break;
 
-        case 'custom_group':
-          if (rule.recipient_group_id) {
-            // Get users from custom group (if implemented)
-            // For now, fall back to role-based
-            if (rule.recipient_role) {
-              const cgResult = await pool.request()
-                .input('role', sql.NVarChar(50), rule.recipient_role)
-                .input('limit', sql.Int, rule.number_of_recipients || 3)
-                .query(`
-                  SELECT TOP (@limit) first_name + ' ' + last_name AS name, email
-                  FROM USER_MASTER
-                  WHERE role = @role AND is_active = 1
-                  ORDER BY NEWID()
-                `);
-              for (const user of cgResult.recordset) {
-                recipients.push({ ...user, type: rule.recipient_role });
-              }
+        case 'custom_role':
+          // Get users by custom role specified in recipient_role field
+          if (rule.recipient_role) {
+            const customResult = await pool.request()
+              .input('role', sql.NVarChar(50), rule.recipient_role)
+              .input('limit', sql.Int, limit)
+              .query(`
+                SELECT TOP (@limit) first_name + ' ' + last_name AS name, email
+                FROM USER_MASTER
+                WHERE role = @role AND is_active = 1
+                ORDER BY NEWID()
+              `);
+            for (const user of customResult.recordset) {
+              recipients.push({ ...user, type: rule.recipient_role });
+            }
+          }
+          break;
+
+        case 'custom_designation':
+          // Get users by designation specified in recipient_role field
+          if (rule.recipient_role) {
+            const designationResult = await pool.request()
+              .input('designation', sql.NVarChar(100), rule.recipient_role)
+              .input('departmentId', sql.UniqueIdentifier, ticket.department_id)
+              .input('limit', sql.Int, limit)
+              .query(`
+                SELECT TOP (@limit) first_name + ' ' + last_name AS name, email, designation
+                FROM USER_MASTER
+                WHERE designation = @designation AND is_active = 1
+                ORDER BY CASE WHEN department_id = @departmentId THEN 0 ELSE 1 END, NEWID()
+              `);
+            for (const user of designationResult.recordset) {
+              recipients.push({ ...user, type: user.designation });
             }
           }
           break;

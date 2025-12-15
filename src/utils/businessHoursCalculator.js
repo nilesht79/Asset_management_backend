@@ -140,12 +140,23 @@ class BusinessHoursCalculator {
   }
 
   /**
-   * Parse time string to minutes from midnight
+   * Parse time string or Date object to minutes from midnight
    */
   timeToMinutes(timeStr) {
     if (!timeStr) return 0;
-    const [hours, minutes] = timeStr.split(':').map(Number);
-    return hours * 60 + minutes;
+
+    // Handle Date object (returned by SQL Server for TIME columns)
+    if (timeStr instanceof Date) {
+      return timeStr.getUTCHours() * 60 + timeStr.getUTCMinutes();
+    }
+
+    // Handle string format "HH:mm" or "HH:mm:ss"
+    if (typeof timeStr === 'string') {
+      const [hours, minutes] = timeStr.split(':').map(Number);
+      return hours * 60 + minutes;
+    }
+
+    return 0;
   }
 
   /**
