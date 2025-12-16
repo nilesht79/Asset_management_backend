@@ -202,11 +202,18 @@ class SlaTrackingModel {
         tracking.max_tat_minutes
       );
 
-      // Update tracking record
+      // Check if this is a new breach (status becoming breached for the first time)
+      const isNewBreach = slaStatus.status === 'breached' && tracking.sla_status !== 'breached';
+
+      // Update tracking record - set breach_triggered_at only on first breach
       const updateQuery = `
         UPDATE TICKET_SLA_TRACKING SET
           business_elapsed_minutes = @elapsedMinutes,
           sla_status = @slaStatus,
+          breach_triggered_at = CASE
+            WHEN @isNewBreach = 1 AND breach_triggered_at IS NULL THEN GETDATE()
+            ELSE breach_triggered_at
+          END,
           last_calculated_at = GETDATE(),
           updated_at = GETDATE()
         OUTPUT INSERTED.*
@@ -217,6 +224,7 @@ class SlaTrackingModel {
         .input('trackingId', sql.UniqueIdentifier, tracking.tracking_id)
         .input('elapsedMinutes', sql.Int, elapsedMinutes)
         .input('slaStatus', sql.NVarChar(20), slaStatus.status)
+        .input('isNewBreach', sql.Bit, isNewBreach ? 1 : 0)
         .query(updateQuery);
 
       // Return full tracking data with SLA rule details
@@ -583,6 +591,277 @@ class SlaTrackingModel {
       return updates;
     } catch (error) {
       console.error('Error updating all active tracking:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get SLA Compliance Report
+   * Calculates: (Tickets Resolved Within SLA) / (Total Tickets Due Within SLA)
+   * @param {Object} filters - Filter options
+   * @param {string} filters.date_from - Start date (required)
+   * @param {string} filters.date_to - End date (required)
+   * @param {string} filters.location_id - Filter by location
+   * @param {string} filters.department_id - Filter by department
+   * @param {string} filters.asset_category_id - Filter by asset category
+   * @param {string} filters.oem_id - Filter by OEM
+   * @param {string} filters.product_model - Filter by product model
+   * @param {string} filters.frequency - Group by: daily, weekly, monthly, quarterly
+   */
+  static async getSlaComplianceReport(filters = {}) {
+    try {
+      const pool = await connectDB();
+      const request = pool.request();
+
+      // Build WHERE clause
+      let whereConditions = ['tst.resolved_at IS NOT NULL'];
+
+      if (filters.date_from) {
+        whereConditions.push('tst.resolved_at >= @dateFrom');
+        request.input('dateFrom', sql.DateTime, new Date(filters.date_from));
+      }
+
+      if (filters.date_to) {
+        whereConditions.push('tst.resolved_at <= @dateTo');
+        request.input('dateTo', sql.DateTime, new Date(filters.date_to));
+      }
+
+      if (filters.location_id) {
+        whereConditions.push('t.location_id = @locationId');
+        request.input('locationId', sql.UniqueIdentifier, filters.location_id);
+      }
+
+      if (filters.department_id) {
+        whereConditions.push('t.department_id = @departmentId');
+        request.input('departmentId', sql.UniqueIdentifier, filters.department_id);
+      }
+
+      if (filters.asset_category_id) {
+        whereConditions.push('p.category_id = @assetCategoryId');
+        request.input('assetCategoryId', sql.UniqueIdentifier, filters.asset_category_id);
+      }
+
+      if (filters.oem_id) {
+        whereConditions.push('p.oem_id = @oemId');
+        request.input('oemId', sql.UniqueIdentifier, filters.oem_id);
+      }
+
+      if (filters.product_model) {
+        whereConditions.push('p.model LIKE @productModel');
+        request.input('productModel', sql.NVarChar, `%${filters.product_model}%`);
+      }
+
+      const whereClause = whereConditions.length > 0
+        ? 'WHERE ' + whereConditions.join(' AND ')
+        : '';
+
+      // Determine grouping based on frequency
+      let groupByClause = '';
+      let periodSelect = '';
+
+      switch (filters.frequency) {
+        case 'daily':
+          periodSelect = "CONVERT(VARCHAR(10), tst.resolved_at, 120) AS period";
+          groupByClause = "GROUP BY CONVERT(VARCHAR(10), tst.resolved_at, 120)";
+          break;
+        case 'weekly':
+          periodSelect = "CONCAT(YEAR(tst.resolved_at), '-W', RIGHT('0' + CAST(DATEPART(WEEK, tst.resolved_at) AS VARCHAR), 2)) AS period";
+          groupByClause = "GROUP BY YEAR(tst.resolved_at), DATEPART(WEEK, tst.resolved_at)";
+          break;
+        case 'monthly':
+          periodSelect = "CONCAT(YEAR(tst.resolved_at), '-', RIGHT('0' + CAST(MONTH(tst.resolved_at) AS VARCHAR), 2)) AS period";
+          groupByClause = "GROUP BY YEAR(tst.resolved_at), MONTH(tst.resolved_at)";
+          break;
+        case 'quarterly':
+          periodSelect = "CONCAT(YEAR(tst.resolved_at), '-Q', DATEPART(QUARTER, tst.resolved_at)) AS period";
+          groupByClause = "GROUP BY YEAR(tst.resolved_at), DATEPART(QUARTER, tst.resolved_at)";
+          break;
+        default:
+          periodSelect = "'Total' AS period";
+          groupByClause = "";
+      }
+
+      // Main compliance query with period breakdown
+      const complianceQuery = `
+        SELECT
+          ${periodSelect},
+          COUNT(*) AS total_resolved,
+          SUM(CASE WHEN tst.final_status != 'breached' THEN 1 ELSE 0 END) AS resolved_within_sla,
+          SUM(CASE WHEN tst.final_status = 'breached' THEN 1 ELSE 0 END) AS resolved_breached,
+          CAST(
+            SUM(CASE WHEN tst.final_status != 'breached' THEN 1.0 ELSE 0 END) * 100.0 /
+            NULLIF(COUNT(*), 0)
+          AS DECIMAL(5,2)) AS compliance_rate,
+          AVG(tst.business_elapsed_minutes) AS avg_resolution_minutes,
+          MIN(tst.business_elapsed_minutes) AS min_resolution_minutes,
+          MAX(tst.business_elapsed_minutes) AS max_resolution_minutes
+        FROM TICKET_SLA_TRACKING tst
+        INNER JOIN TICKETS t ON tst.ticket_id = t.ticket_id
+        LEFT JOIN TICKET_ASSETS ta ON t.ticket_id = ta.ticket_id
+        LEFT JOIN assets a ON ta.asset_id = a.id
+        LEFT JOIN products p ON a.product_id = p.id
+        ${whereClause}
+        ${groupByClause}
+        ORDER BY period
+      `;
+
+      const complianceResult = await request.query(complianceQuery);
+
+      // Get summary totals
+      const summaryRequest = pool.request();
+      if (filters.date_from) summaryRequest.input('dateFrom', sql.DateTime, new Date(filters.date_from));
+      if (filters.date_to) summaryRequest.input('dateTo', sql.DateTime, new Date(filters.date_to));
+      if (filters.location_id) summaryRequest.input('locationId', sql.UniqueIdentifier, filters.location_id);
+      if (filters.department_id) summaryRequest.input('departmentId', sql.UniqueIdentifier, filters.department_id);
+      if (filters.asset_category_id) summaryRequest.input('assetCategoryId', sql.UniqueIdentifier, filters.asset_category_id);
+      if (filters.oem_id) summaryRequest.input('oemId', sql.UniqueIdentifier, filters.oem_id);
+      if (filters.product_model) summaryRequest.input('productModel', sql.NVarChar, `%${filters.product_model}%`);
+
+      const summaryQuery = `
+        SELECT
+          COUNT(*) AS total_resolved,
+          SUM(CASE WHEN tst.final_status != 'breached' THEN 1 ELSE 0 END) AS resolved_within_sla,
+          SUM(CASE WHEN tst.final_status = 'breached' THEN 1 ELSE 0 END) AS resolved_breached,
+          CAST(
+            SUM(CASE WHEN tst.final_status != 'breached' THEN 1.0 ELSE 0 END) * 100.0 /
+            NULLIF(COUNT(*), 0)
+          AS DECIMAL(5,2)) AS compliance_rate,
+          AVG(tst.business_elapsed_minutes) AS avg_resolution_minutes
+        FROM TICKET_SLA_TRACKING tst
+        INNER JOIN TICKETS t ON tst.ticket_id = t.ticket_id
+        LEFT JOIN TICKET_ASSETS ta ON t.ticket_id = ta.ticket_id
+        LEFT JOIN assets a ON ta.asset_id = a.id
+        LEFT JOIN products p ON a.product_id = p.id
+        ${whereClause}
+      `;
+
+      const summaryResult = await summaryRequest.query(summaryQuery);
+
+      // Get breakdown by location
+      const locationRequest = pool.request();
+      if (filters.date_from) locationRequest.input('dateFrom', sql.DateTime, new Date(filters.date_from));
+      if (filters.date_to) locationRequest.input('dateTo', sql.DateTime, new Date(filters.date_to));
+      if (filters.location_id) locationRequest.input('locationId', sql.UniqueIdentifier, filters.location_id);
+      if (filters.department_id) locationRequest.input('departmentId', sql.UniqueIdentifier, filters.department_id);
+      if (filters.asset_category_id) locationRequest.input('assetCategoryId', sql.UniqueIdentifier, filters.asset_category_id);
+      if (filters.oem_id) locationRequest.input('oemId', sql.UniqueIdentifier, filters.oem_id);
+      if (filters.product_model) locationRequest.input('productModel', sql.NVarChar, `%${filters.product_model}%`);
+
+      const locationBreakdownQuery = `
+        SELECT
+          l.id AS location_id,
+          l.name AS location_name,
+          COUNT(*) AS total_resolved,
+          SUM(CASE WHEN tst.final_status != 'breached' THEN 1 ELSE 0 END) AS resolved_within_sla,
+          CAST(
+            SUM(CASE WHEN tst.final_status != 'breached' THEN 1.0 ELSE 0 END) * 100.0 /
+            NULLIF(COUNT(*), 0)
+          AS DECIMAL(5,2)) AS compliance_rate
+        FROM TICKET_SLA_TRACKING tst
+        INNER JOIN TICKETS t ON tst.ticket_id = t.ticket_id
+        LEFT JOIN locations l ON t.location_id = l.id
+        LEFT JOIN TICKET_ASSETS ta ON t.ticket_id = ta.ticket_id
+        LEFT JOIN assets a ON ta.asset_id = a.id
+        LEFT JOIN products p ON a.product_id = p.id
+        ${whereClause}
+        GROUP BY l.id, l.name
+        ORDER BY total_resolved DESC
+      `;
+
+      const locationBreakdown = await locationRequest.query(locationBreakdownQuery);
+
+      // Get breakdown by department
+      const deptRequest = pool.request();
+      if (filters.date_from) deptRequest.input('dateFrom', sql.DateTime, new Date(filters.date_from));
+      if (filters.date_to) deptRequest.input('dateTo', sql.DateTime, new Date(filters.date_to));
+      if (filters.location_id) deptRequest.input('locationId', sql.UniqueIdentifier, filters.location_id);
+      if (filters.department_id) deptRequest.input('departmentId', sql.UniqueIdentifier, filters.department_id);
+      if (filters.asset_category_id) deptRequest.input('assetCategoryId', sql.UniqueIdentifier, filters.asset_category_id);
+      if (filters.oem_id) deptRequest.input('oemId', sql.UniqueIdentifier, filters.oem_id);
+      if (filters.product_model) deptRequest.input('productModel', sql.NVarChar, `%${filters.product_model}%`);
+
+      const deptBreakdownQuery = `
+        SELECT
+          d.department_id,
+          d.department_name,
+          COUNT(*) AS total_resolved,
+          SUM(CASE WHEN tst.final_status != 'breached' THEN 1 ELSE 0 END) AS resolved_within_sla,
+          CAST(
+            SUM(CASE WHEN tst.final_status != 'breached' THEN 1.0 ELSE 0 END) * 100.0 /
+            NULLIF(COUNT(*), 0)
+          AS DECIMAL(5,2)) AS compliance_rate
+        FROM TICKET_SLA_TRACKING tst
+        INNER JOIN TICKETS t ON tst.ticket_id = t.ticket_id
+        LEFT JOIN DEPARTMENT_MASTER d ON t.department_id = d.department_id
+        LEFT JOIN TICKET_ASSETS ta ON t.ticket_id = ta.ticket_id
+        LEFT JOIN assets a ON ta.asset_id = a.id
+        LEFT JOIN products p ON a.product_id = p.id
+        ${whereClause}
+        GROUP BY d.department_id, d.department_name
+        ORDER BY total_resolved DESC
+      `;
+
+      const deptBreakdown = await deptRequest.query(deptBreakdownQuery);
+
+      // Get detailed ticket list
+      const detailRequest = pool.request();
+      if (filters.date_from) detailRequest.input('dateFrom', sql.DateTime, new Date(filters.date_from));
+      if (filters.date_to) detailRequest.input('dateTo', sql.DateTime, new Date(filters.date_to));
+      if (filters.location_id) detailRequest.input('locationId', sql.UniqueIdentifier, filters.location_id);
+      if (filters.department_id) detailRequest.input('departmentId', sql.UniqueIdentifier, filters.department_id);
+      if (filters.asset_category_id) detailRequest.input('assetCategoryId', sql.UniqueIdentifier, filters.asset_category_id);
+      if (filters.oem_id) detailRequest.input('oemId', sql.UniqueIdentifier, filters.oem_id);
+      if (filters.product_model) detailRequest.input('productModel', sql.NVarChar, `%${filters.product_model}%`);
+
+      const detailQuery = `
+        SELECT
+          t.ticket_id,
+          t.ticket_number,
+          t.title,
+          t.category,
+          t.priority,
+          t.status,
+          tst.sla_start_time,
+          tst.resolved_at,
+          tst.final_status,
+          tst.business_elapsed_minutes,
+          sr.rule_name,
+          sr.max_tat_minutes,
+          CASE WHEN tst.final_status != 'breached' THEN 1 ELSE 0 END AS met_sla,
+          l.name AS location_name,
+          d.department_name,
+          u.first_name + ' ' + u.last_name AS engineer_name
+        FROM TICKET_SLA_TRACKING tst
+        INNER JOIN TICKETS t ON tst.ticket_id = t.ticket_id
+        INNER JOIN SLA_RULES sr ON tst.sla_rule_id = sr.rule_id
+        LEFT JOIN locations l ON t.location_id = l.id
+        LEFT JOIN DEPARTMENT_MASTER d ON t.department_id = d.department_id
+        LEFT JOIN USER_MASTER u ON t.assigned_to_engineer_id = u.user_id
+        LEFT JOIN TICKET_ASSETS ta ON t.ticket_id = ta.ticket_id
+        LEFT JOIN assets a ON ta.asset_id = a.id
+        LEFT JOIN products p ON a.product_id = p.id
+        ${whereClause}
+        ORDER BY tst.resolved_at DESC
+      `;
+
+      const detailResult = await detailRequest.query(detailQuery);
+
+      return {
+        summary: summaryResult.recordset[0] || {
+          total_resolved: 0,
+          resolved_within_sla: 0,
+          resolved_breached: 0,
+          compliance_rate: null,
+          avg_resolution_minutes: 0
+        },
+        by_period: complianceResult.recordset,
+        by_location: locationBreakdown.recordset,
+        by_department: deptBreakdown.recordset,
+        details: detailResult.recordset,
+        filters_applied: filters
+      };
+    } catch (error) {
+      console.error('Error getting SLA compliance report:', error);
       throw error;
     }
   }

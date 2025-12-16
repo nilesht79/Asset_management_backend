@@ -136,6 +136,30 @@ router.get(
 );
 
 /**
+ * @route   GET /api/tickets/trend-analysis
+ * @desc    Get ticket trend analysis over time
+ * @access  Coordinator, Admin, Superadmin
+ */
+router.get(
+  '/trend-analysis',
+  authenticateOAuth,
+  requireRole(COORDINATORS),
+  TicketController.getTrendAnalysis
+);
+
+/**
+ * @route   GET /api/tickets/trend-analysis/export
+ * @desc    Export ticket trend analysis to Excel
+ * @access  Coordinator, Admin, Superadmin
+ */
+router.get(
+  '/trend-analysis/export',
+  authenticateOAuth,
+  requireRole(COORDINATORS),
+  TicketController.exportTrendAnalysis
+);
+
+/**
  * @route   GET /api/tickets/:id/assets
  * @desc    Get all assets linked to a ticket
  * @access  Coordinator, Superadmin, Engineer

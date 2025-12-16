@@ -128,6 +128,14 @@ router.get('/metrics', SlaController.getMetrics);
 // Get bulk SLA summary for multiple tickets
 router.post('/bulk-summary', SlaController.getBulkSlaSummary);
 
+// ==================== REPORTS ====================
+
+// Get SLA compliance report
+router.get('/compliance-report', SlaController.getComplianceReport);
+
+// Export SLA compliance report to Excel
+router.get('/compliance-report/export', SlaController.exportComplianceReport);
+
 // ==================== ADMIN TRIGGERS ====================
 
 // Manually trigger escalation processing (admin/superadmin only)

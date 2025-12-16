@@ -304,24 +304,32 @@ class AssetMovementModel {
 
       const assetTag = assetResult.recordset[0].asset_tag;
 
-      // Get assigned user name if exists
+      // Get assigned user name and location if exists
       let assignedToName = null;
+      let userLocationId = null;
       if (assignedTo) {
         const userResult = await pool.request()
           .input('user_id', assignedTo)
-          .query('SELECT first_name, last_name FROM USER_MASTER WHERE user_id = @user_id');
+          .query('SELECT first_name, last_name, location_id FROM USER_MASTER WHERE user_id = @user_id');
 
         if (userResult.recordset.length > 0) {
           const user = userResult.recordset[0];
           assignedToName = `${user.first_name} ${user.last_name}`;
+          userLocationId = user.location_id; // Store user's location for fallback
         }
+      }
+
+      // Use provided locationId or fallback to user's location for install/assign movements
+      let effectiveLocationId = locationId;
+      if (!effectiveLocationId && userLocationId) {
+        effectiveLocationId = userLocationId;
       }
 
       // Get location name if exists
       let locationName = null;
-      if (locationId) {
+      if (effectiveLocationId) {
         const locationResult = await pool.request()
-          .input('location_id', locationId)
+          .input('location_id', effectiveLocationId)
           .query('SELECT name FROM LOCATIONS WHERE id = @location_id');
 
         if (locationResult.recordset.length > 0) {
@@ -420,7 +428,7 @@ class AssetMovementModel {
         .input('asset_tag', assetTag)
         .input('assigned_to', assignedTo)
         .input('assigned_to_name', assignedToName)
-        .input('location_id', locationId)
+        .input('location_id', effectiveLocationId)
         .input('location_name', locationName)
         .input('movement_type', movementType)
         .input('status', status)

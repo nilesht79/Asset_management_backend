@@ -804,6 +804,268 @@ class SlaController {
       });
     }
   }
+
+  // ==================== REPORTS ====================
+
+  /**
+   * Get SLA Compliance Report
+   */
+  static async getComplianceReport(req, res) {
+    try {
+      const {
+        date_from,
+        date_to,
+        location_id,
+        department_id,
+        asset_category_id,
+        oem_id,
+        product_model,
+        frequency
+      } = req.query;
+
+      // Validate required date range
+      if (!date_from || !date_to) {
+        return res.status(400).json({
+          success: false,
+          message: 'date_from and date_to are required parameters'
+        });
+      }
+
+      const filters = {
+        date_from,
+        date_to,
+        location_id,
+        department_id,
+        asset_category_id,
+        oem_id,
+        product_model,
+        frequency
+      };
+
+      const report = await SlaTrackingModel.getSlaComplianceReport(filters);
+
+      res.json({
+        success: true,
+        data: report
+      });
+    } catch (error) {
+      console.error('Error getting SLA compliance report:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to get SLA compliance report',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Export SLA Compliance Report to Excel
+   */
+  static async exportComplianceReport(req, res) {
+    try {
+      const ExcelJS = require('exceljs');
+      const {
+        date_from,
+        date_to,
+        location_id,
+        department_id,
+        asset_category_id,
+        oem_id,
+        product_model,
+        frequency
+      } = req.query;
+
+      // Validate required date range
+      if (!date_from || !date_to) {
+        return res.status(400).json({
+          success: false,
+          message: 'date_from and date_to are required parameters'
+        });
+      }
+
+      const filters = {
+        date_from,
+        date_to,
+        location_id,
+        department_id,
+        asset_category_id,
+        oem_id,
+        product_model,
+        frequency
+      };
+
+      const report = await SlaTrackingModel.getSlaComplianceReport(filters);
+
+      // Create workbook
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'Asset Management System';
+      workbook.created = new Date();
+
+      // Summary Sheet
+      const summarySheet = workbook.addWorksheet('Summary');
+      summarySheet.columns = [
+        { header: 'Metric', key: 'metric', width: 30 },
+        { header: 'Value', key: 'value', width: 20 }
+      ];
+
+      // Style header row
+      summarySheet.getRow(1).font = { bold: true };
+      summarySheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: '1890FF' }
+      };
+      summarySheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFF' } };
+
+      summarySheet.addRows([
+        { metric: 'Report Period', value: `${date_from} to ${date_to}` },
+        { metric: 'Total Tickets Resolved', value: report.summary.total_resolved || 0 },
+        { metric: 'Resolved Within SLA', value: report.summary.resolved_within_sla || 0 },
+        { metric: 'Resolved Breached', value: report.summary.resolved_breached || 0 },
+        { metric: 'Compliance Rate (%)', value: report.summary.compliance_rate || 0 },
+        { metric: 'Avg Resolution Time (minutes)', value: report.summary.avg_resolution_minutes || 0 }
+      ]);
+
+      // Period Breakdown Sheet (if frequency specified)
+      if (report.by_period && report.by_period.length > 0) {
+        const periodSheet = workbook.addWorksheet('By Period');
+        periodSheet.columns = [
+          { header: 'Period', key: 'period', width: 15 },
+          { header: 'Total Resolved', key: 'total_resolved', width: 15 },
+          { header: 'Within SLA', key: 'resolved_within_sla', width: 15 },
+          { header: 'Breached', key: 'resolved_breached', width: 12 },
+          { header: 'Compliance %', key: 'compliance_rate', width: 15 },
+          { header: 'Avg Resolution (min)', key: 'avg_resolution_minutes', width: 20 }
+        ];
+
+        periodSheet.getRow(1).font = { bold: true };
+        periodSheet.getRow(1).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: '1890FF' }
+        };
+        periodSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFF' } };
+
+        periodSheet.addRows(report.by_period);
+      }
+
+      // Location Breakdown Sheet
+      if (report.by_location && report.by_location.length > 0) {
+        const locationSheet = workbook.addWorksheet('By Location');
+        locationSheet.columns = [
+          { header: 'Location', key: 'location_name', width: 25 },
+          { header: 'Total Resolved', key: 'total_resolved', width: 15 },
+          { header: 'Within SLA', key: 'resolved_within_sla', width: 15 },
+          { header: 'Compliance %', key: 'compliance_rate', width: 15 }
+        ];
+
+        locationSheet.getRow(1).font = { bold: true };
+        locationSheet.getRow(1).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: '52C41A' }
+        };
+        locationSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFF' } };
+
+        locationSheet.addRows(report.by_location);
+      }
+
+      // Department Breakdown Sheet
+      if (report.by_department && report.by_department.length > 0) {
+        const deptSheet = workbook.addWorksheet('By Department');
+        deptSheet.columns = [
+          { header: 'Department', key: 'department_name', width: 25 },
+          { header: 'Total Resolved', key: 'total_resolved', width: 15 },
+          { header: 'Within SLA', key: 'resolved_within_sla', width: 15 },
+          { header: 'Compliance %', key: 'compliance_rate', width: 15 }
+        ];
+
+        deptSheet.getRow(1).font = { bold: true };
+        deptSheet.getRow(1).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FA8C16' }
+        };
+        deptSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFF' } };
+
+        deptSheet.addRows(report.by_department);
+      }
+
+      // Detailed Tickets Sheet
+      if (report.details && report.details.length > 0) {
+        const detailSheet = workbook.addWorksheet('Ticket Details');
+        detailSheet.columns = [
+          { header: 'Ticket #', key: 'ticket_number', width: 15 },
+          { header: 'Title', key: 'title', width: 30 },
+          { header: 'Category', key: 'category', width: 15 },
+          { header: 'Priority', key: 'priority', width: 12 },
+          { header: 'Location', key: 'location_name', width: 20 },
+          { header: 'Department', key: 'department_name', width: 20 },
+          { header: 'Engineer', key: 'engineer_name', width: 20 },
+          { header: 'SLA Rule', key: 'rule_name', width: 20 },
+          { header: 'SLA Started', key: 'sla_start_time', width: 20 },
+          { header: 'Resolved At', key: 'resolved_at', width: 20 },
+          { header: 'Resolution Time (min)', key: 'business_elapsed_minutes', width: 20 },
+          { header: 'Max TAT (min)', key: 'max_tat_minutes', width: 15 },
+          { header: 'SLA Met', key: 'met_sla', width: 10 },
+          { header: 'Final Status', key: 'final_status', width: 12 }
+        ];
+
+        detailSheet.getRow(1).font = { bold: true };
+        detailSheet.getRow(1).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: '722ED1' }
+        };
+        detailSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFF' } };
+
+        // Format dates and add rows
+        const formattedDetails = report.details.map(d => ({
+          ...d,
+          sla_start_time: d.sla_start_time ? new Date(d.sla_start_time).toLocaleString() : '',
+          resolved_at: d.resolved_at ? new Date(d.resolved_at).toLocaleString() : '',
+          met_sla: d.met_sla ? 'Yes' : 'No'
+        }));
+
+        detailSheet.addRows(formattedDetails);
+
+        // Conditional formatting for SLA Met column
+        formattedDetails.forEach((_, index) => {
+          const row = detailSheet.getRow(index + 2);
+          const metSlaCell = row.getCell('met_sla');
+          if (metSlaCell.value === 'No') {
+            metSlaCell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFCCC7' }
+            };
+          } else {
+            metSlaCell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'D9F7BE' }
+            };
+          }
+        });
+      }
+
+      // Set response headers
+      const filename = `SLA_Compliance_Report_${date_from}_to_${date_to}.xlsx`;
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+      // Write to response
+      await workbook.xlsx.write(res);
+      res.end();
+    } catch (error) {
+      console.error('Error exporting SLA compliance report:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to export SLA compliance report',
+        error: error.message
+      });
+    }
+  }
 }
 
 module.exports = SlaController;

@@ -1284,6 +1284,248 @@ class TicketModel {
       throw error;
     }
   }
+
+  /**
+   * Get ticket trend analysis
+   * Analyzes ticket volume trends over specified months, grouped by category
+   * @param {Object} filters - Optional filters (months_back, location_id, department_id)
+   * @returns {Object} Trend data with monthly volume and category breakdown
+   */
+  static async getTicketTrendAnalysis(filters = {}) {
+    try {
+      const pool = await connectDB();
+
+      const monthsBack = filters.months_back || 6;
+
+      // Build WHERE clause for filters
+      let whereClause = `WHERE t.created_at >= DATEADD(MONTH, -@monthsBack, GETDATE())`;
+      const params = { monthsBack };
+
+      if (filters.location_id) {
+        whereClause += ' AND t.location_id = @locationId';
+        params.locationId = filters.location_id;
+      }
+
+      if (filters.department_id) {
+        whereClause += ' AND t.department_id = @departmentId';
+        params.departmentId = filters.department_id;
+      }
+
+      if (filters.priority) {
+        whereClause += ' AND t.priority = @priority';
+        params.priority = filters.priority;
+      }
+
+      // Query 1: Monthly ticket volume
+      const monthlyVolumeQuery = `
+        SELECT
+          YEAR(t.created_at) AS year,
+          MONTH(t.created_at) AS month,
+          FORMAT(t.created_at, 'yyyy-MM') AS period,
+          DATENAME(MONTH, t.created_at) + ' ' + CAST(YEAR(t.created_at) AS VARCHAR) AS period_label,
+          COUNT(*) AS total_tickets,
+          SUM(CASE WHEN t.status = 'closed' THEN 1 ELSE 0 END) AS closed_tickets,
+          SUM(CASE WHEN t.status IN ('open', 'in_progress', 'assigned', 'pending_closure') THEN 1 ELSE 0 END) AS active_tickets,
+          SUM(CASE WHEN t.priority IN ('critical', 'emergency') THEN 1 ELSE 0 END) AS critical_tickets,
+          AVG(CASE
+            WHEN t.closed_at IS NOT NULL
+            THEN DATEDIFF(HOUR, t.created_at, t.closed_at)
+            ELSE NULL
+          END) AS avg_resolution_hours
+        FROM TICKETS t
+        ${whereClause}
+        GROUP BY YEAR(t.created_at), MONTH(t.created_at),
+                 FORMAT(t.created_at, 'yyyy-MM'),
+                 DATENAME(MONTH, t.created_at) + ' ' + CAST(YEAR(t.created_at) AS VARCHAR)
+        ORDER BY YEAR(t.created_at), MONTH(t.created_at)
+      `;
+
+      // Query 2: Category breakdown
+      const categoryBreakdownQuery = `
+        SELECT
+          COALESCE(t.category, 'Uncategorized') AS category,
+          COUNT(*) AS total_tickets,
+          SUM(CASE WHEN t.status = 'closed' THEN 1 ELSE 0 END) AS closed_tickets,
+          SUM(CASE WHEN t.status IN ('open', 'in_progress', 'assigned', 'pending_closure') THEN 1 ELSE 0 END) AS active_tickets,
+          ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2) AS percentage
+        FROM TICKETS t
+        ${whereClause}
+        GROUP BY COALESCE(t.category, 'Uncategorized')
+        ORDER BY total_tickets DESC
+      `;
+
+      // Query 3: Priority breakdown
+      const priorityBreakdownQuery = `
+        SELECT
+          t.priority,
+          COUNT(*) AS total_tickets,
+          SUM(CASE WHEN t.status = 'closed' THEN 1 ELSE 0 END) AS closed_tickets,
+          ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2) AS percentage
+        FROM TICKETS t
+        ${whereClause}
+        GROUP BY t.priority
+        ORDER BY
+          CASE t.priority
+            WHEN 'emergency' THEN 1
+            WHEN 'critical' THEN 2
+            WHEN 'high' THEN 3
+            WHEN 'medium' THEN 4
+            WHEN 'low' THEN 5
+            ELSE 6
+          END
+      `;
+
+      // Query 4: Category by month (for heatmap/detailed view)
+      const categoryByMonthQuery = `
+        SELECT
+          FORMAT(t.created_at, 'yyyy-MM') AS period,
+          COALESCE(t.category, 'Uncategorized') AS category,
+          COUNT(*) AS ticket_count
+        FROM TICKETS t
+        ${whereClause}
+        GROUP BY FORMAT(t.created_at, 'yyyy-MM'), COALESCE(t.category, 'Uncategorized')
+        ORDER BY period, category
+      `;
+
+      // Query 5: Status distribution
+      const statusBreakdownQuery = `
+        SELECT
+          t.status,
+          COUNT(*) AS total_tickets,
+          ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2) AS percentage
+        FROM TICKETS t
+        ${whereClause}
+        GROUP BY t.status
+        ORDER BY total_tickets DESC
+      `;
+
+      // Query 6: Location breakdown
+      const locationBreakdownQuery = `
+        SELECT
+          COALESCE(l.name, 'Unknown') AS location_name,
+          COUNT(*) AS total_tickets,
+          SUM(CASE WHEN t.status = 'closed' THEN 1 ELSE 0 END) AS closed_tickets,
+          ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2) AS percentage
+        FROM TICKETS t
+        LEFT JOIN locations l ON t.location_id = l.id
+        ${whereClause}
+        GROUP BY COALESCE(l.name, 'Unknown')
+        ORDER BY total_tickets DESC
+      `;
+
+      // Query 7: Department breakdown
+      const departmentBreakdownQuery = `
+        SELECT
+          COALESCE(d.department_name, 'Unknown') AS department_name,
+          COUNT(*) AS total_tickets,
+          SUM(CASE WHEN t.status = 'closed' THEN 1 ELSE 0 END) AS closed_tickets,
+          ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2) AS percentage
+        FROM TICKETS t
+        LEFT JOIN DEPARTMENT_MASTER d ON t.department_id = d.department_id
+        ${whereClause}
+        GROUP BY COALESCE(d.department_name, 'Unknown')
+        ORDER BY total_tickets DESC
+      `;
+
+      // Query 8: Summary statistics
+      const summaryQuery = `
+        SELECT
+          COUNT(*) AS total_tickets,
+          SUM(CASE WHEN t.status = 'closed' THEN 1 ELSE 0 END) AS closed_tickets,
+          SUM(CASE WHEN t.status IN ('open', 'in_progress', 'assigned', 'pending_closure') THEN 1 ELSE 0 END) AS active_tickets,
+          SUM(CASE WHEN t.priority IN ('critical', 'emergency') THEN 1 ELSE 0 END) AS critical_tickets,
+          AVG(CASE
+            WHEN t.closed_at IS NOT NULL
+            THEN DATEDIFF(HOUR, t.created_at, t.closed_at)
+            ELSE NULL
+          END) AS avg_resolution_hours,
+          COUNT(DISTINCT t.category) AS unique_categories,
+          COUNT(DISTINCT t.location_id) AS unique_locations,
+          COUNT(DISTINCT t.department_id) AS unique_departments
+        FROM TICKETS t
+        ${whereClause}
+      `;
+
+      // Build requests with parameters
+      const buildRequest = (query) => {
+        let request = pool.request().input('monthsBack', sql.Int, monthsBack);
+
+        if (params.locationId) {
+          request.input('locationId', sql.UniqueIdentifier, params.locationId);
+        }
+        if (params.departmentId) {
+          request.input('departmentId', sql.UniqueIdentifier, params.departmentId);
+        }
+        if (params.priority) {
+          request.input('priority', sql.VarChar, params.priority);
+        }
+
+        return request.query(query);
+      };
+
+      // Execute all queries in parallel
+      const [
+        monthlyVolumeResult,
+        categoryResult,
+        priorityResult,
+        categoryByMonthResult,
+        statusResult,
+        locationResult,
+        departmentResult,
+        summaryResult
+      ] = await Promise.all([
+        buildRequest(monthlyVolumeQuery),
+        buildRequest(categoryBreakdownQuery),
+        buildRequest(priorityBreakdownQuery),
+        buildRequest(categoryByMonthQuery),
+        buildRequest(statusBreakdownQuery),
+        buildRequest(locationBreakdownQuery),
+        buildRequest(departmentBreakdownQuery),
+        buildRequest(summaryQuery)
+      ]);
+
+      // Calculate month-over-month change
+      const monthlyData = monthlyVolumeResult.recordset;
+      const monthlyWithChange = monthlyData.map((month, index) => {
+        let change = null;
+        let changePercent = null;
+
+        if (index > 0) {
+          const prevMonth = monthlyData[index - 1];
+          change = month.total_tickets - prevMonth.total_tickets;
+          changePercent = prevMonth.total_tickets > 0
+            ? Math.round((change / prevMonth.total_tickets) * 100 * 100) / 100
+            : null;
+        }
+
+        return {
+          ...month,
+          change,
+          change_percent: changePercent
+        };
+      });
+
+      return {
+        summary: summaryResult.recordset[0],
+        monthly_volume: monthlyWithChange,
+        by_category: categoryResult.recordset,
+        by_priority: priorityResult.recordset,
+        by_status: statusResult.recordset,
+        by_location: locationResult.recordset,
+        by_department: departmentResult.recordset,
+        category_by_month: categoryByMonthResult.recordset,
+        filters_applied: {
+          months_back: monthsBack,
+          location_id: filters.location_id || null,
+          department_id: filters.department_id || null,
+          priority: filters.priority || null
+        }
+      };
+    } catch (error) {
+      console.error('Error fetching ticket trend analysis:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = TicketModel;

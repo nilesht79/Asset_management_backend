@@ -14,6 +14,283 @@ const router = express.Router();
 router.use(authenticateToken);
 
 // =====================================================
+// CONSUMPTION REPORTS
+// =====================================================
+
+/**
+ * GET /consumables/consumption-report
+ * Get consumables consumption report for delivered requests
+ */
+router.get('/consumption-report',
+  requireRole(['admin', 'superadmin', 'coordinator']),
+  asyncHandler(async (req, res) => {
+    const { date_from, date_to, category_id, location_id, consumable_id } = req.query;
+    const pool = await connectDB();
+
+    let whereClause = `WHERE cr.status = 'delivered'`;
+
+    if (date_from) {
+      whereClause += ` AND cr.delivered_at >= '${date_from}'`;
+    }
+    if (date_to) {
+      whereClause += ` AND cr.delivered_at <= '${date_to} 23:59:59'`;
+    }
+    if (category_id) {
+      whereClause += ` AND c.category_id = '${category_id}'`;
+    }
+    if (location_id) {
+      whereClause += ` AND req.location_id = '${location_id}'`;
+    }
+    if (consumable_id) {
+      whereClause += ` AND cr.consumable_id = '${consumable_id}'`;
+    }
+
+    // Summary by consumable
+    const summaryQuery = `
+      SELECT
+        c.id as consumable_id,
+        c.name as consumable_name,
+        c.sku,
+        cc.name as category_name,
+        c.unit_of_measure,
+        c.unit_cost,
+        COUNT(cr.id) as request_count,
+        SUM(cr.quantity_requested) as total_quantity,
+        SUM(COALESCE(cr.quantity_issued, cr.quantity_requested)) as total_delivered,
+        SUM(COALESCE(cr.quantity_issued, cr.quantity_requested) * COALESCE(c.unit_cost, 0)) as total_cost
+      FROM consumable_requests cr
+      JOIN consumables c ON cr.consumable_id = c.id
+      JOIN consumable_categories cc ON c.category_id = cc.id
+      JOIN USER_MASTER req ON cr.requested_by = req.user_id
+      ${whereClause}
+      GROUP BY c.id, c.name, c.sku, cc.name, c.unit_of_measure, c.unit_cost
+      ORDER BY total_delivered DESC
+    `;
+
+    // Detailed records
+    const detailsQuery = `
+      SELECT
+        cr.id as request_id,
+        cr.request_number,
+        cr.created_at as requested_at,
+        cr.delivered_at,
+        c.name as consumable_name,
+        c.sku,
+        cc.name as category_name,
+        c.unit_of_measure,
+        c.unit_cost,
+        cr.quantity_requested,
+        COALESCE(cr.quantity_issued, cr.quantity_requested) as quantity_delivered,
+        COALESCE(cr.quantity_issued, cr.quantity_requested) * COALESCE(c.unit_cost, 0) as total_cost,
+        req.first_name + ' ' + req.last_name as requested_by_name,
+        req.email as requested_by_email,
+        req_dept.department_name,
+        req_loc.name as location_name,
+        a.asset_tag,
+        p.name as asset_product_name,
+        eng.first_name + ' ' + eng.last_name as delivered_by_name,
+        cr.notes
+      FROM consumable_requests cr
+      JOIN consumables c ON cr.consumable_id = c.id
+      JOIN consumable_categories cc ON c.category_id = cc.id
+      JOIN USER_MASTER req ON cr.requested_by = req.user_id
+      LEFT JOIN DEPARTMENT_MASTER req_dept ON req.department_id = req_dept.department_id
+      LEFT JOIN locations req_loc ON req.location_id = req_loc.id
+      LEFT JOIN assets a ON cr.for_asset_id = a.id
+      LEFT JOIN products p ON a.product_id = p.id
+      LEFT JOIN USER_MASTER eng ON cr.assigned_engineer = eng.user_id
+      ${whereClause}
+      ORDER BY cr.delivered_at DESC
+    `;
+
+    // Summary totals
+    const totalsQuery = `
+      SELECT
+        COUNT(cr.id) as total_requests,
+        SUM(COALESCE(cr.quantity_issued, cr.quantity_requested)) as total_quantity,
+        SUM(COALESCE(cr.quantity_issued, cr.quantity_requested) * COALESCE(c.unit_cost, 0)) as total_cost,
+        COUNT(DISTINCT cr.consumable_id) as unique_consumables,
+        COUNT(DISTINCT req.location_id) as unique_locations
+      FROM consumable_requests cr
+      JOIN consumables c ON cr.consumable_id = c.id
+      JOIN USER_MASTER req ON cr.requested_by = req.user_id
+      ${whereClause}
+    `;
+
+    // By category breakdown
+    const byCategoryQuery = `
+      SELECT
+        cc.name as category_name,
+        COUNT(cr.id) as request_count,
+        SUM(COALESCE(cr.quantity_issued, cr.quantity_requested)) as total_quantity,
+        SUM(COALESCE(cr.quantity_issued, cr.quantity_requested) * COALESCE(c.unit_cost, 0)) as total_cost
+      FROM consumable_requests cr
+      JOIN consumables c ON cr.consumable_id = c.id
+      JOIN consumable_categories cc ON c.category_id = cc.id
+      JOIN USER_MASTER req ON cr.requested_by = req.user_id
+      ${whereClause}
+      GROUP BY cc.name
+      ORDER BY total_quantity DESC
+    `;
+
+    // By location breakdown
+    const byLocationQuery = `
+      SELECT
+        COALESCE(req_loc.name, 'Unknown') as location_name,
+        COUNT(cr.id) as request_count,
+        SUM(COALESCE(cr.quantity_issued, cr.quantity_requested)) as total_quantity,
+        SUM(COALESCE(cr.quantity_issued, cr.quantity_requested) * COALESCE(c.unit_cost, 0)) as total_cost
+      FROM consumable_requests cr
+      JOIN consumables c ON cr.consumable_id = c.id
+      JOIN USER_MASTER req ON cr.requested_by = req.user_id
+      LEFT JOIN locations req_loc ON req.location_id = req_loc.id
+      ${whereClause}
+      GROUP BY COALESCE(req_loc.name, 'Unknown')
+      ORDER BY total_quantity DESC
+    `;
+
+    const [summaryResult, detailsResult, totalsResult, categoryResult, locationResult] = await Promise.all([
+      pool.request().query(summaryQuery),
+      pool.request().query(detailsQuery),
+      pool.request().query(totalsQuery),
+      pool.request().query(byCategoryQuery),
+      pool.request().query(byLocationQuery)
+    ]);
+
+    sendSuccess(res, {
+      summary: summaryResult.recordset,
+      details: detailsResult.recordset,
+      totals: totalsResult.recordset[0],
+      by_category: categoryResult.recordset,
+      by_location: locationResult.recordset,
+      filters_applied: {
+        date_from: date_from || null,
+        date_to: date_to || null,
+        category_id: category_id || null,
+        location_id: location_id || null,
+        consumable_id: consumable_id || null
+      }
+    }, 'Consumption report retrieved successfully');
+  })
+);
+
+/**
+ * GET /consumables/consumption-report/export
+ * Export consumables consumption report to Excel
+ */
+router.get('/consumption-report/export',
+  requireRole(['admin', 'superadmin', 'coordinator']),
+  asyncHandler(async (req, res) => {
+    const ExcelJS = require('exceljs');
+    const { date_from, date_to, category_id, location_id, consumable_id } = req.query;
+    const pool = await connectDB();
+
+    let whereClause = `WHERE cr.status = 'delivered'`;
+
+    if (date_from) {
+      whereClause += ` AND cr.delivered_at >= '${date_from}'`;
+    }
+    if (date_to) {
+      whereClause += ` AND cr.delivered_at <= '${date_to} 23:59:59'`;
+    }
+    if (category_id) {
+      whereClause += ` AND c.category_id = '${category_id}'`;
+    }
+    if (location_id) {
+      whereClause += ` AND req.location_id = '${location_id}'`;
+    }
+    if (consumable_id) {
+      whereClause += ` AND cr.consumable_id = '${consumable_id}'`;
+    }
+
+    // Get detailed records
+    const detailsResult = await pool.request().query(`
+      SELECT
+        cr.request_number,
+        FORMAT(cr.delivered_at, 'yyyy-MM-dd') as delivered_date,
+        c.name as consumable_name,
+        c.sku,
+        cc.name as category_name,
+        c.unit_of_measure,
+        c.unit_cost,
+        COALESCE(cr.quantity_issued, cr.quantity_requested) as quantity_delivered,
+        COALESCE(cr.quantity_issued, cr.quantity_requested) * COALESCE(c.unit_cost, 0) as total_cost,
+        req.first_name + ' ' + req.last_name as requested_by,
+        req.email as requester_email,
+        req_dept.department_name as department,
+        req_loc.name as location,
+        a.asset_tag,
+        p.name as asset_product,
+        eng.first_name + ' ' + eng.last_name as delivered_by,
+        cr.notes
+      FROM consumable_requests cr
+      JOIN consumables c ON cr.consumable_id = c.id
+      JOIN consumable_categories cc ON c.category_id = cc.id
+      JOIN USER_MASTER req ON cr.requested_by = req.user_id
+      LEFT JOIN DEPARTMENT_MASTER req_dept ON req.department_id = req_dept.department_id
+      LEFT JOIN locations req_loc ON req.location_id = req_loc.id
+      LEFT JOIN assets a ON cr.for_asset_id = a.id
+      LEFT JOIN products p ON a.product_id = p.id
+      LEFT JOIN USER_MASTER eng ON cr.assigned_engineer = eng.user_id
+      ${whereClause}
+      ORDER BY cr.delivered_at DESC
+    `);
+
+    // Create workbook
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Consumables Consumption');
+
+    // Define columns
+    worksheet.columns = [
+      { header: 'Request #', key: 'request_number', width: 20 },
+      { header: 'Delivered Date', key: 'delivered_date', width: 15 },
+      { header: 'Consumable', key: 'consumable_name', width: 25 },
+      { header: 'SKU', key: 'sku', width: 15 },
+      { header: 'Category', key: 'category_name', width: 20 },
+      { header: 'Unit', key: 'unit_of_measure', width: 10 },
+      { header: 'Unit Cost', key: 'unit_cost', width: 12 },
+      { header: 'Qty Delivered', key: 'quantity_delivered', width: 14 },
+      { header: 'Total Cost', key: 'total_cost', width: 14 },
+      { header: 'Requested By', key: 'requested_by', width: 20 },
+      { header: 'Email', key: 'requester_email', width: 25 },
+      { header: 'Department', key: 'department', width: 20 },
+      { header: 'Location', key: 'location', width: 20 },
+      { header: 'Asset Tag', key: 'asset_tag', width: 15 },
+      { header: 'Asset Product', key: 'asset_product', width: 20 },
+      { header: 'Delivered By', key: 'delivered_by', width: 20 },
+      { header: 'Notes', key: 'notes', width: 30 }
+    ];
+
+    // Style header row
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF4472C4' }
+    };
+    worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+
+    // Add data rows
+    detailsResult.recordset.forEach(row => {
+      worksheet.addRow(row);
+    });
+
+    // Set response headers
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=consumables_consumption_${new Date().toISOString().split('T')[0]}.xlsx`
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+  })
+);
+
+// =====================================================
 // CONSUMABLE CATEGORIES
 // =====================================================
 

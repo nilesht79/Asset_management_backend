@@ -725,6 +725,223 @@ class TicketController {
       return sendError(res, error.message || 'Failed to fetch close request history', 500);
     }
   }
+
+  /**
+   * Get ticket trend analysis
+   * GET /api/tickets/trend-analysis
+   */
+  static async getTrendAnalysis(req, res) {
+    try {
+      const {
+        months_back,
+        location_id,
+        department_id,
+        priority
+      } = req.query;
+
+      const filters = {};
+      if (months_back) filters.months_back = parseInt(months_back);
+      if (location_id) filters.location_id = location_id;
+      if (department_id) filters.department_id = department_id;
+      if (priority) filters.priority = priority;
+
+      const trendData = await TicketModel.getTicketTrendAnalysis(filters);
+
+      return sendSuccess(res, trendData, 'Trend analysis fetched successfully');
+    } catch (error) {
+      console.error('Get trend analysis error:', error);
+      return sendError(res, error.message || 'Failed to fetch trend analysis', 500);
+    }
+  }
+
+  /**
+   * Export ticket trend analysis to Excel
+   * GET /api/tickets/trend-analysis/export
+   */
+  static async exportTrendAnalysis(req, res) {
+    try {
+      const {
+        months_back,
+        location_id,
+        department_id,
+        priority
+      } = req.query;
+
+      const filters = {};
+      if (months_back) filters.months_back = parseInt(months_back);
+      if (location_id) filters.location_id = location_id;
+      if (department_id) filters.department_id = department_id;
+      if (priority) filters.priority = priority;
+
+      const trendData = await TicketModel.getTicketTrendAnalysis(filters);
+
+      // Create workbook
+      const workbook = new ExcelJS.Workbook();
+
+      // Sheet 1: Summary
+      const summarySheet = workbook.addWorksheet('Summary');
+      summarySheet.columns = [
+        { header: 'Metric', key: 'metric', width: 30 },
+        { header: 'Value', key: 'value', width: 20 }
+      ];
+      summarySheet.getRow(1).font = { bold: true };
+      summarySheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF4472C4' }
+      };
+      summarySheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+
+      const summary = trendData.summary || {};
+      summarySheet.addRow({ metric: 'Total Tickets', value: summary.total_tickets || 0 });
+      summarySheet.addRow({ metric: 'Closed Tickets', value: summary.closed_tickets || 0 });
+      summarySheet.addRow({ metric: 'Active Tickets', value: summary.active_tickets || 0 });
+      summarySheet.addRow({ metric: 'Critical Tickets', value: summary.critical_tickets || 0 });
+      summarySheet.addRow({ metric: 'Avg Resolution Hours', value: summary.avg_resolution_hours ? Math.round(summary.avg_resolution_hours) : 'N/A' });
+      summarySheet.addRow({ metric: 'Unique Categories', value: summary.unique_categories || 0 });
+      summarySheet.addRow({ metric: 'Analysis Period (Months)', value: filters.months_back || 6 });
+
+      // Sheet 2: Monthly Volume
+      const monthlySheet = workbook.addWorksheet('Monthly Volume');
+      monthlySheet.columns = [
+        { header: 'Period', key: 'period_label', width: 20 },
+        { header: 'Total Tickets', key: 'total_tickets', width: 15 },
+        { header: 'Closed', key: 'closed_tickets', width: 12 },
+        { header: 'Active', key: 'active_tickets', width: 12 },
+        { header: 'Critical', key: 'critical_tickets', width: 12 },
+        { header: 'Avg Resolution (hrs)', key: 'avg_resolution_hours', width: 20 },
+        { header: 'Change', key: 'change', width: 12 },
+        { header: 'Change %', key: 'change_percent', width: 12 }
+      ];
+      monthlySheet.getRow(1).font = { bold: true };
+      monthlySheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF4472C4' }
+      };
+      monthlySheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+
+      (trendData.monthly_volume || []).forEach(row => {
+        monthlySheet.addRow({
+          ...row,
+          avg_resolution_hours: row.avg_resolution_hours ? Math.round(row.avg_resolution_hours) : 'N/A',
+          change: row.change !== null ? row.change : 'N/A',
+          change_percent: row.change_percent !== null ? `${row.change_percent}%` : 'N/A'
+        });
+      });
+
+      // Sheet 3: By Category
+      const categorySheet = workbook.addWorksheet('By Category');
+      categorySheet.columns = [
+        { header: 'Category', key: 'category', width: 25 },
+        { header: 'Total Tickets', key: 'total_tickets', width: 15 },
+        { header: 'Closed', key: 'closed_tickets', width: 12 },
+        { header: 'Active', key: 'active_tickets', width: 12 },
+        { header: 'Percentage', key: 'percentage', width: 12 }
+      ];
+      categorySheet.getRow(1).font = { bold: true };
+      categorySheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF4472C4' }
+      };
+      categorySheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+
+      (trendData.by_category || []).forEach(row => {
+        categorySheet.addRow({
+          ...row,
+          percentage: `${row.percentage}%`
+        });
+      });
+
+      // Sheet 4: By Priority
+      const prioritySheet = workbook.addWorksheet('By Priority');
+      prioritySheet.columns = [
+        { header: 'Priority', key: 'priority', width: 15 },
+        { header: 'Total Tickets', key: 'total_tickets', width: 15 },
+        { header: 'Closed', key: 'closed_tickets', width: 12 },
+        { header: 'Percentage', key: 'percentage', width: 12 }
+      ];
+      prioritySheet.getRow(1).font = { bold: true };
+      prioritySheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF4472C4' }
+      };
+      prioritySheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+
+      (trendData.by_priority || []).forEach(row => {
+        prioritySheet.addRow({
+          ...row,
+          percentage: `${row.percentage}%`
+        });
+      });
+
+      // Sheet 5: By Location
+      const locationSheet = workbook.addWorksheet('By Location');
+      locationSheet.columns = [
+        { header: 'Location', key: 'location_name', width: 25 },
+        { header: 'Total Tickets', key: 'total_tickets', width: 15 },
+        { header: 'Closed', key: 'closed_tickets', width: 12 },
+        { header: 'Percentage', key: 'percentage', width: 12 }
+      ];
+      locationSheet.getRow(1).font = { bold: true };
+      locationSheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF4472C4' }
+      };
+      locationSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+
+      (trendData.by_location || []).forEach(row => {
+        locationSheet.addRow({
+          ...row,
+          percentage: `${row.percentage}%`
+        });
+      });
+
+      // Sheet 6: By Department
+      const departmentSheet = workbook.addWorksheet('By Department');
+      departmentSheet.columns = [
+        { header: 'Department', key: 'department_name', width: 25 },
+        { header: 'Total Tickets', key: 'total_tickets', width: 15 },
+        { header: 'Closed', key: 'closed_tickets', width: 12 },
+        { header: 'Percentage', key: 'percentage', width: 12 }
+      ];
+      departmentSheet.getRow(1).font = { bold: true };
+      departmentSheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF4472C4' }
+      };
+      departmentSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+
+      (trendData.by_department || []).forEach(row => {
+        departmentSheet.addRow({
+          ...row,
+          percentage: `${row.percentage}%`
+        });
+      });
+
+      // Set response headers
+      const monthsLabel = filters.months_back || 6;
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      );
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename=ticket_trend_analysis_${monthsLabel}m_${new Date().toISOString().split('T')[0]}.xlsx`
+      );
+
+      // Write to response
+      await workbook.xlsx.write(res);
+      res.end();
+    } catch (error) {
+      console.error('Export trend analysis error:', error);
+      return sendError(res, error.message || 'Failed to export trend analysis', 500);
+    }
+  }
 }
 
 module.exports = TicketController;

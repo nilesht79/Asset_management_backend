@@ -131,7 +131,7 @@ class BusinessHoursCalculator {
       return {
         is_working_day: true,
         start_time: '00:00:00',
-        end_time: '23:59:59'
+        end_time: '24:00:00'  // Full day (1440 minutes)
       };
     }
 
@@ -153,7 +153,8 @@ class BusinessHoursCalculator {
     // Handle string format "HH:mm" or "HH:mm:ss"
     if (typeof timeStr === 'string') {
       const [hours, minutes] = timeStr.split(':').map(Number);
-      return hours * 60 + minutes;
+      // Handle 24:00 as end of day (1440 minutes)
+      return hours * 60 + (minutes || 0);
     }
 
     return 0;
@@ -273,7 +274,12 @@ class BusinessHoursCalculator {
     const periodEnd = new Date(Math.min(endDate.getTime(), dayEnd.getTime()));
 
     const periodStartMinutes = periodStart.getHours() * 60 + periodStart.getMinutes();
-    const periodEndMinutes = periodEnd.getHours() * 60 + periodEnd.getMinutes();
+    // Handle midnight (day boundary) - when periodEnd equals dayEnd, it's midnight of the next day
+    // which should be treated as 1440 (24*60) minutes of the current day
+    let periodEndMinutes = periodEnd.getHours() * 60 + periodEnd.getMinutes();
+    if (periodEnd.getTime() === dayEnd.getTime() && periodEndMinutes === 0) {
+      periodEndMinutes = 24 * 60; // 1440 minutes
+    }
 
     // Clamp to working hours
     const effectiveStart = Math.max(periodStartMinutes, workStartMinutes);
