@@ -54,7 +54,7 @@ class AssetJobReportPDF {
         .query(`
           SELECT config_key, config_value
           FROM system_config
-          WHERE config_key IN ('COMPANY_LOGO', 'COMPANY_NAME', 'COMPANY_ADDRESS')
+          WHERE config_key IN ('COMPANY_LOGO', 'COMPANY_NAME', 'COMPANY_ADDRESS', 'SHOW_COMPANY_NAME_IN_PDF')
         `);
 
       const settings = {};
@@ -65,7 +65,8 @@ class AssetJobReportPDF {
       return {
         logo: settings.COMPANY_LOGO || null,
         name: settings.COMPANY_NAME || 'Asset Management System',
-        address: settings.COMPANY_ADDRESS || ''
+        address: settings.COMPANY_ADDRESS || '',
+        showNameInPdf: settings.SHOW_COMPANY_NAME_IN_PDF === 'true' || settings.SHOW_COMPANY_NAME_IN_PDF === '1' || settings.SHOW_COMPANY_NAME_IN_PDF === undefined
       };
     } catch (error) {
       console.error('Error fetching company settings:', error);
@@ -255,18 +256,21 @@ class AssetJobReportPDF {
       try {
         const logoPath = path.join(__dirname, '../../uploads/logos/', companySettings.logo);
         if (fs.existsSync(logoPath)) {
-          doc.image(logoPath, x, y, { width: 45, height: 45 });
+          doc.image(logoPath, x, y, { height: 45 });
           textX = x + 55;
         }
       } catch (e) { /* ignore */ }
     }
 
-    doc.font('Helvetica-Bold').fontSize(13).fillColor(this.colors.primary);
-    doc.text(companySettings.name, textX, y + 5, { width: 180, lineBreak: false });
+    // Only show company name/address if showNameInPdf is true or no logo
+    if (companySettings.showNameInPdf || !companySettings.logo) {
+      doc.font('Helvetica-Bold').fontSize(13).fillColor(this.colors.primary);
+      doc.text(companySettings.name, textX, y + 5, { width: 180, lineBreak: false });
 
-    if (companySettings.address) {
-      doc.font('Helvetica').fontSize(7).fillColor(this.colors.gray);
-      doc.text(companySettings.address, textX, y + 20, { width: 180, lineBreak: false });
+      if (companySettings.address) {
+        doc.font('Helvetica').fontSize(7).fillColor(this.colors.gray);
+        doc.text(companySettings.address, textX, y + 20, { width: 180, lineBreak: false });
+      }
     }
 
     // Report title (right side) - with proper spacing to prevent overlap
@@ -392,24 +396,34 @@ class AssetJobReportPDF {
    * Render signature section
    */
   static renderSignatureSection(doc, x, y, width) {
-    const boxWidth = (width - 20) / 3;
+    const gap = 8;
+    const boxWidth = (width - gap * 3) / 4;
     const boxH = 50;
 
-    // IT Department signature
+    doc.font('Helvetica').fontSize(6).fillColor(this.colors.gray);
+
+    // IT FMS Coordinator
     doc.rect(x, y, boxWidth, boxH).strokeColor(this.colors.border).lineWidth(1).stroke();
-    doc.font('Helvetica').fontSize(7).fillColor(this.colors.gray);
-    doc.text('IT Department', x + 5, y + boxH - 18, { width: boxWidth - 10, align: 'center', lineBreak: false });
-    doc.text('Signature & Date', x + 5, y + boxH - 10, { width: boxWidth - 10, align: 'center', lineBreak: false });
+    doc.text('IT FMS Coordinator', x + 3, y + boxH - 18, { width: boxWidth - 6, align: 'center', lineBreak: false });
+    doc.text('Signature & Date', x + 3, y + boxH - 10, { width: boxWidth - 6, align: 'center', lineBreak: false });
 
-    // User Acknowledgment
-    doc.rect(x + boxWidth + 10, y, boxWidth, boxH).strokeColor(this.colors.border).lineWidth(1).stroke();
-    doc.text('User Acknowledgment', x + boxWidth + 15, y + boxH - 18, { width: boxWidth - 10, align: 'center', lineBreak: false });
-    doc.text('Signature & Date', x + boxWidth + 15, y + boxH - 10, { width: boxWidth - 10, align: 'center', lineBreak: false });
+    // IT Head
+    const col2X = x + boxWidth + gap;
+    doc.rect(col2X, y, boxWidth, boxH).strokeColor(this.colors.border).lineWidth(1).stroke();
+    doc.text('IT Head', col2X + 3, y + boxH - 18, { width: boxWidth - 6, align: 'center', lineBreak: false });
+    doc.text('Signature & Date', col2X + 3, y + boxH - 10, { width: boxWidth - 6, align: 'center', lineBreak: false });
 
-    // Supervisor
-    doc.rect(x + (boxWidth + 10) * 2, y, boxWidth, boxH).strokeColor(this.colors.border).lineWidth(1).stroke();
-    doc.text('Supervisor', x + (boxWidth + 10) * 2 + 5, y + boxH - 18, { width: boxWidth - 10, align: 'center', lineBreak: false });
-    doc.text('Signature & Date', x + (boxWidth + 10) * 2 + 5, y + boxH - 10, { width: boxWidth - 10, align: 'center', lineBreak: false });
+    // User
+    const col3X = x + (boxWidth + gap) * 2;
+    doc.rect(col3X, y, boxWidth, boxH).strokeColor(this.colors.border).lineWidth(1).stroke();
+    doc.text('User', col3X + 3, y + boxH - 18, { width: boxWidth - 6, align: 'center', lineBreak: false });
+    doc.text('Signature & Date', col3X + 3, y + boxH - 10, { width: boxWidth - 6, align: 'center', lineBreak: false });
+
+    // Security
+    const col4X = x + (boxWidth + gap) * 3;
+    doc.rect(col4X, y, boxWidth, boxH).strokeColor(this.colors.border).lineWidth(1).stroke();
+    doc.text('Security', col4X + 3, y + boxH - 18, { width: boxWidth - 6, align: 'center', lineBreak: false });
+    doc.text('Signature & Date', col4X + 3, y + boxH - 10, { width: boxWidth - 6, align: 'center', lineBreak: false });
   }
 
   /**

@@ -999,6 +999,353 @@ class ServiceReportModel {
       throw error;
     }
   }
+
+  /**
+   * Create a draft service report (no asset updates until finalized)
+   * Used when engineer submits close request for repair/replace tickets
+   */
+  static async createDraftReport(reportData, partsUsed = []) {
+    const pool = await connectDB();
+    const transaction = new sql.Transaction(pool);
+
+    try {
+      await transaction.begin();
+
+      // Generate report number
+      const reportNumberResult = await transaction.request()
+        .output('ReportNumber', sql.VarChar(20))
+        .execute('sp_GenerateServiceReportNumber');
+
+      const reportNumber = reportNumberResult.output.ReportNumber;
+
+      // Insert service report with status = 'draft'
+      const insertReportQuery = `
+        INSERT INTO SERVICE_REPORTS (
+          report_id,
+          report_number,
+          ticket_id,
+          service_type,
+          asset_id,
+          replacement_asset_id,
+          fault_type_id,
+          diagnosis,
+          work_performed,
+          condition_before,
+          condition_after,
+          total_parts_cost,
+          labor_cost,
+          engineer_notes,
+          status,
+          created_by,
+          created_at,
+          updated_at
+        )
+        OUTPUT INSERTED.*
+        VALUES (
+          NEWID(),
+          @reportNumber,
+          @ticketId,
+          @serviceType,
+          @assetId,
+          @replacementAssetId,
+          @faultTypeId,
+          @diagnosis,
+          @workPerformed,
+          @conditionBefore,
+          @conditionAfter,
+          @totalPartsCost,
+          @laborCost,
+          @engineerNotes,
+          'draft',
+          @createdBy,
+          GETDATE(),
+          GETDATE()
+        )
+      `;
+
+      const reportResult = await transaction.request()
+        .input('reportNumber', sql.VarChar(20), reportNumber)
+        .input('ticketId', sql.UniqueIdentifier, reportData.ticket_id)
+        .input('serviceType', sql.VarChar(20), reportData.service_type)
+        .input('assetId', sql.UniqueIdentifier, reportData.asset_id || null)
+        .input('replacementAssetId', sql.UniqueIdentifier, reportData.replacement_asset_id || null)
+        .input('faultTypeId', sql.UniqueIdentifier, reportData.fault_type_id || null)
+        .input('diagnosis', sql.NVarChar(sql.MAX), reportData.diagnosis || null)
+        .input('workPerformed', sql.NVarChar(sql.MAX), reportData.work_performed || null)
+        .input('conditionBefore', sql.VarChar(50), reportData.condition_before || null)
+        .input('conditionAfter', sql.VarChar(50), reportData.condition_after || null)
+        .input('totalPartsCost', sql.Decimal(15, 2), reportData.total_parts_cost || 0)
+        .input('laborCost', sql.Decimal(15, 2), reportData.labor_cost || 0)
+        .input('engineerNotes', sql.NVarChar(sql.MAX), reportData.engineer_notes || null)
+        .input('createdBy', sql.UniqueIdentifier, reportData.created_by)
+        .query(insertReportQuery);
+
+      const report = reportResult.recordset[0];
+
+      // Insert parts used (draft - no asset updates)
+      if (partsUsed && partsUsed.length > 0) {
+        for (const part of partsUsed) {
+          await transaction.request()
+            .input('reportId', sql.UniqueIdentifier, report.report_id)
+            .input('assetId', sql.UniqueIdentifier, part.asset_id)
+            .input('quantity', sql.Int, part.quantity || 1)
+            .input('unitCost', sql.Decimal(15, 2), part.unit_cost || 0)
+            .input('notes', sql.NVarChar(500), part.notes || null)
+            .query(`
+              INSERT INTO SERVICE_REPORT_PARTS (
+                part_id, report_id, asset_id, quantity, unit_cost, notes, created_at
+              ) VALUES (
+                NEWID(), @reportId, @assetId, @quantity, @unitCost, @notes, GETDATE()
+              )
+            `);
+        }
+      }
+
+      await transaction.commit();
+
+      return await this.getReportById(report.report_id);
+    } catch (error) {
+      await transaction.rollback();
+      console.error('Error creating draft service report:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Finalize a draft service report - performs all asset updates
+   * Called when coordinator approves the close request
+   */
+  static async finalizeReport(reportId, approvedBy) {
+    const pool = await connectDB();
+    const transaction = new sql.Transaction(pool);
+
+    try {
+      await transaction.begin();
+
+      // Get the draft report
+      const reportResult = await transaction.request()
+        .input('reportId', sql.UniqueIdentifier, reportId)
+        .query(`
+          SELECT * FROM SERVICE_REPORTS WHERE report_id = @reportId AND status = 'draft'
+        `);
+
+      const report = reportResult.recordset[0];
+      if (!report) {
+        throw new Error('Draft service report not found');
+      }
+
+      // Update status to finalized
+      await transaction.request()
+        .input('reportId', sql.UniqueIdentifier, reportId)
+        .input('approvedBy', sql.UniqueIdentifier, approvedBy)
+        .query(`
+          UPDATE SERVICE_REPORTS
+          SET status = 'finalized', updated_at = GETDATE()
+          WHERE report_id = @reportId
+        `);
+
+      // Get parts used
+      const partsResult = await transaction.request()
+        .input('reportId', sql.UniqueIdentifier, reportId)
+        .query(`
+          SELECT * FROM SERVICE_REPORT_PARTS WHERE report_id = @reportId
+        `);
+
+      const partsUsed = partsResult.recordset;
+
+      // Update component assets - attach to parent
+      if (partsUsed && partsUsed.length > 0 && report.asset_id) {
+        for (const part of partsUsed) {
+          await transaction.request()
+            .input('componentAssetId', sql.UniqueIdentifier, part.asset_id)
+            .input('parentAssetId', sql.UniqueIdentifier, report.asset_id)
+            .query(`
+              UPDATE assets
+              SET
+                parent_asset_id = @parentAssetId,
+                status = 'in_use',
+                installation_date = GETDATE(),
+                updated_at = GETDATE()
+              WHERE id = @componentAssetId AND asset_type = 'component'
+            `);
+        }
+      }
+
+      // Update main asset's condition if repair
+      if (report.service_type === 'repair' && report.asset_id && report.condition_after) {
+        await transaction.request()
+          .input('assetId', sql.UniqueIdentifier, report.asset_id)
+          .input('conditionAfter', sql.VarChar(50), report.condition_after)
+          .query(`
+            UPDATE assets
+            SET
+              condition_status = @conditionAfter,
+              updated_at = GETDATE()
+            WHERE id = @assetId
+          `);
+      }
+
+      // Handle replacement - asset swap
+      if (report.service_type === 'replace' && report.asset_id && report.replacement_asset_id) {
+        // Get old asset's assigned user
+        const oldAssetResult = await transaction.request()
+          .input('oldAssetId', sql.UniqueIdentifier, report.asset_id)
+          .query(`
+            SELECT assigned_to, status FROM assets WHERE id = @oldAssetId
+          `);
+
+        const oldAsset = oldAssetResult.recordset[0];
+        const assignedTo = oldAsset?.assigned_to;
+
+        // Update old asset - mark as retired
+        await transaction.request()
+          .input('oldAssetId', sql.UniqueIdentifier, report.asset_id)
+          .input('replacementAssetId', sql.UniqueIdentifier, report.replacement_asset_id)
+          .query(`
+            UPDATE assets
+            SET
+              status = 'retired',
+              replacement_asset_id = @replacementAssetId,
+              updated_at = GETDATE()
+            WHERE id = @oldAssetId
+          `);
+
+        // Update new asset - assign to user
+        if (assignedTo) {
+          await transaction.request()
+            .input('newAssetId', sql.UniqueIdentifier, report.replacement_asset_id)
+            .input('assignedTo', sql.UniqueIdentifier, assignedTo)
+            .query(`
+              UPDATE assets
+              SET
+                assigned_to = @assignedTo,
+                status = CASE
+                  WHEN asset_type = 'component' THEN 'in_use'
+                  ELSE 'assigned'
+                END,
+                updated_at = GETDATE()
+              WHERE id = @newAssetId
+            `);
+        }
+
+        // Create ASSET_MOVEMENTS record for the replacement
+        const movementDetailsResult = await transaction.request()
+          .input('newAssetId', sql.UniqueIdentifier, report.replacement_asset_id)
+          .input('assignedToId', sql.UniqueIdentifier, assignedTo)
+          .input('performedById', sql.UniqueIdentifier, approvedBy)
+          .query(`
+            SELECT
+              a.asset_tag,
+              u.first_name + ' ' + u.last_name AS assigned_to_name,
+              p.first_name + ' ' + p.last_name AS performed_by_name
+            FROM assets a
+            LEFT JOIN USER_MASTER u ON u.user_id = @assignedToId
+            LEFT JOIN USER_MASTER p ON p.user_id = @performedById
+            WHERE a.id = @newAssetId
+          `);
+
+        const movementDetails = movementDetailsResult.recordset[0] || {};
+
+        await transaction.request()
+          .input('assetId', sql.UniqueIdentifier, report.replacement_asset_id)
+          .input('assetTag', sql.VarChar(100), movementDetails.asset_tag || null)
+          .input('assignedTo', sql.UniqueIdentifier, assignedTo)
+          .input('assignedToName', sql.NVarChar(200), movementDetails.assigned_to_name || null)
+          .input('movementType', sql.VarChar(50), 'assigned')
+          .input('status', sql.VarChar(50), 'assigned')
+          .input('notes', sql.NVarChar(sql.MAX), `Replacement asset assigned (Service Report: ${report.report_number})`)
+          .input('performedBy', sql.UniqueIdentifier, approvedBy)
+          .input('performedByName', sql.NVarChar(200), movementDetails.performed_by_name || null)
+          .query(`
+            INSERT INTO ASSET_MOVEMENTS (
+              id, asset_id, asset_tag,
+              assigned_to, assigned_to_name,
+              movement_type, status,
+              movement_date, notes,
+              performed_by, performed_by_name,
+              created_at
+            ) VALUES (
+              NEWID(), @assetId, @assetTag,
+              @assignedTo, @assignedToName,
+              @movementType, @status,
+              GETDATE(), @notes,
+              @performedBy, @performedByName,
+              GETDATE()
+            )
+          `);
+      }
+
+      await transaction.commit();
+
+      return await this.getReportById(reportId);
+    } catch (error) {
+      await transaction.rollback();
+      console.error('Error finalizing service report:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get draft service report by ticket ID
+   */
+  static async getDraftReportByTicketId(ticketId) {
+    try {
+      const pool = await connectDB();
+
+      const query = `
+        SELECT report_id FROM SERVICE_REPORTS
+        WHERE ticket_id = @ticketId AND status = 'draft'
+      `;
+
+      const result = await pool.request()
+        .input('ticketId', sql.UniqueIdentifier, ticketId)
+        .query(query);
+
+      if (result.recordset.length > 0) {
+        return await this.getReportById(result.recordset[0].report_id);
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error fetching draft service report by ticket:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a draft service report (if close request is rejected)
+   */
+  static async deleteDraftReport(reportId) {
+    const pool = await connectDB();
+    const transaction = new sql.Transaction(pool);
+
+    try {
+      await transaction.begin();
+
+      // Delete parts first
+      await transaction.request()
+        .input('reportId', sql.UniqueIdentifier, reportId)
+        .query(`
+          DELETE FROM SERVICE_REPORT_PARTS WHERE report_id = @reportId
+        `);
+
+      // Delete report (only if draft)
+      const result = await transaction.request()
+        .input('reportId', sql.UniqueIdentifier, reportId)
+        .query(`
+          DELETE FROM SERVICE_REPORTS
+          WHERE report_id = @reportId AND status = 'draft'
+        `);
+
+      await transaction.commit();
+
+      return result.rowsAffected[0] > 0;
+    } catch (error) {
+      await transaction.rollback();
+      console.error('Error deleting draft service report:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = ServiceReportModel;

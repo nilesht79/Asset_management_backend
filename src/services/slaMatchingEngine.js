@@ -179,16 +179,20 @@ class SlaMatchingEngine {
     let score = 0;
     let reasons = [];
 
-    // Check asset importance
-    if (rule.applicable_asset_importance) {
+    // Check asset importance (skip if 'all' - treat as wildcard)
+    if (rule.applicable_asset_importance && rule.applicable_asset_importance.toLowerCase() !== 'all') {
       const importanceList = rule.applicable_asset_importance.split(',').map(s => s.trim().toLowerCase());
       if (assetImportance && importanceList.includes(assetImportance.toLowerCase())) {
         score += 3;
         reasons.push(`Asset importance: ${assetImportance}`);
-      } else if (rule.applicable_asset_importance && assetImportance) {
+      } else if (assetImportance) {
         // Rule specifies importance but asset doesn't match
         return { matches: false };
       }
+    } else if (rule.applicable_asset_importance?.toLowerCase() === 'all' && assetImportance) {
+      // 'all' matches any asset importance
+      score += 1;
+      reasons.push(`Asset importance (any): ${assetImportance}`);
     }
 
     // Check asset categories
@@ -206,50 +210,54 @@ class SlaMatchingEngine {
       }
     }
 
-    // Check user category
-    if (rule.applicable_user_category) {
+    // Check user category (skip if 'all' - treat as wildcard)
+    if (rule.applicable_user_category && rule.applicable_user_category.toLowerCase() !== 'all') {
       const userCategoryList = rule.applicable_user_category.split(',').map(s => s.trim().toLowerCase());
       // For now, only VIP is a user category
       if (isVip && userCategoryList.includes('vip')) {
         score += 2;
         reasons.push('VIP user');
-      } else if (rule.applicable_user_category && !userCategoryList.includes('regular')) {
+      } else if (!userCategoryList.includes('regular') && !userCategoryList.includes('all')) {
         // Rule requires specific user category that doesn't match
         return { matches: false };
       }
     }
 
-    // Check ticket type
-    if (rule.applicable_ticket_type) {
+    // Check ticket type (skip if 'all' - treat as wildcard)
+    if (rule.applicable_ticket_type && rule.applicable_ticket_type.toLowerCase() !== 'all') {
       const typeList = rule.applicable_ticket_type.split(',').map(s => s.trim().toLowerCase());
       if (ticketType && typeList.includes(ticketType.toLowerCase())) {
         score += 2;
         reasons.push(`Ticket type: ${ticketType}`);
-      } else if (rule.applicable_ticket_type && ticketType) {
+      } else if (ticketType) {
         // Rule specifies type but doesn't match
         return { matches: false };
       }
+    } else if (rule.applicable_ticket_type?.toLowerCase() === 'all' && ticketType) {
+      // 'all' matches any ticket type
+      score += 1;
+      reasons.push(`Ticket type (any): ${ticketType}`);
     }
 
-    // Check ticket channel
-    if (rule.applicable_ticket_channels) {
+    // Check ticket channel (skip if 'all' - treat as wildcard)
+    if (rule.applicable_ticket_channels && rule.applicable_ticket_channels.toLowerCase() !== 'all') {
       const channelList = rule.applicable_ticket_channels.split(',').map(s => s.trim().toLowerCase());
       if (ticketChannel && channelList.includes(ticketChannel.toLowerCase())) {
         score += 1;
         reasons.push(`Ticket channel: ${ticketChannel}`);
-      } else if (rule.applicable_ticket_channels && ticketChannel) {
+      } else if (ticketChannel) {
         // Rule specifies channel but doesn't match
         return { matches: false };
       }
     }
 
-    // Check ticket priority
-    if (rule.applicable_priority) {
+    // Check ticket priority (skip if 'all' - treat as wildcard)
+    if (rule.applicable_priority && rule.applicable_priority.toLowerCase() !== 'all') {
       const priorityList = rule.applicable_priority.split(',').map(s => s.trim().toLowerCase());
       if (ticketPriority && priorityList.includes(ticketPriority.toLowerCase())) {
         score += 1;
         reasons.push(`Priority: ${ticketPriority}`);
-      } else if (rule.applicable_priority && ticketPriority) {
+      } else if (ticketPriority) {
         // Rule specifies priority but doesn't match
         return { matches: false };
       }

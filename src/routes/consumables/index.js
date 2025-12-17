@@ -24,7 +24,7 @@ router.use(authenticateToken);
 router.get('/consumption-report',
   requireRole(['admin', 'superadmin', 'coordinator']),
   asyncHandler(async (req, res) => {
-    const { date_from, date_to, category_id, location_id, consumable_id } = req.query;
+    const { date_from, date_to, category_id, location_id, consumable_id, engineer_id } = req.query;
     const pool = await connectDB();
 
     let whereClause = `WHERE cr.status = 'delivered'`;
@@ -43,6 +43,9 @@ router.get('/consumption-report',
     }
     if (consumable_id) {
       whereClause += ` AND cr.consumable_id = '${consumable_id}'`;
+    }
+    if (engineer_id) {
+      whereClause += ` AND cr.assigned_engineer = '${engineer_id}'`;
     }
 
     // Summary by consumable
@@ -149,12 +152,30 @@ router.get('/consumption-report',
       ORDER BY total_quantity DESC
     `;
 
-    const [summaryResult, detailsResult, totalsResult, categoryResult, locationResult] = await Promise.all([
+    // By engineer breakdown
+    const byEngineerQuery = `
+      SELECT
+        COALESCE(eng.first_name + ' ' + eng.last_name, 'Unassigned') as engineer_name,
+        cr.assigned_engineer as engineer_id,
+        COUNT(cr.id) as request_count,
+        SUM(COALESCE(cr.quantity_issued, cr.quantity_requested)) as total_quantity,
+        SUM(COALESCE(cr.quantity_issued, cr.quantity_requested) * COALESCE(c.unit_cost, 0)) as total_cost
+      FROM consumable_requests cr
+      JOIN consumables c ON cr.consumable_id = c.id
+      JOIN USER_MASTER req ON cr.requested_by = req.user_id
+      LEFT JOIN USER_MASTER eng ON cr.assigned_engineer = eng.user_id
+      ${whereClause}
+      GROUP BY cr.assigned_engineer, eng.first_name, eng.last_name
+      ORDER BY total_quantity DESC
+    `;
+
+    const [summaryResult, detailsResult, totalsResult, categoryResult, locationResult, engineerResult] = await Promise.all([
       pool.request().query(summaryQuery),
       pool.request().query(detailsQuery),
       pool.request().query(totalsQuery),
       pool.request().query(byCategoryQuery),
-      pool.request().query(byLocationQuery)
+      pool.request().query(byLocationQuery),
+      pool.request().query(byEngineerQuery)
     ]);
 
     sendSuccess(res, {
@@ -163,12 +184,14 @@ router.get('/consumption-report',
       totals: totalsResult.recordset[0],
       by_category: categoryResult.recordset,
       by_location: locationResult.recordset,
+      by_engineer: engineerResult.recordset,
       filters_applied: {
         date_from: date_from || null,
         date_to: date_to || null,
         category_id: category_id || null,
         location_id: location_id || null,
-        consumable_id: consumable_id || null
+        consumable_id: consumable_id || null,
+        engineer_id: engineer_id || null
       }
     }, 'Consumption report retrieved successfully');
   })
@@ -182,7 +205,7 @@ router.get('/consumption-report/export',
   requireRole(['admin', 'superadmin', 'coordinator']),
   asyncHandler(async (req, res) => {
     const ExcelJS = require('exceljs');
-    const { date_from, date_to, category_id, location_id, consumable_id } = req.query;
+    const { date_from, date_to, category_id, location_id, consumable_id, engineer_id } = req.query;
     const pool = await connectDB();
 
     let whereClause = `WHERE cr.status = 'delivered'`;
@@ -201,6 +224,9 @@ router.get('/consumption-report/export',
     }
     if (consumable_id) {
       whereClause += ` AND cr.consumable_id = '${consumable_id}'`;
+    }
+    if (engineer_id) {
+      whereClause += ` AND cr.assigned_engineer = '${engineer_id}'`;
     }
 
     // Get detailed records

@@ -597,7 +597,7 @@ class TicketController {
   static async requestTicketClose(req, res) {
     try {
       const { id } = req.params;
-      const { request_notes } = req.body;
+      const { request_notes, service_report_id } = req.body;
       const engineerId = req.oauth.user.id;
 
       if (!request_notes) {
@@ -610,8 +610,8 @@ class TicketController {
         return sendNotFound(res, 'Ticket not found');
       }
 
-      // Request close
-      await TicketModel.requestTicketClose(id, engineerId, request_notes);
+      // Request close (with optional service_report_id for repair/replace tickets)
+      await TicketModel.requestTicketClose(id, engineerId, request_notes, service_report_id || null);
 
       // Fetch updated ticket
       const updatedTicket = await TicketModel.getTicketById(id);
@@ -736,7 +736,8 @@ class TicketController {
         months_back,
         location_id,
         department_id,
-        priority
+        priority,
+        engineer_id
       } = req.query;
 
       const filters = {};
@@ -744,6 +745,7 @@ class TicketController {
       if (location_id) filters.location_id = location_id;
       if (department_id) filters.department_id = department_id;
       if (priority) filters.priority = priority;
+      if (engineer_id) filters.engineer_id = engineer_id;
 
       const trendData = await TicketModel.getTicketTrendAnalysis(filters);
 
@@ -764,7 +766,8 @@ class TicketController {
         months_back,
         location_id,
         department_id,
-        priority
+        priority,
+        engineer_id
       } = req.query;
 
       const filters = {};
@@ -772,6 +775,7 @@ class TicketController {
       if (location_id) filters.location_id = location_id;
       if (department_id) filters.department_id = department_id;
       if (priority) filters.priority = priority;
+      if (engineer_id) filters.engineer_id = engineer_id;
 
       const trendData = await TicketModel.getTicketTrendAnalysis(filters);
 
@@ -940,6 +944,131 @@ class TicketController {
     } catch (error) {
       console.error('Export trend analysis error:', error);
       return sendError(res, error.message || 'Failed to export trend analysis', 500);
+    }
+  }
+
+  /**
+   * Get ticket reopen configuration
+   * GET /api/tickets/reopen-config
+   */
+  static async getReopenConfig(req, res) {
+    try {
+      const config = await TicketModel.getReopenConfig();
+
+      if (!config) {
+        return sendNotFound(res, 'Reopen configuration not found');
+      }
+
+      return sendSuccess(res, config);
+    } catch (error) {
+      console.error('Get reopen config error:', error);
+      return sendError(res, error.message || 'Failed to fetch reopen configuration', 500);
+    }
+  }
+
+  /**
+   * Update ticket reopen configuration
+   * PUT /api/tickets/reopen-config
+   */
+  static async updateReopenConfig(req, res) {
+    try {
+      const {
+        reopen_window_days,
+        max_reopen_count,
+        sla_reset_mode,
+        require_reopen_reason,
+        notify_assignee,
+        notify_manager
+      } = req.body;
+
+      // Validation
+      if (reopen_window_days !== undefined && (reopen_window_days < 1 || reopen_window_days > 365)) {
+        return sendError(res, 'Reopen window must be between 1 and 365 days', 400);
+      }
+
+      if (max_reopen_count !== undefined && (max_reopen_count < 1 || max_reopen_count > 10)) {
+        return sendError(res, 'Max reopen count must be between 1 and 10', 400);
+      }
+
+      if (sla_reset_mode && !['reset', 'continue', 'new_sla'].includes(sla_reset_mode)) {
+        return sendError(res, 'Invalid SLA reset mode', 400);
+      }
+
+      const updatedBy = req.oauth.user.id;
+
+      const config = await TicketModel.updateReopenConfig({
+        reopen_window_days,
+        max_reopen_count,
+        sla_reset_mode,
+        require_reopen_reason,
+        notify_assignee,
+        notify_manager
+      }, updatedBy);
+
+      return sendSuccess(res, config, 'Reopen configuration updated successfully');
+    } catch (error) {
+      console.error('Update reopen config error:', error);
+      return sendError(res, error.message || 'Failed to update reopen configuration', 500);
+    }
+  }
+
+  /**
+   * Check if a ticket can be reopened
+   * GET /api/tickets/:ticketId/can-reopen
+   */
+  static async canReopenTicket(req, res) {
+    try {
+      const { ticketId } = req.params;
+
+      const result = await TicketModel.canReopenTicket(ticketId);
+
+      return sendSuccess(res, result);
+    } catch (error) {
+      console.error('Check reopen eligibility error:', error);
+      return sendError(res, error.message || 'Failed to check reopen eligibility', 500);
+    }
+  }
+
+  /**
+   * Reopen a closed ticket
+   * POST /api/tickets/:ticketId/reopen
+   */
+  static async reopenTicket(req, res) {
+    try {
+      const { ticketId } = req.params;
+      const { reopen_reason } = req.body;
+      const reopenedBy = req.oauth.user.id;
+
+      // Get config to check if reason is required
+      const config = await TicketModel.getReopenConfig();
+
+      if (config?.require_reopen_reason && !reopen_reason) {
+        return sendError(res, 'Reopen reason is required', 400);
+      }
+
+      const ticket = await TicketModel.reopenTicket(ticketId, reopenedBy, reopen_reason || '');
+
+      return sendSuccess(res, ticket, 'Ticket reopened successfully');
+    } catch (error) {
+      console.error('Reopen ticket error:', error);
+      return sendError(res, error.message || 'Failed to reopen ticket', 500);
+    }
+  }
+
+  /**
+   * Get reopen history for a ticket
+   * GET /api/tickets/:ticketId/reopen-history
+   */
+  static async getReopenHistory(req, res) {
+    try {
+      const { ticketId } = req.params;
+
+      const history = await TicketModel.getReopenHistory(ticketId);
+
+      return sendSuccess(res, history);
+    } catch (error) {
+      console.error('Get reopen history error:', error);
+      return sendError(res, error.message || 'Failed to fetch reopen history', 500);
     }
   }
 }

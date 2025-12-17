@@ -48,6 +48,7 @@ router.get('/',
       vendor_id,
       recipient_user_id,
       search,
+      serial_number,
       page = 1,
       limit = 20
     } = req.query;
@@ -93,6 +94,11 @@ router.get('/',
       request.input('search', sql.VarChar(100), `%${search}%`);
     }
 
+    if (serial_number) {
+      filterConditions += ` AND EXISTS (SELECT 1 FROM GATE_PASS_ASSETS gpa WHERE gpa.gate_pass_id = gp.id AND gpa.serial_number LIKE @serial_number)`;
+      request.input('serial_number', sql.VarChar(100), `%${serial_number}%`);
+    }
+
     // Main query
     const query = `
       SELECT
@@ -136,6 +142,7 @@ router.get('/',
         .input('vendor_id', sql.UniqueIdentifier, vendor_id || null)
         .input('recipient_user_id', sql.UniqueIdentifier, recipient_user_id || null)
         .input('search', sql.VarChar(100), search ? `%${search}%` : null)
+        .input('serial_number', sql.VarChar(100), serial_number ? `%${serial_number}%` : null)
         .query(countQuery)
     ]);
 

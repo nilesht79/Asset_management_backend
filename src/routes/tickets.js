@@ -160,6 +160,66 @@ router.get(
 );
 
 /**
+ * @route   GET /api/tickets/reopen-config
+ * @desc    Get ticket reopen configuration
+ * @access  Superadmin only
+ */
+router.get(
+  '/reopen-config',
+  authenticateOAuth,
+  requireRole(['superadmin']),
+  TicketController.getReopenConfig
+);
+
+/**
+ * @route   PUT /api/tickets/reopen-config
+ * @desc    Update ticket reopen configuration
+ * @access  Superadmin only
+ */
+router.put(
+  '/reopen-config',
+  authenticateOAuth,
+  requireRole(['superadmin']),
+  TicketController.updateReopenConfig
+);
+
+/**
+ * @route   GET /api/tickets/:ticketId/can-reopen
+ * @desc    Check if a ticket can be reopened
+ * @access  Coordinator, Admin, Superadmin
+ */
+router.get(
+  '/:ticketId/can-reopen',
+  authenticateOAuth,
+  requireRole(COORDINATORS),
+  TicketController.canReopenTicket
+);
+
+/**
+ * @route   POST /api/tickets/:ticketId/reopen
+ * @desc    Reopen a closed ticket
+ * @access  Coordinator, Admin, Superadmin
+ */
+router.post(
+  '/:ticketId/reopen',
+  authenticateOAuth,
+  requireRole(COORDINATORS),
+  TicketController.reopenTicket
+);
+
+/**
+ * @route   GET /api/tickets/:ticketId/reopen-history
+ * @desc    Get reopen history for a ticket
+ * @access  Coordinator, Admin, Superadmin, Engineer
+ */
+router.get(
+  '/:ticketId/reopen-history',
+  authenticateOAuth,
+  requireRole(TICKET_MANAGERS),
+  TicketController.getReopenHistory
+);
+
+/**
  * @route   GET /api/tickets/:id/assets
  * @desc    Get all assets linked to a ticket
  * @access  Coordinator, Superadmin, Engineer

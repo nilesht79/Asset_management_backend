@@ -33,7 +33,7 @@ class ServiceReportPDF {
         .query(`
           SELECT config_key, config_value
           FROM system_config
-          WHERE config_key IN ('COMPANY_LOGO', 'COMPANY_NAME', 'COMPANY_ADDRESS')
+          WHERE config_key IN ('COMPANY_LOGO', 'COMPANY_NAME', 'COMPANY_ADDRESS', 'SHOW_COMPANY_NAME_IN_PDF')
         `);
 
       const settings = {};
@@ -44,7 +44,8 @@ class ServiceReportPDF {
       return {
         logo: settings.COMPANY_LOGO || null,
         name: settings.COMPANY_NAME || 'Asset Management System',
-        address: settings.COMPANY_ADDRESS || ''
+        address: settings.COMPANY_ADDRESS || '',
+        showNameInPdf: settings.SHOW_COMPANY_NAME_IN_PDF === 'true' || settings.SHOW_COMPANY_NAME_IN_PDF === '1' || settings.SHOW_COMPANY_NAME_IN_PDF === undefined
       };
     } catch (error) {
       console.error('Error fetching company settings:', error);
@@ -218,18 +219,21 @@ class ServiceReportPDF {
       try {
         const logoPath = path.join(__dirname, '../../uploads/logos/', companySettings.logo);
         if (fs.existsSync(logoPath)) {
-          doc.image(logoPath, x, y, { width: 45, height: 45 });
+          doc.image(logoPath, x, y, { height: 45 });
           textX = x + 55;
         }
       } catch (e) { /* ignore */ }
     }
 
-    doc.font('Helvetica-Bold').fontSize(13).fillColor(this.colors.primary);
-    doc.text(companySettings.name, textX, y + 5, { width: 180, lineBreak: false });
+    // Only show company name/address if showNameInPdf is true or no logo
+    if (companySettings.showNameInPdf || !companySettings.logo) {
+      doc.font('Helvetica-Bold').fontSize(13).fillColor(this.colors.primary);
+      doc.text(companySettings.name, textX, y + 5, { width: 180, lineBreak: false });
 
-    if (companySettings.address) {
-      doc.font('Helvetica').fontSize(7).fillColor(this.colors.gray);
-      doc.text(companySettings.address, textX, y + 20, { width: 180, lineBreak: false });
+      if (companySettings.address) {
+        doc.font('Helvetica').fontSize(7).fillColor(this.colors.gray);
+        doc.text(companySettings.address, textX, y + 20, { width: 180, lineBreak: false });
+      }
     }
 
     // Report title (right side) - with proper spacing to prevent overlap

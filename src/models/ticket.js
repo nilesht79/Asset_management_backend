@@ -4,6 +4,8 @@
  */
 
 const { connectDB, sql } = require('../config/database');
+const ServiceReportModel = require('./serviceReport');
+const AssetRepairHistoryModel = require('./assetRepairHistory');
 
 class TicketModel {
   /**
@@ -115,7 +117,7 @@ class TicketModel {
         .input('departmentId', sql.UniqueIdentifier, employee.department_id)
         .input('locationId', sql.UniqueIdentifier, employee.location_id)
         .input('category', sql.NVarChar(100), ticketData.category || null)
-        .input('ticketType', sql.NVarChar(30), ticketData.ticket_type || 'internal')
+        .input('ticketType', sql.NVarChar(30), ticketData.ticket_type || 'incident')
         .input('serviceType', sql.VarChar(20), ticketData.service_type || 'general')
         .input('dueDate', sql.DateTime, ticketData.due_date || null)
         .query(insertQuery);
@@ -200,7 +202,7 @@ class TicketModel {
           .input('createdByCoordinatorId', sql.UniqueIdentifier, ticketData.created_by_coordinator_id)
           .input('assignedToEngineerId', sql.UniqueIdentifier, ticketData.assigned_to_engineer_id || null)
           .input('category', sql.NVarChar(100), ticketData.category || null)
-          .input('ticketType', sql.NVarChar(30), ticketData.ticket_type || 'external')
+          .input('ticketType', sql.NVarChar(30), ticketData.ticket_type || 'incident')
           .input('serviceType', sql.VarChar(20), ticketData.service_type || 'general')
           .input('dueDate', sql.DateTime, ticketData.due_date || null)
           .query(insertTicketQuery);
@@ -971,8 +973,12 @@ class TicketModel {
 
   /**
    * Engineer requests to close a ticket
+   * @param {string} ticketId - Ticket ID
+   * @param {string} engineerId - Engineer ID
+   * @param {string} requestNotes - Resolution notes
+   * @param {string|null} serviceReportId - Service report ID (for repair/replace tickets)
    */
-  static async requestTicketClose(ticketId, engineerId, requestNotes) {
+  static async requestTicketClose(ticketId, engineerId, requestNotes, serviceReportId = null) {
     try {
       const pool = await connectDB();
 
@@ -981,7 +987,7 @@ class TicketModel {
         .input('ticketId', sql.UniqueIdentifier, ticketId)
         .input('engineerId', sql.UniqueIdentifier, engineerId)
         .query(`
-          SELECT ticket_id, status, assigned_to_engineer_id
+          SELECT ticket_id, status, assigned_to_engineer_id, service_type
           FROM TICKETS
           WHERE ticket_id = @ticketId
         `);
@@ -1004,7 +1010,12 @@ class TicketModel {
         throw new Error('Close request already exists for this ticket');
       }
 
-      // Create close request
+      // Validate service report for repair/replace tickets
+      if ((ticket.service_type === 'repair' || ticket.service_type === 'replace') && !serviceReportId) {
+        throw new Error('Service report is required for repair/replace tickets');
+      }
+
+      // Create close request with service_report_id
       const insertQuery = `
         INSERT INTO TICKET_CLOSE_REQUESTS (
           close_request_id,
@@ -1012,6 +1023,7 @@ class TicketModel {
           requested_by_engineer_id,
           request_notes,
           request_status,
+          service_report_id,
           created_at,
           updated_at
         )
@@ -1022,6 +1034,7 @@ class TicketModel {
           @engineerId,
           @requestNotes,
           'pending',
+          @serviceReportId,
           GETDATE(),
           GETDATE()
         )
@@ -1031,6 +1044,7 @@ class TicketModel {
         .input('ticketId', sql.UniqueIdentifier, ticketId)
         .input('engineerId', sql.UniqueIdentifier, engineerId)
         .input('requestNotes', sql.NVarChar(sql.MAX), requestNotes)
+        .input('serviceReportId', sql.UniqueIdentifier, serviceReportId)
         .query(insertQuery);
 
       // Update ticket status to pending_closure
@@ -1077,6 +1091,7 @@ class TicketModel {
           t.title AS ticket_title,
           t.status AS ticket_status,
           t.priority AS ticket_priority,
+          t.service_type AS ticket_service_type,
           t.department_id,
           t.location_id,
           -- Engineer who requested
@@ -1090,7 +1105,23 @@ class TicketModel {
           l.name AS location_name,
           -- Guest Info
           gt.guest_name,
-          gt.guest_email
+          gt.guest_email,
+          -- Service Report Info (if exists)
+          sr.report_id AS service_report_id,
+          sr.report_number AS service_report_number,
+          sr.service_type AS service_report_type,
+          sr.diagnosis AS service_report_diagnosis,
+          sr.work_performed AS service_report_work_performed,
+          sr.condition_before,
+          sr.condition_after,
+          sr.total_parts_cost,
+          sr.labor_cost,
+          sr.engineer_notes AS service_report_notes,
+          sr.status AS service_report_status,
+          sr.fault_type_id,
+          -- Fault Type Info
+          ft.name AS fault_type_name,
+          ft.category AS fault_type_category
         FROM TICKET_CLOSE_REQUESTS cr
         INNER JOIN TICKETS t ON cr.ticket_id = t.ticket_id
         LEFT JOIN USER_MASTER u1 ON cr.requested_by_engineer_id = u1.user_id
@@ -1098,6 +1129,8 @@ class TicketModel {
         LEFT JOIN DEPARTMENT_MASTER d ON t.department_id = d.department_id
         LEFT JOIN locations l ON t.location_id = l.id
         LEFT JOIN GUEST_TICKETS gt ON t.ticket_id = gt.ticket_id
+        LEFT JOIN SERVICE_REPORTS sr ON cr.service_report_id = sr.report_id
+        LEFT JOIN FAULT_TYPES ft ON sr.fault_type_id = ft.fault_type_id
         ${whereClause}
         ORDER BY cr.created_at ASC
       `;
@@ -1165,7 +1198,9 @@ class TicketModel {
           SELECT
             cr.*,
             t.ticket_id as ticket_id_from_tickets,
-            t.status as ticket_status_current
+            t.status as ticket_status_current,
+            t.service_type,
+            t.assigned_to_engineer_id
           FROM TICKET_CLOSE_REQUESTS cr
           INNER JOIN TICKETS t ON cr.ticket_id = t.ticket_id
           WHERE cr.close_request_id = @closeRequestId
@@ -1189,6 +1224,8 @@ class TicketModel {
 
       // Use the ticket_id from the close request
       const ticketId = closeRequest.ticket_id;
+      const serviceReportId = closeRequest.service_report_id;
+      const serviceType = closeRequest.service_type;
 
       // Validation: Ensure ticketId is valid
       if (!ticketId) {
@@ -1231,6 +1268,61 @@ class TicketModel {
               updated_at = GETDATE()
             WHERE ticket_id = @ticketId
           `);
+
+        // Finalize service report if exists
+        if (serviceReportId) {
+          try {
+            const finalizedReport = await ServiceReportModel.finalizeReport(serviceReportId, coordinatorId);
+            console.log(`Finalized service report ${serviceReportId}`);
+
+            // Create or update repair history from service report (only for repair type, not replace)
+            if (serviceType === 'repair' && finalizedReport && finalizedReport.asset_id) {
+              // Build parts_replaced string from parts_used
+              let partsReplacedStr = null;
+              if (finalizedReport.parts_used && finalizedReport.parts_used.length > 0) {
+                partsReplacedStr = finalizedReport.parts_used
+                  .map(p => `${p.product_name || 'Part'} (${p.asset_tag || 'N/A'}) x${p.quantity}`)
+                  .join(', ');
+              }
+
+              // Calculate labor hours from labor cost (assuming rate or just store null)
+              const laborHours = finalizedReport.labor_cost > 0 ? null : null;
+
+              const repairData = {
+                asset_id: finalizedReport.asset_id,
+                ticket_id: ticketId,
+                fault_type_id: finalizedReport.fault_type_id || null,
+                fault_description: finalizedReport.diagnosis,
+                repair_date: new Date(),
+                engineer_id: closeRequest.assigned_to_engineer_id,
+                parts_replaced: partsReplacedStr,
+                labor_hours: laborHours,
+                parts_cost: finalizedReport.total_parts_cost || 0,
+                labor_cost: finalizedReport.labor_cost || 0,
+                resolution: finalizedReport.work_performed,
+                repair_status: 'completed',
+                notes: finalizedReport.engineer_notes,
+                created_by: coordinatorId
+              };
+
+              // Check if repair history exists for this ticket (reopened ticket case)
+              const repairExists = await AssetRepairHistoryModel.existsForTicket(ticketId);
+
+              if (repairExists) {
+                // Update existing repair history
+                await AssetRepairHistoryModel.updateRepairEntryByTicket(ticketId, repairData, coordinatorId);
+                console.log(`Updated repair history for ticket ${ticketId}`);
+              } else {
+                // Create new repair history
+                await AssetRepairHistoryModel.createRepairEntry(repairData);
+                console.log(`Created repair history for asset ${finalizedReport.asset_id}`);
+              }
+            }
+          } catch (srError) {
+            console.error('Error finalizing service report:', srError);
+            // Don't fail the whole operation if service report finalization fails
+          }
+        }
       } else if (action === 'rejected') {
         // Return ticket to in_progress
         await pool.request()
@@ -1242,6 +1334,17 @@ class TicketModel {
               updated_at = GETDATE()
             WHERE ticket_id = @ticketId
           `);
+
+        // Delete draft service report if exists
+        if (serviceReportId) {
+          try {
+            await ServiceReportModel.deleteDraftReport(serviceReportId);
+            console.log(`Deleted draft service report ${serviceReportId}`);
+          } catch (srError) {
+            console.error('Error deleting draft service report:', srError);
+            // Don't fail the whole operation
+          }
+        }
       }
 
       console.log(`Successfully ${action} close request ${closeRequestId}, ticket ${ticketId} status updated`);
@@ -1314,6 +1417,11 @@ class TicketModel {
       if (filters.priority) {
         whereClause += ' AND t.priority = @priority';
         params.priority = filters.priority;
+      }
+
+      if (filters.engineer_id) {
+        whereClause += ' AND t.assigned_to_engineer_id = @engineerId';
+        params.engineerId = filters.engineer_id;
       }
 
       // Query 1: Monthly ticket volume
@@ -1427,7 +1535,28 @@ class TicketModel {
         ORDER BY total_tickets DESC
       `;
 
-      // Query 8: Summary statistics
+      // Query 8: Engineer breakdown
+      const engineerBreakdownQuery = `
+        SELECT
+          COALESCE(u.first_name + ' ' + u.last_name, 'Unassigned') AS engineer_name,
+          t.assigned_to_engineer_id AS engineer_id,
+          COUNT(*) AS total_tickets,
+          SUM(CASE WHEN t.status = 'closed' THEN 1 ELSE 0 END) AS closed_tickets,
+          SUM(CASE WHEN t.status IN ('open', 'in_progress', 'assigned', 'pending_closure') THEN 1 ELSE 0 END) AS active_tickets,
+          ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2) AS percentage,
+          AVG(CASE
+            WHEN t.closed_at IS NOT NULL
+            THEN DATEDIFF(HOUR, t.created_at, t.closed_at)
+            ELSE NULL
+          END) AS avg_resolution_hours
+        FROM TICKETS t
+        LEFT JOIN USER_MASTER u ON t.assigned_to_engineer_id = u.user_id
+        ${whereClause}
+        GROUP BY t.assigned_to_engineer_id, u.first_name, u.last_name
+        ORDER BY total_tickets DESC
+      `;
+
+      // Query 9: Summary statistics
       const summaryQuery = `
         SELECT
           COUNT(*) AS total_tickets,
@@ -1459,6 +1588,9 @@ class TicketModel {
         if (params.priority) {
           request.input('priority', sql.VarChar, params.priority);
         }
+        if (params.engineerId) {
+          request.input('engineerId', sql.UniqueIdentifier, params.engineerId);
+        }
 
         return request.query(query);
       };
@@ -1472,6 +1604,7 @@ class TicketModel {
         statusResult,
         locationResult,
         departmentResult,
+        engineerResult,
         summaryResult
       ] = await Promise.all([
         buildRequest(monthlyVolumeQuery),
@@ -1481,6 +1614,7 @@ class TicketModel {
         buildRequest(statusBreakdownQuery),
         buildRequest(locationBreakdownQuery),
         buildRequest(departmentBreakdownQuery),
+        buildRequest(engineerBreakdownQuery),
         buildRequest(summaryQuery)
       ]);
 
@@ -1513,16 +1647,266 @@ class TicketModel {
         by_status: statusResult.recordset,
         by_location: locationResult.recordset,
         by_department: departmentResult.recordset,
+        by_engineer: engineerResult.recordset,
         category_by_month: categoryByMonthResult.recordset,
         filters_applied: {
           months_back: monthsBack,
           location_id: filters.location_id || null,
           department_id: filters.department_id || null,
-          priority: filters.priority || null
+          priority: filters.priority || null,
+          engineer_id: filters.engineer_id || null
         }
       };
     } catch (error) {
       console.error('Error fetching ticket trend analysis:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get ticket reopen configuration
+   */
+  static async getReopenConfig() {
+    try {
+      const pool = await connectDB();
+      const result = await pool.request().query(`
+        SELECT TOP 1 * FROM TICKET_REOPEN_CONFIG WHERE is_active = 1
+      `);
+      return result.recordset[0] || null;
+    } catch (error) {
+      console.error('Error fetching reopen config:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update ticket reopen configuration
+   */
+  static async updateReopenConfig(configData, updatedBy) {
+    try {
+      const pool = await connectDB();
+
+      const result = await pool.request()
+        .input('reopenWindowDays', sql.Int, configData.reopen_window_days)
+        .input('maxReopenCount', sql.Int, configData.max_reopen_count)
+        .input('slaResetMode', sql.VarChar(20), configData.sla_reset_mode)
+        .input('requireReopenReason', sql.Bit, configData.require_reopen_reason)
+        .input('notifyAssignee', sql.Bit, configData.notify_assignee)
+        .input('notifyManager', sql.Bit, configData.notify_manager)
+        .input('updatedBy', sql.UniqueIdentifier, updatedBy)
+        .query(`
+          UPDATE TICKET_REOPEN_CONFIG
+          SET
+            reopen_window_days = @reopenWindowDays,
+            max_reopen_count = @maxReopenCount,
+            sla_reset_mode = @slaResetMode,
+            require_reopen_reason = @requireReopenReason,
+            notify_assignee = @notifyAssignee,
+            notify_manager = @notifyManager,
+            updated_by = @updatedBy,
+            updated_at = GETDATE()
+          WHERE is_active = 1;
+
+          SELECT TOP 1 * FROM TICKET_REOPEN_CONFIG WHERE is_active = 1;
+        `);
+
+      return result.recordset[0];
+    } catch (error) {
+      console.error('Error updating reopen config:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if a ticket can be reopened
+   */
+  static async canReopenTicket(ticketId) {
+    try {
+      const pool = await connectDB();
+
+      // Get ticket and config
+      const result = await pool.request()
+        .input('ticketId', sql.UniqueIdentifier, ticketId)
+        .query(`
+          SELECT
+            t.ticket_id,
+            t.ticket_number,
+            t.status,
+            t.closed_at,
+            t.reopen_count,
+            t.service_type,
+            c.reopen_window_days,
+            c.max_reopen_count,
+            c.require_reopen_reason,
+            DATEDIFF(DAY, t.closed_at, GETDATE()) AS days_since_closed
+          FROM TICKETS t
+          CROSS JOIN (SELECT TOP 1 * FROM TICKET_REOPEN_CONFIG WHERE is_active = 1) c
+          WHERE t.ticket_id = @ticketId
+        `);
+
+      if (result.recordset.length === 0) {
+        return { canReopen: false, reason: 'Ticket not found' };
+      }
+
+      const ticket = result.recordset[0];
+
+      if (ticket.status !== 'closed') {
+        return { canReopen: false, reason: 'Ticket is not closed' };
+      }
+
+      if (ticket.reopen_count >= ticket.max_reopen_count) {
+        return {
+          canReopen: false,
+          reason: `Maximum reopen limit (${ticket.max_reopen_count}) reached`
+        };
+      }
+
+      if (ticket.days_since_closed > ticket.reopen_window_days) {
+        return {
+          canReopen: false,
+          reason: `Reopen window (${ticket.reopen_window_days} days) has expired`
+        };
+      }
+
+      return {
+        canReopen: true,
+        ticket,
+        remainingReopens: ticket.max_reopen_count - ticket.reopen_count,
+        daysRemaining: ticket.reopen_window_days - ticket.days_since_closed
+      };
+    } catch (error) {
+      console.error('Error checking reopen eligibility:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Reopen a closed ticket
+   */
+  static async reopenTicket(ticketId, reopenedBy, reopenReason) {
+    try {
+      const pool = await connectDB();
+
+      // First check if can reopen
+      const eligibility = await this.canReopenTicket(ticketId);
+      if (!eligibility.canReopen) {
+        throw new Error(eligibility.reason);
+      }
+
+      const ticket = eligibility.ticket;
+
+      // Get reopen config for SLA handling
+      const config = await this.getReopenConfig();
+
+      // Start transaction
+      const transaction = new sql.Transaction(pool);
+      await transaction.begin();
+
+      try {
+        // 1. Record reopen in history
+        await transaction.request()
+          .input('ticketId', sql.UniqueIdentifier, ticketId)
+          .input('reopenNumber', sql.Int, ticket.reopen_count + 1)
+          .input('reopenReason', sql.NVarChar(sql.MAX), reopenReason)
+          .input('reopenedBy', sql.UniqueIdentifier, reopenedBy)
+          .input('previousClosedAt', sql.DateTime, ticket.closed_at)
+          .query(`
+            INSERT INTO TICKET_REOPEN_HISTORY (
+              ticket_id, reopen_number, reopen_reason, reopened_by,
+              previous_closed_at, reopened_at, created_at
+            ) VALUES (
+              @ticketId, @reopenNumber, @reopenReason, @reopenedBy,
+              @previousClosedAt, GETDATE(), GETDATE()
+            )
+          `);
+
+        // 2. Update ticket status and reopen count
+        await transaction.request()
+          .input('ticketId', sql.UniqueIdentifier, ticketId)
+          .input('reopenedBy', sql.UniqueIdentifier, reopenedBy)
+          .query(`
+            UPDATE TICKETS
+            SET
+              status = 'in_progress',
+              reopen_count = reopen_count + 1,
+              last_reopened_at = GETDATE(),
+              last_reopened_by = @reopenedBy,
+              original_closed_at = CASE
+                WHEN original_closed_at IS NULL THEN closed_at
+                ELSE original_closed_at
+              END,
+              closed_at = NULL,
+              resolved_at = NULL,
+              updated_at = GETDATE()
+            WHERE ticket_id = @ticketId
+          `);
+
+        // 3. Revert service report to draft status (if exists) so engineer can update
+        const serviceReportResult = await transaction.request()
+          .input('ticketId', sql.UniqueIdentifier, ticketId)
+          .query(`
+            SELECT report_id FROM SERVICE_REPORTS
+            WHERE ticket_id = @ticketId AND status = 'finalized'
+          `);
+
+        if (serviceReportResult.recordset.length > 0) {
+          const reportId = serviceReportResult.recordset[0].report_id;
+
+          // Set service report back to draft
+          await transaction.request()
+            .input('reportId', sql.UniqueIdentifier, reportId)
+            .query(`
+              UPDATE SERVICE_REPORTS
+              SET status = 'draft', updated_at = GETDATE()
+              WHERE report_id = @reportId
+            `);
+
+          // Mark repair history as in_progress (if exists)
+          await transaction.request()
+            .input('ticketId', sql.UniqueIdentifier, ticketId)
+            .query(`
+              UPDATE ASSET_REPAIR_HISTORY
+              SET repair_status = 'in_progress', updated_at = GETDATE()
+              WHERE ticket_id = @ticketId
+            `);
+        }
+
+        await transaction.commit();
+
+        return await this.getTicketById(ticketId);
+      } catch (err) {
+        await transaction.rollback();
+        throw err;
+      }
+    } catch (error) {
+      console.error('Error reopening ticket:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get reopen history for a ticket
+   */
+  static async getReopenHistory(ticketId) {
+    try {
+      const pool = await connectDB();
+
+      const result = await pool.request()
+        .input('ticketId', sql.UniqueIdentifier, ticketId)
+        .query(`
+          SELECT
+            rh.*,
+            u.first_name + ' ' + u.last_name AS reopened_by_name,
+            u.email AS reopened_by_email
+          FROM TICKET_REOPEN_HISTORY rh
+          LEFT JOIN USER_MASTER u ON rh.reopened_by = u.user_id
+          WHERE rh.ticket_id = @ticketId
+          ORDER BY rh.reopen_number DESC
+        `);
+
+      return result.recordset;
+    } catch (error) {
+      console.error('Error fetching reopen history:', error);
       throw error;
     }
   }

@@ -595,6 +595,78 @@ class AssetRepairHistoryModel {
       throw error;
     }
   }
+
+  /**
+   * Update repair entry by ticket ID (for reopened tickets)
+   * Updates existing repair history when a reopened ticket is closed again
+   */
+  static async updateRepairEntryByTicket(ticketId, repairData, updatedBy) {
+    try {
+      const pool = await connectDB();
+
+      const query = `
+        UPDATE ASSET_REPAIR_HISTORY
+        SET
+          fault_type_id = @faultTypeId,
+          fault_description = @faultDescription,
+          repair_date = @repairDate,
+          engineer_id = @engineerId,
+          parts_replaced = @partsReplaced,
+          labor_hours = @laborHours,
+          parts_cost = @partsCost,
+          labor_cost = @laborCost,
+          resolution = @resolution,
+          repair_status = @repairStatus,
+          notes = @notes,
+          updated_by = @updatedBy,
+          updated_at = GETDATE()
+        WHERE ticket_id = @ticketId;
+
+        SELECT * FROM ASSET_REPAIR_HISTORY WHERE ticket_id = @ticketId;
+      `;
+
+      const result = await pool.request()
+        .input('ticketId', sql.UniqueIdentifier, ticketId)
+        .input('faultTypeId', sql.UniqueIdentifier, repairData.fault_type_id || null)
+        .input('faultDescription', sql.NVarChar(sql.MAX), repairData.fault_description)
+        .input('repairDate', sql.DateTime, repairData.repair_date || new Date())
+        .input('engineerId', sql.UniqueIdentifier, repairData.engineer_id || null)
+        .input('partsReplaced', sql.NVarChar(sql.MAX), repairData.parts_replaced || null)
+        .input('laborHours', sql.Decimal(5, 2), repairData.labor_hours || null)
+        .input('partsCost', sql.Decimal(12, 2), repairData.parts_cost || 0)
+        .input('laborCost', sql.Decimal(12, 2), repairData.labor_cost || 0)
+        .input('resolution', sql.NVarChar(sql.MAX), repairData.resolution || null)
+        .input('repairStatus', sql.VarChar(20), repairData.repair_status || 'completed')
+        .input('notes', sql.NVarChar(sql.MAX), repairData.notes || null)
+        .input('updatedBy', sql.UniqueIdentifier, updatedBy)
+        .query(query);
+
+      return result.recordset[0];
+    } catch (error) {
+      console.error('Error updating repair entry by ticket:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if repair entry exists for a ticket
+   */
+  static async existsForTicket(ticketId) {
+    try {
+      const pool = await connectDB();
+
+      const result = await pool.request()
+        .input('ticketId', sql.UniqueIdentifier, ticketId)
+        .query(`
+          SELECT COUNT(*) AS count FROM ASSET_REPAIR_HISTORY WHERE ticket_id = @ticketId
+        `);
+
+      return result.recordset[0].count > 0;
+    } catch (error) {
+      console.error('Error checking repair entry exists:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = AssetRepairHistoryModel;

@@ -59,7 +59,7 @@ class GatePassPDF {
         .query(`
           SELECT config_key, config_value
           FROM system_config
-          WHERE config_key IN ('COMPANY_LOGO', 'COMPANY_NAME', 'COMPANY_ADDRESS', 'COMPANY_PHONE', 'COMPANY_EMAIL')
+          WHERE config_key IN ('COMPANY_LOGO', 'COMPANY_NAME', 'COMPANY_ADDRESS', 'COMPANY_PHONE', 'COMPANY_EMAIL', 'SHOW_COMPANY_NAME_IN_PDF')
         `);
 
       const settings = {};
@@ -72,7 +72,8 @@ class GatePassPDF {
         name: settings.COMPANY_NAME || 'Asset Management System',
         address: settings.COMPANY_ADDRESS || '',
         phone: settings.COMPANY_PHONE || '',
-        email: settings.COMPANY_EMAIL || ''
+        email: settings.COMPANY_EMAIL || '',
+        showNameInPdf: settings.SHOW_COMPANY_NAME_IN_PDF === 'true' || settings.SHOW_COMPANY_NAME_IN_PDF === '1' || settings.SHOW_COMPANY_NAME_IN_PDF === undefined
       };
     } catch (error) {
       console.error('Error fetching company settings:', error);
@@ -166,34 +167,34 @@ class GatePassPDF {
         const logoBuffer = Buffer.from(base64Data, 'base64');
 
         doc.image(logoBuffer, margin, y, {
-          width: 80,
-          height: 50,
-          fit: [80, 50]
+          height: 50
         });
       } catch (e) {
         console.error('Error rendering logo:', e);
       }
     }
 
-    // Company name and address (right aligned)
-    doc.font('Helvetica-Bold')
-      .fontSize(14)
-      .fillColor(this.colors.primary)
-      .text(companySettings.name, margin + 100, y, {
-        width: pageWidth - 100,
-        align: 'right',
-        lineBreak: false
-      });
-
-    if (companySettings.address) {
-      doc.font('Helvetica')
-        .fontSize(8)
-        .fillColor(this.colors.gray)
-        .text(companySettings.address, margin + 100, y + 18, {
+    // Company name and address (right aligned) - only if showNameInPdf is true or no logo
+    if (companySettings.showNameInPdf || !companySettings.logo) {
+      doc.font('Helvetica-Bold')
+        .fontSize(14)
+        .fillColor(this.colors.primary)
+        .text(companySettings.name, margin + 100, y, {
           width: pageWidth - 100,
           align: 'right',
           lineBreak: false
         });
+
+      if (companySettings.address) {
+        doc.font('Helvetica')
+          .fontSize(8)
+          .fillColor(this.colors.gray)
+          .text(companySettings.address, margin + 100, y + 18, {
+            width: pageWidth - 100,
+            align: 'right',
+            lineBreak: false
+          });
+      }
     }
 
     y += 60;

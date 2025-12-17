@@ -32,14 +32,15 @@ router.get('/',
       .query(`
         SELECT config_key, config_value
         FROM system_config
-        WHERE config_key IN ('COMPANY_LOGO', 'COMPANY_NAME', 'COMPANY_ADDRESS')
+        WHERE config_key IN ('COMPANY_LOGO', 'COMPANY_NAME', 'COMPANY_ADDRESS', 'SHOW_COMPANY_NAME_IN_PDF')
       `);
 
     const settings = {
       logo: null,
       logoUrl: null,
       name: 'Asset Management System',
-      address: ''
+      address: '',
+      showNameInPdf: true // Default to true for backward compatibility
     };
 
     result.recordset.forEach(row => {
@@ -52,6 +53,8 @@ router.get('/',
         settings.name = row.config_value || 'Asset Management System';
       } else if (row.config_key === 'COMPANY_ADDRESS') {
         settings.address = row.config_value || '';
+      } else if (row.config_key === 'SHOW_COMPANY_NAME_IN_PDF') {
+        settings.showNameInPdf = row.config_value === 'true' || row.config_value === '1';
       }
     });
 
@@ -66,7 +69,7 @@ router.get('/',
 router.put('/',
   requireRole(['superadmin']),
   asyncHandler(async (req, res) => {
-    const { name, address } = req.body;
+    const { name, address, showNameInPdf } = req.body;
 
     const pool = await connectDB();
 
@@ -98,19 +101,34 @@ router.put('/',
         `);
     }
 
+    // Update or insert show company name in PDF setting
+    if (showNameInPdf !== undefined) {
+      await pool.request()
+        .input('key', sql.VarChar(100), 'SHOW_COMPANY_NAME_IN_PDF')
+        .input('value', sql.VarChar(500), showNameInPdf ? 'true' : 'false')
+        .query(`
+          IF EXISTS (SELECT 1 FROM system_config WHERE config_key = @key)
+            UPDATE system_config SET config_value = @value, updated_at = GETUTCDATE() WHERE config_key = @key
+          ELSE
+            INSERT INTO system_config (config_key, config_value, description, category, is_editable)
+            VALUES (@key, @value, 'Show company name in PDF reports (disable if logo contains name)', 'branding', 1)
+        `);
+    }
+
     // Fetch updated settings
     const result = await pool.request()
       .query(`
         SELECT config_key, config_value
         FROM system_config
-        WHERE config_key IN ('COMPANY_LOGO', 'COMPANY_NAME', 'COMPANY_ADDRESS')
+        WHERE config_key IN ('COMPANY_LOGO', 'COMPANY_NAME', 'COMPANY_ADDRESS', 'SHOW_COMPANY_NAME_IN_PDF')
       `);
 
     const settings = {
       logo: null,
       logoUrl: null,
       name: 'Asset Management System',
-      address: ''
+      address: '',
+      showNameInPdf: true
     };
 
     result.recordset.forEach(row => {
@@ -123,6 +141,8 @@ router.put('/',
         settings.name = row.config_value || 'Asset Management System';
       } else if (row.config_key === 'COMPANY_ADDRESS') {
         settings.address = row.config_value || '';
+      } else if (row.config_key === 'SHOW_COMPANY_NAME_IN_PDF') {
+        settings.showNameInPdf = row.config_value === 'true' || row.config_value === '1';
       }
     });
 

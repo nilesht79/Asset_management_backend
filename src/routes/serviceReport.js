@@ -31,6 +31,17 @@ router.get('/detailed', ServiceReportController.getDetailedReports);
 // POST /api/service-reports/pdf/bulk
 router.post('/pdf/bulk', ServiceReportController.generateBulkPDF);
 
+// Get draft service report by ticket ID
+// GET /api/service-reports/draft/ticket/:ticketId
+router.get('/draft/ticket/:ticketId', ServiceReportController.getDraftReportByTicketId);
+
+// Create draft service report (for close request workflow)
+// POST /api/service-reports/draft
+router.post('/draft',
+  requireRoles('engineer', 'coordinator', 'admin', 'superadmin'),
+  ServiceReportController.createDraftReport
+);
+
 // Get service report by ticket ID
 // GET /api/service-reports/ticket/:ticketId
 router.get('/ticket/:ticketId', ServiceReportController.getReportByTicketId);

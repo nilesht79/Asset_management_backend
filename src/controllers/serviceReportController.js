@@ -320,6 +320,90 @@ class ServiceReportController {
       return sendError(res, error.message || 'Failed to generate bulk PDF', 500);
     }
   }
+
+  /**
+   * Create a draft service report (for close request workflow)
+   * POST /api/service-reports/draft
+   */
+  static async createDraftReport(req, res) {
+    try {
+      const {
+        ticket_id,
+        service_type,
+        asset_id,
+        replacement_asset_id,
+        fault_type_id,
+        diagnosis,
+        work_performed,
+        condition_before,
+        condition_after,
+        total_parts_cost,
+        labor_cost,
+        engineer_notes,
+        parts_used
+      } = req.body;
+
+      // Validation
+      if (!ticket_id) {
+        return sendError(res, 'Ticket ID is required', 400);
+      }
+
+      if (!service_type || !['repair', 'replace'].includes(service_type)) {
+        return sendError(res, 'Valid service type (repair/replace) is required', 400);
+      }
+
+      if (service_type === 'replace' && !replacement_asset_id) {
+        return sendError(res, 'Replacement asset is required for replacement service', 400);
+      }
+
+      // Get user ID from authenticated user
+      const created_by = req.oauth.user.id;
+
+      const reportData = {
+        ticket_id,
+        service_type,
+        asset_id,
+        replacement_asset_id: service_type === 'replace' ? replacement_asset_id : null,
+        fault_type_id: service_type === 'repair' ? fault_type_id : null,
+        diagnosis,
+        work_performed,
+        condition_before,
+        condition_after,
+        total_parts_cost: total_parts_cost || 0,
+        labor_cost: labor_cost || 0,
+        engineer_notes,
+        created_by
+      };
+
+      const report = await ServiceReportModel.createDraftReport(reportData, parts_used || []);
+
+      return sendCreated(res, report, 'Draft service report created successfully');
+    } catch (error) {
+      console.error('Create draft service report error:', error);
+      return sendError(res, error.message || 'Failed to create draft service report', 500);
+    }
+  }
+
+  /**
+   * Get draft service report by ticket ID
+   * GET /api/service-reports/draft/ticket/:ticketId
+   */
+  static async getDraftReportByTicketId(req, res) {
+    try {
+      const { ticketId } = req.params;
+
+      const report = await ServiceReportModel.getDraftReportByTicketId(ticketId);
+
+      if (!report) {
+        return sendSuccess(res, null, 'No draft service report found for this ticket');
+      }
+
+      return sendSuccess(res, report);
+    } catch (error) {
+      console.error('Get draft service report by ticket error:', error);
+      return sendError(res, error.message || 'Failed to fetch draft service report', 500);
+    }
+  }
 }
 
 module.exports = ServiceReportController;
