@@ -321,7 +321,7 @@ class SlaTrackingModel {
       const pauseStart = new Date(tracking.pause_started_at);
       const pausedMinutes = Math.round((now - pauseStart) / (1000 * 60));
 
-      // Update tracking to resumed
+      // Update tracking to resumed and clear any resolution data (for reopened tickets)
       await pool.request()
         .input('trackingId', sql.UniqueIdentifier, tracking.tracking_id)
         .input('totalPausedMinutes', sql.Int, tracking.total_paused_minutes + pausedMinutes)
@@ -331,6 +331,8 @@ class SlaTrackingModel {
             pause_started_at = NULL,
             current_pause_reason = NULL,
             total_paused_minutes = @totalPausedMinutes,
+            resolved_at = NULL,
+            final_status = NULL,
             updated_at = GETDATE()
           WHERE tracking_id = @trackingId
         `);
@@ -616,14 +618,23 @@ class SlaTrackingModel {
       // Build WHERE clause
       let whereConditions = ['tst.resolved_at IS NOT NULL'];
 
-      if (filters.date_from) {
-        whereConditions.push('tst.resolved_at >= @dateFrom');
-        request.input('dateFrom', sql.DateTime, new Date(filters.date_from));
+      // Pre-calculate dates for consistent use across all queries
+      const startDate = filters.date_from ? new Date(filters.date_from) : null;
+      let endDate = null;
+      if (filters.date_to) {
+        // Set to end of day (23:59:59) to include all tickets on that day
+        endDate = new Date(filters.date_to);
+        endDate.setHours(23, 59, 59, 999);
       }
 
-      if (filters.date_to) {
+      if (startDate) {
+        whereConditions.push('tst.resolved_at >= @dateFrom');
+        request.input('dateFrom', sql.DateTime, startDate);
+      }
+
+      if (endDate) {
         whereConditions.push('tst.resolved_at <= @dateTo');
-        request.input('dateTo', sql.DateTime, new Date(filters.date_to));
+        request.input('dateTo', sql.DateTime, endDate);
       }
 
       if (filters.location_id) {
@@ -709,8 +720,8 @@ class SlaTrackingModel {
 
       // Get summary totals
       const summaryRequest = pool.request();
-      if (filters.date_from) summaryRequest.input('dateFrom', sql.DateTime, new Date(filters.date_from));
-      if (filters.date_to) summaryRequest.input('dateTo', sql.DateTime, new Date(filters.date_to));
+      if (startDate) summaryRequest.input('dateFrom', sql.DateTime, startDate);
+      if (endDate) summaryRequest.input('dateTo', sql.DateTime, endDate);
       if (filters.location_id) summaryRequest.input('locationId', sql.UniqueIdentifier, filters.location_id);
       if (filters.department_id) summaryRequest.input('departmentId', sql.UniqueIdentifier, filters.department_id);
       if (filters.asset_category_id) summaryRequest.input('assetCategoryId', sql.UniqueIdentifier, filters.asset_category_id);
@@ -739,8 +750,8 @@ class SlaTrackingModel {
 
       // Get breakdown by location
       const locationRequest = pool.request();
-      if (filters.date_from) locationRequest.input('dateFrom', sql.DateTime, new Date(filters.date_from));
-      if (filters.date_to) locationRequest.input('dateTo', sql.DateTime, new Date(filters.date_to));
+      if (startDate) locationRequest.input('dateFrom', sql.DateTime, startDate);
+      if (endDate) locationRequest.input('dateTo', sql.DateTime, endDate);
       if (filters.location_id) locationRequest.input('locationId', sql.UniqueIdentifier, filters.location_id);
       if (filters.department_id) locationRequest.input('departmentId', sql.UniqueIdentifier, filters.department_id);
       if (filters.asset_category_id) locationRequest.input('assetCategoryId', sql.UniqueIdentifier, filters.asset_category_id);
@@ -772,8 +783,8 @@ class SlaTrackingModel {
 
       // Get breakdown by department
       const deptRequest = pool.request();
-      if (filters.date_from) deptRequest.input('dateFrom', sql.DateTime, new Date(filters.date_from));
-      if (filters.date_to) deptRequest.input('dateTo', sql.DateTime, new Date(filters.date_to));
+      if (startDate) deptRequest.input('dateFrom', sql.DateTime, startDate);
+      if (endDate) deptRequest.input('dateTo', sql.DateTime, endDate);
       if (filters.location_id) deptRequest.input('locationId', sql.UniqueIdentifier, filters.location_id);
       if (filters.department_id) deptRequest.input('departmentId', sql.UniqueIdentifier, filters.department_id);
       if (filters.asset_category_id) deptRequest.input('assetCategoryId', sql.UniqueIdentifier, filters.asset_category_id);
@@ -805,8 +816,8 @@ class SlaTrackingModel {
 
       // Get detailed ticket list
       const detailRequest = pool.request();
-      if (filters.date_from) detailRequest.input('dateFrom', sql.DateTime, new Date(filters.date_from));
-      if (filters.date_to) detailRequest.input('dateTo', sql.DateTime, new Date(filters.date_to));
+      if (startDate) detailRequest.input('dateFrom', sql.DateTime, startDate);
+      if (endDate) detailRequest.input('dateTo', sql.DateTime, endDate);
       if (filters.location_id) detailRequest.input('locationId', sql.UniqueIdentifier, filters.location_id);
       if (filters.department_id) detailRequest.input('departmentId', sql.UniqueIdentifier, filters.department_id);
       if (filters.asset_category_id) detailRequest.input('assetCategoryId', sql.UniqueIdentifier, filters.asset_category_id);

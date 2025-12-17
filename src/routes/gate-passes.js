@@ -116,6 +116,7 @@ router.get('/',
         gp.valid_until,
         gp.created_by_name,
         gp.created_at,
+        gp.carrier_name,
         (SELECT COUNT(*) FROM GATE_PASS_ASSETS WHERE gate_pass_id = gp.id) as asset_count
       FROM GATE_PASSES gp
       WHERE 1=1 ${filterConditions}
@@ -218,7 +219,7 @@ router.get('/assets/search',
         LEFT JOIN categories cat ON p.category_id = cat.id
         LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
         LEFT JOIN locations l ON u.location_id = l.id
-        WHERE (a.asset_tag LIKE @search OR a.serial_number LIKE @search)
+        WHERE (a.asset_tag LIKE @search OR a.serial_number LIKE @search OR p.name LIKE @search)
           AND a.is_active = 1
           AND a.status NOT IN ('disposed', 'scrapped')
         ORDER BY a.asset_tag
@@ -307,6 +308,7 @@ router.post('/',
       destination_address,
       service_description,
       expected_return_date,
+      carrier_name,
 
       // End User fields
       recipient_user_id,
@@ -435,6 +437,7 @@ router.post('/',
         .input('remarks', sql.NVarChar(sql.MAX), remarks || null)
         .input('created_by', sql.UniqueIdentifier, req.user.user_id)
         .input('created_by_name', sql.NVarChar(200), creatorName)
+        .input('carrier_name', sql.NVarChar(200), carrier_name || null)
         .query(`
           INSERT INTO GATE_PASSES (
             id, gate_pass_number, gate_pass_type, purpose,
@@ -442,14 +445,14 @@ router.post('/',
             vendor_id, vendor_name, destination_address, service_description, expected_return_date,
             recipient_user_id, recipient_name, recipient_employee_id, recipient_email, recipient_department, recipient_location,
             authorized_by, authorized_by_name, issue_date, valid_until, remarks,
-            created_by, created_by_name
+            created_by, created_by_name, carrier_name
           ) VALUES (
             @id, @gate_pass_number, @gate_pass_type, @purpose,
             @from_location_id, @from_location_name, @from_location_address,
             @vendor_id, @vendor_name, @destination_address, @service_description, @expected_return_date,
             @recipient_user_id, @recipient_name, @recipient_employee_id, @recipient_email, @recipient_department, @recipient_location,
             @authorized_by, @authorized_by_name, @issue_date, @valid_until, @remarks,
-            @created_by, @created_by_name
+            @created_by, @created_by_name, @carrier_name
           )
         `);
 

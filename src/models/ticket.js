@@ -6,6 +6,7 @@
 const { connectDB, sql } = require('../config/database');
 const ServiceReportModel = require('./serviceReport');
 const AssetRepairHistoryModel = require('./assetRepairHistory');
+const SlaTrackingModel = require('./slaTracking');
 
 class TicketModel {
   /**
@@ -1269,6 +1270,17 @@ class TicketModel {
             WHERE ticket_id = @ticketId
           `);
 
+        // Stop SLA tracking - important for compliance report
+        try {
+          const slaResult = await SlaTrackingModel.stopTracking(ticketId, null);
+          if (slaResult) {
+            console.log(`SLA tracking stopped for ticket ${ticketId} - final status: ${slaResult.final_status}`);
+          }
+        } catch (slaError) {
+          console.error('Failed to stop SLA tracking:', slaError.message);
+          // Don't fail the whole operation if SLA tracking fails
+        }
+
         // Finalize service report if exists
         if (serviceReportId) {
           try {
@@ -1872,6 +1884,115 @@ class TicketModel {
         }
 
         await transaction.commit();
+
+        // 4. Handle SLA based on reset mode
+        const slaResetMode = config?.sla_reset_mode || 'continue';
+
+        try {
+          if (slaResetMode === 'reset') {
+            // Delete existing SLA tracking and re-initialize
+            await pool.request()
+              .input('ticketId', sql.UniqueIdentifier, ticketId)
+              .query(`DELETE FROM TICKET_SLA_TRACKING WHERE ticket_id = @ticketId`);
+
+            // Get ticket context for new SLA
+            const reopenedTicket = await this.getTicketById(ticketId);
+
+            // Get linked assets
+            const assetsResult = await pool.request()
+              .input('ticketId', sql.UniqueIdentifier, ticketId)
+              .query(`SELECT asset_id FROM TICKET_ASSETS WHERE ticket_id = @ticketId`);
+
+            const assetIds = assetsResult.recordset.map(a => a.asset_id);
+
+            // Re-initialize SLA tracking
+            await SlaTrackingModel.initializeTracking(ticketId, {
+              ticket_id: ticketId,
+              ticket_type: reopenedTicket.ticket_type || 'internal',
+              service_type: reopenedTicket.service_type || 'general',
+              ticket_channel: 'portal',
+              priority: reopenedTicket.priority || 'medium',
+              user_id: reopenedTicket.created_by_user_id,
+              asset_ids: assetIds
+            });
+
+            console.log(`SLA reset for ticket ${ticketId} - new tracking initialized`);
+          } else if (slaResetMode === 'continue') {
+            // Resume SLA timer if paused
+            const tracking = await SlaTrackingModel.getTracking(ticketId);
+            if (tracking && tracking.is_paused) {
+              await SlaTrackingModel.resumeTimer(ticketId, reopenedBy);
+              console.log(`SLA resumed for ticket ${ticketId}`);
+            } else if (tracking) {
+              // Update status and clear resolution fields so ticket is active again
+              await pool.request()
+                .input('ticketId', sql.UniqueIdentifier, ticketId)
+                .query(`
+                  UPDATE TICKET_SLA_TRACKING
+                  SET sla_status = CASE
+                    WHEN business_elapsed_minutes >= (SELECT max_tat_minutes FROM SLA_RULES WHERE rule_id = sla_rule_id) THEN 'breached'
+                    WHEN business_elapsed_minutes >= (SELECT avg_tat_minutes FROM SLA_RULES WHERE rule_id = sla_rule_id) THEN 'critical'
+                    WHEN business_elapsed_minutes >= (SELECT min_tat_minutes FROM SLA_RULES WHERE rule_id = sla_rule_id) THEN 'warning'
+                    ELSE 'on_track'
+                  END,
+                  resolved_at = NULL,
+                  final_status = NULL,
+                  updated_at = GETDATE()
+                  WHERE ticket_id = @ticketId
+                `);
+              console.log(`SLA continued for ticket ${ticketId}`);
+            }
+          } else if (slaResetMode === 'new_sla') {
+            // Keep history but calculate new target times from now
+            const tracking = await SlaTrackingModel.getTracking(ticketId);
+            if (tracking) {
+              // Get the SLA rule to recalculate targets
+              const ruleResult = await pool.request()
+                .input('ruleId', sql.UniqueIdentifier, tracking.sla_rule_id)
+                .query(`SELECT * FROM SLA_RULES WHERE rule_id = @ruleId`);
+
+              if (ruleResult.recordset.length > 0) {
+                const rule = ruleResult.recordset[0];
+                const now = new Date();
+
+                // Calculate new target times
+                const minTarget = new Date(now.getTime() + rule.min_tat_minutes * 60000);
+                const avgTarget = new Date(now.getTime() + rule.avg_tat_minutes * 60000);
+                const maxTarget = new Date(now.getTime() + rule.max_tat_minutes * 60000);
+
+                await pool.request()
+                  .input('ticketId', sql.UniqueIdentifier, ticketId)
+                  .input('minTarget', sql.DateTime, minTarget)
+                  .input('avgTarget', sql.DateTime, avgTarget)
+                  .input('maxTarget', sql.DateTime, maxTarget)
+                  .query(`
+                    UPDATE TICKET_SLA_TRACKING
+                    SET
+                      sla_start_time = GETDATE(),
+                      min_target_time = @minTarget,
+                      avg_target_time = @avgTarget,
+                      max_target_time = @maxTarget,
+                      business_elapsed_minutes = 0,
+                      total_paused_minutes = 0,
+                      is_paused = 0,
+                      pause_started_at = NULL,
+                      current_pause_reason = NULL,
+                      sla_status = 'on_track',
+                      resolved_at = NULL,
+                      final_status = NULL,
+                      warning_triggered_at = NULL,
+                      breach_triggered_at = NULL,
+                      updated_at = GETDATE()
+                    WHERE ticket_id = @ticketId
+                  `);
+                console.log(`New SLA targets set for ticket ${ticketId}`);
+              }
+            }
+          }
+        } catch (slaError) {
+          console.error('Error handling SLA on reopen:', slaError);
+          // Don't throw - ticket is already reopened, just log the SLA error
+        }
 
         return await this.getTicketById(ticketId);
       } catch (err) {

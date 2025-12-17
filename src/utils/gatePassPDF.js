@@ -6,6 +6,8 @@
  */
 
 const PDFDocument = require('pdfkit');
+const path = require('path');
+const fs = require('fs');
 const { connectDB } = require('../config/database');
 
 class GatePassPDF {
@@ -159,16 +161,10 @@ class GatePassPDF {
     // Company logo
     if (companySettings.logo) {
       try {
-        const logoData = companySettings.logo.startsWith('data:')
-          ? companySettings.logo
-          : `data:image/png;base64,${companySettings.logo}`;
-
-        const base64Data = logoData.split(',')[1];
-        const logoBuffer = Buffer.from(base64Data, 'base64');
-
-        doc.image(logoBuffer, margin, y, {
-          height: 50
-        });
+        const logoPath = path.join(__dirname, '../../uploads/logos/', companySettings.logo);
+        if (fs.existsSync(logoPath)) {
+          doc.image(logoPath, margin, y, { height: 50 });
+        }
       } catch (e) {
         console.error('Error rendering logo:', e);
       }
@@ -372,6 +368,14 @@ class GatePassPDF {
         doc.fontSize(8)
           .fillColor(this.colors.gray)
           .text(gatePass.destination_address.substring(0, 50), toX + 10, y + 45, {
+            width: halfWidth - 20,
+            lineBreak: false
+          });
+      }
+      if (gatePass.carrier_name) {
+        doc.fontSize(8)
+          .fillColor(this.colors.gray)
+          .text(`Carrier: ${gatePass.carrier_name}`, toX + 10, y + 58, {
             width: halfWidth - 20,
             lineBreak: false
           });
