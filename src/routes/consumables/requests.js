@@ -7,6 +7,8 @@ const { asyncHandler } = require('../../middleware/error-handler');
 const { sendSuccess, sendCreated, sendError, sendNotFound } = require('../../utils/response');
 const { getPaginationInfo } = require('../../utils/helpers');
 const { validatePagination } = require('../../middleware/validation');
+const NotificationModel = require('../../models/notification');
+const emailService = require('../../services/emailService');
 
 const router = express.Router();
 
@@ -44,7 +46,7 @@ router.get('/',
   validatePagination,
   asyncHandler(async (req, res) => {
     const { page, limit, offset } = req.pagination;
-    const { status, requested_by, for_asset_id, consumable_id, priority } = req.query;
+    const { status, requested_by, for_asset_id, consumable_id, priority, search } = req.query;
 
     const pool = await connectDB();
     const userId = req.user.id;
@@ -53,9 +55,14 @@ router.get('/',
     let whereClause = '1=1';
     const params = [];
 
-    // Non-admin users can only see their own requests
+    // Non-admin users can only see their own requests or requests they created
     if (!['admin', 'superadmin', 'coordinator'].includes(userRole)) {
-      whereClause += ' AND cr.requested_by = @user_id';
+      // Engineers can see requests they created on behalf of others OR their own requests
+      if (userRole === 'engineer') {
+        whereClause += ' AND (cr.requested_by = @user_id OR cr.created_by = @user_id)';
+      } else {
+        whereClause += ' AND cr.requested_by = @user_id';
+      }
       params.push({ name: 'user_id', type: sql.UniqueIdentifier, value: userId });
     } else if (requested_by) {
       whereClause += ' AND cr.requested_by = @requested_by';
@@ -82,11 +89,26 @@ router.get('/',
       params.push({ name: 'priority', type: sql.VarChar(20), value: priority });
     }
 
-    // Count query
+    // Search filter - search by request number, consumable name, or requester name
+    if (search) {
+      whereClause += ` AND (
+        cr.request_number LIKE @search OR
+        c.name LIKE @search OR
+        req.first_name + ' ' + req.last_name LIKE @search OR
+        a.asset_tag LIKE @search
+      )`;
+      params.push({ name: 'search', type: sql.VarChar(100), value: `%${search}%` });
+    }
+
+    // Count query - include JOINs needed for search filter
     const countRequest = pool.request();
     params.forEach(p => countRequest.input(p.name, p.type, p.value));
     const countResult = await countRequest.query(`
-      SELECT COUNT(*) as total FROM consumable_requests cr WHERE ${whereClause}
+      SELECT COUNT(*) as total FROM consumable_requests cr
+      JOIN consumables c ON cr.consumable_id = c.id
+      JOIN USER_MASTER req ON cr.requested_by = req.user_id
+      LEFT JOIN assets a ON cr.for_asset_id = a.id
+      WHERE ${whereClause}
     `);
 
     // Data query
@@ -110,7 +132,8 @@ router.get('/',
         req_loc.id as requester_location_id,
         app.first_name + ' ' + app.last_name as approved_by_name,
         eng.first_name + ' ' + eng.last_name as assigned_engineer_name,
-        eng.email as assigned_engineer_email
+        eng.email as assigned_engineer_email,
+        creator.first_name + ' ' + creator.last_name as created_by_name
       FROM consumable_requests cr
       JOIN consumables c ON cr.consumable_id = c.id
       JOIN consumable_categories cc ON c.category_id = cc.id
@@ -120,6 +143,7 @@ router.get('/',
       LEFT JOIN locations req_loc ON req.location_id = req_loc.id
       LEFT JOIN USER_MASTER app ON cr.approved_by = app.user_id
       LEFT JOIN USER_MASTER eng ON cr.assigned_engineer = eng.user_id
+      LEFT JOIN USER_MASTER creator ON cr.created_by = creator.user_id
       WHERE ${whereClause}
       ORDER BY
         CASE cr.priority
@@ -149,7 +173,7 @@ router.get('/my-requests',
   validatePagination,
   asyncHandler(async (req, res) => {
     const { page, limit, offset } = req.pagination;
-    const { status } = req.query;
+    const { status, priority, search } = req.query;
     const userId = req.user.id;
 
     const pool = await connectDB();
@@ -162,10 +186,28 @@ router.get('/my-requests',
       params.push({ name: 'status', type: sql.VarChar(30), value: status });
     }
 
+    if (priority) {
+      whereClause += ' AND cr.priority = @priority';
+      params.push({ name: 'priority', type: sql.VarChar(20), value: priority });
+    }
+
+    // Search filter - search by request number, consumable name, or asset tag
+    if (search) {
+      whereClause += ` AND (
+        cr.request_number LIKE @search OR
+        c.name LIKE @search OR
+        a.asset_tag LIKE @search
+      )`;
+      params.push({ name: 'search', type: sql.VarChar(100), value: `%${search}%` });
+    }
+
     const countRequest = pool.request();
     params.forEach(p => countRequest.input(p.name, p.type, p.value));
     const countResult = await countRequest.query(`
-      SELECT COUNT(*) as total FROM consumable_requests cr WHERE ${whereClause}
+      SELECT COUNT(*) as total FROM consumable_requests cr
+      JOIN consumables c ON cr.consumable_id = c.id
+      LEFT JOIN assets a ON cr.for_asset_id = a.id
+      WHERE ${whereClause}
     `);
 
     const dataRequest = pool.request();
@@ -355,7 +397,8 @@ router.get('/:id',
           app.first_name + ' ' + app.last_name as approved_by_name,
           eng.first_name + ' ' + eng.last_name as assigned_engineer_name,
           eng.email as assigned_engineer_email,
-          rcv.first_name + ' ' + rcv.last_name as received_by_name
+          rcv.first_name + ' ' + rcv.last_name as received_by_name,
+          creator.first_name + ' ' + creator.last_name as created_by_name
         FROM consumable_requests cr
         JOIN consumables c ON cr.consumable_id = c.id
         JOIN consumable_categories cc ON c.category_id = cc.id
@@ -367,6 +410,7 @@ router.get('/:id',
         LEFT JOIN USER_MASTER app ON cr.approved_by = app.user_id
         LEFT JOIN USER_MASTER eng ON cr.assigned_engineer = eng.user_id
         LEFT JOIN USER_MASTER rcv ON cr.received_by = rcv.user_id
+        LEFT JOIN USER_MASTER creator ON cr.created_by = creator.user_id
         WHERE cr.id = @id
       `);
 
@@ -394,20 +438,20 @@ router.post('/',
     const pool = await connectDB();
     const currentUserId = req.user.id;
     const userRole = req.user.role;
-    const isCoordinator = ['coordinator', 'admin', 'superadmin'].includes(userRole);
+    const canRequestOnBehalf = ['coordinator', 'admin', 'superadmin', 'engineer'].includes(userRole);
 
     // Determine who the request is for
     let requestedById = currentUserId;
 
-    // Coordinators/Admins can request on behalf of others
-    if (requested_for && isCoordinator) {
-      // Verify the target user exists and is eligible (employee, dept_head, it_head)
+    // Coordinators/Admins/Engineers can request on behalf of others
+    if (requested_for && canRequestOnBehalf) {
+      // Verify the target user exists and is eligible (employee, dept_head, it_head, engineer)
       const targetUser = await pool.request()
         .input('user_id', sql.UniqueIdentifier, requested_for)
         .query(`
           SELECT user_id, role FROM USER_MASTER
           WHERE user_id = @user_id AND is_active = 1
-          AND role IN ('employee', 'dept_head', 'it_head')
+          AND role IN ('employee', 'dept_head', 'it_head', 'engineer')
         `);
 
       if (targetUser.recordset.length === 0) {
@@ -415,11 +459,11 @@ router.post('/',
       }
 
       requestedById = requested_for;
-    } else if (!isCoordinator) {
+    } else if (!canRequestOnBehalf) {
       // Regular users can only request for themselves
-      // Verify current user is eligible (employee, dept_head, it_head)
-      if (!['employee', 'dept_head', 'it_head'].includes(userRole)) {
-        return sendError(res, 'Only employees, department heads, and IT heads can request consumables', 403);
+      // Verify current user is eligible (employee, dept_head, it_head, engineer)
+      if (!['employee', 'dept_head', 'it_head', 'engineer'].includes(userRole)) {
+        return sendError(res, 'Only employees, department heads, IT heads, and engineers can request consumables', 403);
       }
     }
 
@@ -475,9 +519,84 @@ router.post('/',
       .input('priority', sql.VarChar(20), priority || 'normal')
       .query(`
         INSERT INTO consumable_requests
-        (id, request_number, requested_by, for_asset_id, consumable_id, quantity_requested, purpose, priority)
-        VALUES (@id, @request_number, @requested_by, @for_asset_id, @consumable_id, @quantity_requested, @purpose, @priority)
+        (id, request_number, requested_by, created_by, for_asset_id, consumable_id, quantity_requested, purpose, priority)
+        VALUES (@id, @request_number, @requested_by, @created_by, @for_asset_id, @consumable_id, @quantity_requested, @purpose, @priority)
       `);
+
+    // Get requester name for notifications
+    const requesterResult = await pool.request()
+      .input('userId', sql.UniqueIdentifier, requestedById)
+      .query(`SELECT first_name + ' ' + last_name as name, email FROM USER_MASTER WHERE user_id = @userId`);
+    const requesterName = requesterResult.recordset[0]?.name || 'Unknown';
+
+    // Send notifications to coordinators and admins
+    try {
+      // Get all coordinators and admins
+      const approversResult = await pool.request()
+        .query(`
+          SELECT user_id, first_name + ' ' + last_name as name, email
+          FROM USER_MASTER
+          WHERE role IN ('coordinator', 'admin', 'superadmin') AND is_active = 1
+        `);
+
+      const approvers = approversResult.recordset;
+
+      // Create in-app notifications for approvers
+      for (const approver of approvers) {
+        try {
+          await NotificationModel.createNotification({
+            user_id: approver.user_id,
+            ticket_id: null,
+            notification_type: 'consumable_request',
+            title: `New Consumable Request: ${requestNumber}`,
+            message: `${requesterName} has requested ${quantity_requested} x ${consumable.recordset[0].name}. Priority: ${priority || 'normal'}`,
+            priority: priority === 'urgent' ? 'high' : 'medium',
+            related_data: {
+              request_id: newId,
+              request_number: requestNumber,
+              consumable_name: consumable.recordset[0].name,
+              quantity: quantity_requested,
+              requester_name: requesterName,
+              priority: priority || 'normal'
+            }
+          });
+        } catch (notifError) {
+          console.error('Failed to create in-app notification for approver:', notifError.message);
+        }
+      }
+
+      // Send email notifications to approvers
+      for (const approver of approvers) {
+        if (approver.email) {
+          try {
+            const emailSubject = `New Consumable Request: ${requestNumber}`;
+            const emailBody = `
+Hello ${approver.name},
+
+A new consumable request has been submitted and requires your attention.
+
+Request Details:
+- Request Number: ${requestNumber}
+- Consumable: ${consumable.recordset[0].name}
+- Quantity: ${quantity_requested}
+- Requested By: ${requesterName}
+- Priority: ${(priority || 'normal').toUpperCase()}
+${purpose ? `- Purpose: ${purpose}` : ''}
+
+Please log in to the Asset Management System to review and approve/reject this request.
+
+This is an automated notification. Please do not reply to this email.
+            `;
+
+            await emailService.sendEmail(approver.email, emailSubject, emailBody.trim());
+          } catch (emailError) {
+            console.error('Failed to send email notification to approver:', emailError.message);
+          }
+        }
+      }
+    } catch (notificationError) {
+      console.error('Failed to send notifications for consumable request:', notificationError.message);
+    }
 
     sendCreated(res, {
       id: newId,
@@ -636,6 +755,115 @@ router.put('/:id/approve',
 
       await transaction.commit();
 
+      // Send notifications to requester and assigned engineer
+      try {
+        // Get requester info
+        const requesterResult = await pool.request()
+          .input('userId', sql.UniqueIdentifier, reqData.requested_by)
+          .query(`SELECT user_id, first_name + ' ' + last_name as name, email FROM USER_MASTER WHERE user_id = @userId`);
+        const requester = requesterResult.recordset[0];
+        const engineerName = `${engineerCheck.recordset[0].first_name} ${engineerCheck.recordset[0].last_name}`;
+        const engineerEmail = engineerCheck.recordset[0].email;
+
+        // In-app notification to requester
+        if (requester) {
+          try {
+            await NotificationModel.createNotification({
+              user_id: requester.user_id,
+              ticket_id: null,
+              notification_type: 'consumable_approved',
+              title: `Request Approved: ${reqData.request_number}`,
+              message: `Your consumable request for ${reqData.quantity_requested} x ${reqData.consumable_name} has been approved. Engineer ${engineerName} will deliver it soon.`,
+              priority: 'medium',
+              related_data: {
+                request_id: id,
+                request_number: reqData.request_number,
+                consumable_name: reqData.consumable_name,
+                quantity: reqData.quantity_requested,
+                assigned_engineer: engineerName
+              }
+            });
+          } catch (notifError) {
+            console.error('Failed to create in-app notification for requester:', notifError.message);
+          }
+
+          // Email notification to requester
+          if (requester.email) {
+            try {
+              const emailSubject = `Consumable Request Approved: ${reqData.request_number}`;
+              const emailBody = `
+Hello ${requester.name},
+
+Great news! Your consumable request has been approved.
+
+Request Details:
+- Request Number: ${reqData.request_number}
+- Consumable: ${reqData.consumable_name}
+- Quantity: ${reqData.quantity_requested}
+- Assigned Engineer: ${engineerName}
+
+The engineer will contact you to arrange delivery.
+
+This is an automated notification. Please do not reply to this email.
+              `;
+              await emailService.sendEmail(requester.email, emailSubject, emailBody.trim());
+            } catch (emailError) {
+              console.error('Failed to send email to requester:', emailError.message);
+            }
+          }
+        }
+
+        // In-app notification to assigned engineer
+        try {
+          await NotificationModel.createNotification({
+            user_id: assigned_engineer,
+            ticket_id: null,
+            notification_type: 'consumable_delivery_assigned',
+            title: `Delivery Assignment: ${reqData.request_number}`,
+            message: `You have been assigned to deliver ${reqData.quantity_requested} x ${reqData.consumable_name} to ${requester?.name || 'the requester'}.`,
+            priority: 'high',
+            related_data: {
+              request_id: id,
+              request_number: reqData.request_number,
+              consumable_name: reqData.consumable_name,
+              quantity: reqData.quantity_requested,
+              requester_name: requester?.name,
+              requester_location: reqData.requester_location_name
+            }
+          });
+        } catch (notifError) {
+          console.error('Failed to create in-app notification for engineer:', notifError.message);
+        }
+
+        // Email notification to assigned engineer
+        if (engineerEmail) {
+          try {
+            const emailSubject = `Consumable Delivery Assignment: ${reqData.request_number}`;
+            const emailBody = `
+Hello ${engineerName},
+
+You have been assigned a consumable delivery task.
+
+Delivery Details:
+- Request Number: ${reqData.request_number}
+- Consumable: ${reqData.consumable_name}
+- Quantity: ${reqData.quantity_requested}
+- Deliver To: ${requester?.name || 'Unknown'}
+${reqData.requester_location_name ? `- Location: ${reqData.requester_location_name}` : ''}
+
+Please complete the delivery and mark it as delivered in the system.
+
+This is an automated notification. Please do not reply to this email.
+            `;
+            await emailService.sendEmail(engineerEmail, emailSubject, emailBody.trim());
+          } catch (emailError) {
+            console.error('Failed to send email to engineer:', emailError.message);
+          }
+        }
+      } catch (notificationError) {
+        console.error('Failed to send approval notifications:', notificationError.message);
+      }
+
       sendSuccess(res, {
         assigned_engineer: assigned_engineer,
         engineer_name: `${engineerCheck.recordset[0].first_name} ${engineerCheck.recordset[0].last_name}`,
@@ -666,15 +894,26 @@ router.put('/:id/reject',
 
     const pool = await connectDB();
 
+    // Get request details including requester info
     const request = await pool.request()
       .input('id', sql.UniqueIdentifier, id)
-      .query('SELECT id, status FROM consumable_requests WHERE id = @id');
+      .query(`
+        SELECT cr.id, cr.status, cr.request_number, cr.requested_by, cr.quantity_requested,
+               c.name as consumable_name,
+               u.first_name + ' ' + u.last_name as requester_name, u.email as requester_email
+        FROM consumable_requests cr
+        JOIN consumables c ON cr.consumable_id = c.id
+        JOIN USER_MASTER u ON cr.requested_by = u.user_id
+        WHERE cr.id = @id
+      `);
 
     if (request.recordset.length === 0) {
       return sendNotFound(res, 'Request not found');
     }
 
-    if (request.recordset[0].status !== 'pending') {
+    const reqData = request.recordset[0];
+
+    if (reqData.status !== 'pending') {
       return sendError(res, 'Request is not in pending status', 400);
     }
 
@@ -691,6 +930,50 @@ router.put('/:id/reject',
             updated_at = GETUTCDATE()
         WHERE id = @id
       `);
+
+    // Send notification to requester
+    try {
+      // In-app notification
+      await NotificationModel.createNotification({
+        user_id: reqData.requested_by,
+        ticket_id: null,
+        notification_type: 'consumable_rejected',
+        title: `Request Rejected: ${reqData.request_number}`,
+        message: `Your consumable request for ${reqData.quantity_requested} x ${reqData.consumable_name} has been rejected. Reason: ${rejection_reason}`,
+        priority: 'medium',
+        related_data: {
+          request_id: id,
+          request_number: reqData.request_number,
+          consumable_name: reqData.consumable_name,
+          quantity: reqData.quantity_requested,
+          rejection_reason: rejection_reason
+        }
+      });
+
+      // Email notification
+      if (reqData.requester_email) {
+        const emailSubject = `Consumable Request Rejected: ${reqData.request_number}`;
+        const emailBody = `
+Hello ${reqData.requester_name},
+
+Unfortunately, your consumable request has been rejected.
+
+Request Details:
+- Request Number: ${reqData.request_number}
+- Consumable: ${reqData.consumable_name}
+- Quantity Requested: ${reqData.quantity_requested}
+
+Rejection Reason: ${rejection_reason}
+
+If you believe this was a mistake or have questions, please contact your coordinator.
+
+This is an automated notification. Please do not reply to this email.
+        `;
+        await emailService.sendEmail(reqData.requester_email, emailSubject, emailBody.trim());
+      }
+    } catch (notificationError) {
+      console.error('Failed to send rejection notification:', notificationError.message);
+    }
 
     sendSuccess(res, null, 'Request rejected');
   })
@@ -711,11 +994,19 @@ router.put('/:id/deliver',
 
     const pool = await connectDB();
 
+    // Get request details including requester info
     const request = await pool.request()
       .input('id', sql.UniqueIdentifier, id)
       .query(`
-        SELECT id, status, requested_by, assigned_engineer, request_number
-        FROM consumable_requests WHERE id = @id
+        SELECT cr.id, cr.status, cr.requested_by, cr.assigned_engineer, cr.request_number, cr.quantity_requested,
+               c.name as consumable_name,
+               u.first_name + ' ' + u.last_name as requester_name, u.email as requester_email,
+               eng.first_name + ' ' + eng.last_name as engineer_name
+        FROM consumable_requests cr
+        JOIN consumables c ON cr.consumable_id = c.id
+        JOIN USER_MASTER u ON cr.requested_by = u.user_id
+        LEFT JOIN USER_MASTER eng ON cr.assigned_engineer = eng.user_id
+        WHERE cr.id = @id
       `);
 
     if (request.recordset.length === 0) {
@@ -750,6 +1041,50 @@ router.put('/:id/deliver',
             updated_at = GETUTCDATE()
         WHERE id = @id
       `);
+
+    // Send notification to requester
+    try {
+      // In-app notification
+      await NotificationModel.createNotification({
+        user_id: reqData.requested_by,
+        ticket_id: null,
+        notification_type: 'consumable_delivered',
+        title: `Consumable Delivered: ${reqData.request_number}`,
+        message: `Your consumable request for ${reqData.quantity_requested} x ${reqData.consumable_name} has been delivered by ${reqData.engineer_name || 'the engineer'}.`,
+        priority: 'low',
+        related_data: {
+          request_id: id,
+          request_number: reqData.request_number,
+          consumable_name: reqData.consumable_name,
+          quantity: reqData.quantity_requested,
+          delivered_by: reqData.engineer_name
+        }
+      });
+
+      // Email notification
+      if (reqData.requester_email) {
+        const emailSubject = `Consumable Delivered: ${reqData.request_number}`;
+        const emailBody = `
+Hello ${reqData.requester_name},
+
+Your consumable request has been delivered!
+
+Delivery Details:
+- Request Number: ${reqData.request_number}
+- Consumable: ${reqData.consumable_name}
+- Quantity: ${reqData.quantity_requested}
+- Delivered By: ${reqData.engineer_name || 'Engineer'}
+${delivery_notes ? `- Notes: ${delivery_notes}` : ''}
+
+If you have any issues with the delivery, please create a new ticket.
+
+This is an automated notification. Please do not reply to this email.
+        `;
+        await emailService.sendEmail(reqData.requester_email, emailSubject, emailBody.trim());
+      }
+    } catch (notificationError) {
+      console.error('Failed to send delivery notification:', notificationError.message);
+    }
 
     sendSuccess(res, { request_number: reqData.request_number }, 'Delivery confirmed successfully');
   })

@@ -274,22 +274,13 @@ Please do not reply to this email.
 
   /**
    * Log notification details to database
+   * Note: Notification logging is already handled in logNotification method
    */
   async logNotificationDetails(notificationId, sendResults) {
-    try {
-      const pool = await connectDB();
-
-      await pool.request()
-        .input('notificationId', sql.UniqueIdentifier, notificationId)
-        .input('details', sql.NVarChar(sql.MAX), JSON.stringify(sendResults))
-        .query(`
-          UPDATE ESCALATION_NOTIFICATIONS_LOG
-          SET notification_details = @details
-          WHERE notification_id = @notificationId
-        `);
-    } catch (error) {
-      console.error('Error logging notification details:', error);
-    }
+    // Notification details are already logged with delivery_status
+    // This method is kept for backward compatibility but doesn't need to do anything
+    // since ESCALATION_NOTIFICATIONS_LOG doesn't have a notification_details column
+    return;
   }
 
   /**

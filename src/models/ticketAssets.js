@@ -317,6 +317,7 @@ class TicketAssetsModel {
         LEFT JOIN categories c ON p.category_id = c.id
         WHERE a.assigned_to = @userId
           AND a.is_active = 1
+          AND a.status <> 'retired'
           AND a.asset_type IN ('standalone', 'parent')
 
         UNION ALL
@@ -343,6 +344,8 @@ class TicketAssetsModel {
         LEFT JOIN categories c ON p.category_id = c.id
         WHERE parent.assigned_to = @userId
           AND comp.is_active = 1
+          AND comp.status <> 'retired'
+          AND parent.status <> 'retired'
           AND comp.asset_type = 'component'
 
         ORDER BY asset_type, product_name, asset_tag

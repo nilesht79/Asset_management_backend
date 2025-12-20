@@ -7,6 +7,7 @@
 const { connectDB, sql } = require('../config/database');
 const SlaTrackingModel = require('../models/slaTracking');
 const businessHoursCalculator = require('../utils/businessHoursCalculator');
+const inAppNotificationService = require('./inAppNotificationService');
 
 class EscalationEngine {
   /**
@@ -193,6 +194,29 @@ class EscalationEngine {
         .input('notificationCount', sql.Int, notificationCount)
         .query(logQuery);
 
+      // Create in-app notifications for recipients
+      try {
+        const userIds = recipients.map(r => r.user_id).filter(id => id); // Only users with user_id
+
+        if (userIds.length > 0) {
+          await inAppNotificationService.createSlaNotification({
+            user_ids: userIds,
+            ticket_id: tracking.ticket_id,
+            ticket_number: tracking.ticket_number,
+            ticket_title: tracking.ticket_title,
+            priority: tracking.ticket_priority,
+            trigger_type: rule.trigger_type,
+            escalation_level: rule.escalation_level,
+            elapsed_business_minutes: tracking.business_elapsed_minutes,
+            max_tat_minutes: tracking.max_tat_minutes,
+            sla_rule_name: tracking.sla_rule_name
+          });
+        }
+      } catch (notifError) {
+        console.error('Error creating in-app notifications:', notifError);
+        // Don't fail escalation if in-app notification fails
+      }
+
       return {
         notification: logResult.recordset[0],
         rule: rule,
@@ -222,6 +246,7 @@ class EscalationEngine {
             u_eng.email AS engineer_email,
             u_coord.first_name + ' ' + u_coord.last_name AS coordinator_name,
             u_coord.email AS coordinator_email,
+            u_coord.role AS coordinator_role,
             u_user.first_name + ' ' + u_user.last_name AS created_for_name,
             u_user.email AS created_for_email,
             d.department_name
@@ -242,6 +267,7 @@ class EscalationEngine {
           // Get the engineer assigned to this specific ticket
           if (ticket.engineer_email) {
             recipients.push({
+              user_id: ticket.assigned_to_engineer_id,
               name: ticket.engineer_name,
               email: ticket.engineer_email,
               type: 'engineer'
@@ -250,21 +276,23 @@ class EscalationEngine {
           break;
 
         case 'coordinator':
-          // First add the ticket's coordinator if exists
-          if (ticket.coordinator_email) {
+          // First add the ticket's coordinator if exists AND their current role is still coordinator
+          if (ticket.coordinator_email && ticket.coordinator_role === 'coordinator') {
             recipients.push({
+              user_id: ticket.created_by_coordinator_id,
               name: ticket.coordinator_name,
               email: ticket.coordinator_email,
               type: 'coordinator'
             });
           }
-          // Then add other coordinators up to the limit
+          // Then add other coordinators (system-wide, all departments)
           const coordResult = await pool.request()
             .input('limit', sql.Int, limit)
             .query(`
-              SELECT TOP (@limit) first_name + ' ' + last_name AS name, email
+              SELECT TOP (@limit) user_id, first_name + ' ' + last_name AS name, email
               FROM USER_MASTER
-              WHERE role = 'coordinator' AND is_active = 1
+              WHERE role = 'coordinator'
+                AND is_active = 1
               ORDER BY NEWID()
             `);
           for (const coord of coordResult.recordset) {
@@ -279,7 +307,7 @@ class EscalationEngine {
           const itHeadResult = await pool.request()
             .input('limit', sql.Int, limit)
             .query(`
-              SELECT TOP (@limit) first_name + ' ' + last_name AS name, email
+              SELECT TOP (@limit) user_id, first_name + ' ' + last_name AS name, email
               FROM USER_MASTER
               WHERE role = 'it_head' AND is_active = 1
               ORDER BY NEWID()
@@ -290,16 +318,17 @@ class EscalationEngine {
           break;
 
         case 'department_head':
-          // Get Department Head users (prioritize same department)
+          // Get Department Head users from the SAME DEPARTMENT only
           const dhResult = await pool.request()
             .input('departmentId', sql.UniqueIdentifier, ticket.department_id)
             .input('limit', sql.Int, limit)
             .query(`
-              SELECT TOP (@limit) first_name + ' ' + last_name AS name, email
+              SELECT TOP (@limit) user_id, first_name + ' ' + last_name AS name, email
               FROM USER_MASTER
-              WHERE role = 'department_head' AND is_active = 1
-                AND (department_id = @departmentId OR department_id IS NULL)
-              ORDER BY CASE WHEN department_id = @departmentId THEN 0 ELSE 1 END, NEWID()
+              WHERE role = 'department_head'
+                AND is_active = 1
+                AND department_id = @departmentId
+              ORDER BY NEWID()
             `);
           for (const dh of dhResult.recordset) {
             recipients.push({ ...dh, type: 'department_head' });
@@ -311,7 +340,7 @@ class EscalationEngine {
           const adminResult = await pool.request()
             .input('limit', sql.Int, limit)
             .query(`
-              SELECT TOP (@limit) first_name + ' ' + last_name AS name, email
+              SELECT TOP (@limit) user_id, first_name + ' ' + last_name AS name, email
               FROM USER_MASTER
               WHERE role = 'admin' AND is_active = 1
               ORDER BY NEWID()
@@ -326,7 +355,7 @@ class EscalationEngine {
           const superadminResult = await pool.request()
             .input('limit', sql.Int, limit)
             .query(`
-              SELECT TOP (@limit) first_name + ' ' + last_name AS name, email
+              SELECT TOP (@limit) user_id, first_name + ' ' + last_name AS name, email
               FROM USER_MASTER
               WHERE role = 'superadmin' AND is_active = 1
               ORDER BY NEWID()
@@ -343,7 +372,7 @@ class EscalationEngine {
               .input('role', sql.NVarChar(50), rule.recipient_role)
               .input('limit', sql.Int, limit)
               .query(`
-                SELECT TOP (@limit) first_name + ' ' + last_name AS name, email
+                SELECT TOP (@limit) user_id, first_name + ' ' + last_name AS name, email
                 FROM USER_MASTER
                 WHERE role = @role AND is_active = 1
                 ORDER BY NEWID()
@@ -362,13 +391,38 @@ class EscalationEngine {
               .input('departmentId', sql.UniqueIdentifier, ticket.department_id)
               .input('limit', sql.Int, limit)
               .query(`
-                SELECT TOP (@limit) first_name + ' ' + last_name AS name, email, designation
+                SELECT TOP (@limit) user_id, first_name + ' ' + last_name AS name, email, designation
                 FROM USER_MASTER
                 WHERE designation = @designation AND is_active = 1
                 ORDER BY CASE WHEN department_id = @departmentId THEN 0 ELSE 1 END, NEWID()
               `);
             for (const user of designationResult.recordset) {
               recipients.push({ ...user, type: user.designation });
+            }
+          }
+          break;
+
+        case 'custom_email':
+          // Get custom email addresses from the rule's custom_emails field
+          if (rule.custom_emails) {
+            try {
+              const customEmails = typeof rule.custom_emails === 'string'
+                ? JSON.parse(rule.custom_emails)
+                : rule.custom_emails;
+
+              if (Array.isArray(customEmails)) {
+                for (const email of customEmails) {
+                  if (email && typeof email === 'string' && email.trim()) {
+                    recipients.push({
+                      name: email.split('@')[0], // Use email prefix as name
+                      email: email.trim(),
+                      type: 'custom_email'
+                    });
+                  }
+                }
+              }
+            } catch (error) {
+              console.error('Error parsing custom_emails:', error);
             }
           }
           break;

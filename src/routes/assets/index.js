@@ -421,7 +421,7 @@ router.get('/statistics',
   })
 );
 
-// GET /assets/my-assets - Get assets assigned to the current user
+// GET /assets/my-assets - Get assets assigned to the current user (includes components of parent assets)
 router.get('/my-assets',
   asyncHandler(async (req, res) => {
     const userId = req.user.id;
@@ -430,12 +430,16 @@ router.get('/my-assets',
     const result = await pool.request()
       .input('userId', sql.UniqueIdentifier, userId)
       .query(`
+        -- Get directly assigned assets (standalone and parent)
         SELECT
           a.id,
           a.asset_tag,
           a.serial_number,
           a.status,
           a.condition_status,
+          a.asset_type,
+          a.parent_asset_id,
+          NULL as parent_asset_tag,
           p.id as product_id,
           p.name as product_name,
           p.name as asset_product_name,
@@ -445,50 +449,8 @@ router.get('/my-assets',
           c.id as category_id,
           c.name as category_name,
           pt.id as product_type_id,
-          pt.name as product_type_name
-        FROM assets a
-        LEFT JOIN products p ON a.product_id = p.id
-        LEFT JOIN oems o ON p.oem_id = o.id
-        LEFT JOIN categories c ON p.category_id = c.id
-        LEFT JOIN product_types pt ON p.product_type_id = pt.id
-        WHERE a.assigned_to = @userId
-          AND a.is_active = 1
-          AND a.status IN ('assigned', 'in_use')
-        ORDER BY a.updated_at DESC
-      `);
-
-    sendSuccess(res, {
-      assets: result.recordset
-    }, 'User assets retrieved successfully');
-  })
-);
-
-// GET /assets/user/:userId/assets - Get assets for a specific user (for coordinators to raise requests on behalf)
-router.get('/user/:userId/assets',
-  requireRole(['coordinator', 'admin', 'superadmin']),
-  asyncHandler(async (req, res) => {
-    const { userId } = req.params;
-    const pool = await connectDB();
-
-    const result = await pool.request()
-      .input('userId', sql.UniqueIdentifier, userId)
-      .query(`
-        SELECT
-          a.id,
-          a.asset_tag,
-          a.serial_number,
-          a.status,
-          a.condition_status,
-          p.id as product_id,
-          p.name as product_name,
-          p.name as asset_product_name,
-          p.model as product_model,
-          o.id as oem_id,
-          o.name as oem_name,
-          c.id as category_id,
-          c.name as category_name,
-          pt.id as product_type_id,
-          pt.name as product_type_name
+          pt.name as product_type_name,
+          0 as is_component
         FROM assets a
         LEFT JOIN products p ON a.product_id = p.id
         LEFT JOIN oems o ON p.oem_id = o.id
@@ -497,7 +459,129 @@ router.get('/user/:userId/assets',
         WHERE a.assigned_to = @userId
           AND a.is_active = 1
           AND a.status IN ('assigned', 'in_use')
-        ORDER BY a.updated_at DESC
+          AND (a.asset_type IS NULL OR a.asset_type IN ('standalone', 'parent'))
+
+        UNION ALL
+
+        -- Get components of assigned parent assets
+        SELECT
+          comp.id,
+          comp.asset_tag,
+          comp.serial_number,
+          comp.status,
+          comp.condition_status,
+          comp.asset_type,
+          comp.parent_asset_id,
+          parent.asset_tag as parent_asset_tag,
+          p.id as product_id,
+          p.name as product_name,
+          p.name as asset_product_name,
+          p.model as product_model,
+          o.id as oem_id,
+          o.name as oem_name,
+          c.id as category_id,
+          c.name as category_name,
+          pt.id as product_type_id,
+          pt.name as product_type_name,
+          1 as is_component
+        FROM assets comp
+        INNER JOIN assets parent ON comp.parent_asset_id = parent.id
+        LEFT JOIN products p ON comp.product_id = p.id
+        LEFT JOIN oems o ON p.oem_id = o.id
+        LEFT JOIN categories c ON p.category_id = c.id
+        LEFT JOIN product_types pt ON p.type_id = pt.id
+        WHERE parent.assigned_to = @userId
+          AND comp.is_active = 1
+          AND comp.status <> 'retired'
+          AND parent.status <> 'retired'
+          AND comp.asset_type = 'component'
+
+        ORDER BY is_component, product_name, asset_tag
+      `);
+
+    sendSuccess(res, {
+      assets: result.recordset
+    }, 'User assets retrieved successfully');
+  })
+);
+
+// GET /assets/user/:userId/assets - Get assets for a specific user (for coordinators/engineers to raise requests on behalf)
+router.get('/user/:userId/assets',
+  requireRole(['coordinator', 'admin', 'superadmin', 'engineer']),
+  asyncHandler(async (req, res) => {
+    const { userId } = req.params;
+    const pool = await connectDB();
+
+    const result = await pool.request()
+      .input('userId', sql.UniqueIdentifier, userId)
+      .query(`
+        -- Get directly assigned assets (standalone and parent)
+        SELECT
+          a.id,
+          a.asset_tag,
+          a.serial_number,
+          a.status,
+          a.condition_status,
+          a.asset_type,
+          a.parent_asset_id,
+          NULL as parent_asset_tag,
+          p.id as product_id,
+          p.name as product_name,
+          p.name as asset_product_name,
+          p.model as product_model,
+          o.id as oem_id,
+          o.name as oem_name,
+          c.id as category_id,
+          c.name as category_name,
+          pt.id as product_type_id,
+          pt.name as product_type_name,
+          0 as is_component
+        FROM assets a
+        LEFT JOIN products p ON a.product_id = p.id
+        LEFT JOIN oems o ON p.oem_id = o.id
+        LEFT JOIN categories c ON p.category_id = c.id
+        LEFT JOIN product_types pt ON p.type_id = pt.id
+        WHERE a.assigned_to = @userId
+          AND a.is_active = 1
+          AND a.status IN ('assigned', 'in_use')
+          AND (a.asset_type IS NULL OR a.asset_type IN ('standalone', 'parent'))
+
+        UNION ALL
+
+        -- Get components of assigned parent assets
+        SELECT
+          comp.id,
+          comp.asset_tag,
+          comp.serial_number,
+          comp.status,
+          comp.condition_status,
+          comp.asset_type,
+          comp.parent_asset_id,
+          parent.asset_tag as parent_asset_tag,
+          p.id as product_id,
+          p.name as product_name,
+          p.name as asset_product_name,
+          p.model as product_model,
+          o.id as oem_id,
+          o.name as oem_name,
+          c.id as category_id,
+          c.name as category_name,
+          pt.id as product_type_id,
+          pt.name as product_type_name,
+          1 as is_component
+        FROM assets comp
+        INNER JOIN assets parent ON comp.parent_asset_id = parent.id
+        LEFT JOIN products p ON comp.product_id = p.id
+        LEFT JOIN oems o ON p.oem_id = o.id
+        LEFT JOIN categories c ON p.category_id = c.id
+        LEFT JOIN product_types pt ON p.type_id = pt.id
+        WHERE parent.assigned_to = @userId
+          AND comp.is_active = 1
+          AND comp.status <> 'retired'
+          AND parent.status <> 'retired'
+          AND comp.asset_type = 'component'
+
+        ORDER BY is_component, product_name, asset_tag
       `);
 
     sendSuccess(res, {

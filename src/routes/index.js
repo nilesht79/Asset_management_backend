@@ -32,6 +32,7 @@ const slaRoutes = require('./sla');
 const serviceReportRoutes = require('./serviceReport');
 const assetJobReportRoutes = require('./asset-job-reports');
 const gatePassRoutes = require('./gate-passes');
+const notificationRoutes = require('./notifications');
 
 const router = express.Router();
 
@@ -91,7 +92,8 @@ router.get('/', (req, res) => {
       sla: '/sla',
       serviceReports: '/service-reports',
       assetReports: '/asset-reports',
-      gatePasses: '/gate-passes'
+      gatePasses: '/gate-passes',
+      notifications: '/notifications'
     },
     documentation: '/docs',
     health: '/health',
@@ -129,6 +131,7 @@ router.use('/sla', slaRoutes);
 router.use('/service-reports', serviceReportRoutes);
 router.use('/asset-reports/job-reports', assetJobReportRoutes);
 router.use('/gate-passes', gatePassRoutes);
+router.use('/notifications', notificationRoutes);
 
 
 // API version info

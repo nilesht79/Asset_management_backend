@@ -698,23 +698,36 @@ class GatePassPDF {
   }
 
   /**
-   * Render footer - uses line drawing to avoid page creation issues
+   * Render footer with company branding and page numbers
    */
   static renderFooter(doc, gatePass, companySettings) {
-    const footerY = doc.page.height - 35;
+    const footerY = doc.page.height - 40;
     const margin = 40;
     const pageWidth = doc.page.width - margin * 2;
 
-    // Draw footer line only to avoid page creation
+    // Draw footer line
     doc.moveTo(margin, footerY - 5)
       .lineTo(margin + pageWidth, footerY - 5)
       .strokeColor(this.colors.border)
       .lineWidth(0.5)
       .stroke();
 
-    // Reset cursor to start to prevent blank page
-    doc.x = margin;
-    doc.y = margin;
+    // Save graphics state
+    doc.save();
+
+    // Footer text - left aligned with explicit positioning
+    doc.font('Helvetica').fontSize(7).fillColor(this.colors.gray);
+    doc.text('Report Generated from Poleplus ITSM ©2026. Polestar Consulting Pvt. Ltd.',
+      margin, footerY, { lineBreak: false }
+    );
+
+    // Page number - right aligned with explicit positioning
+    doc.text('Page 1 of 1',
+      margin + pageWidth - 80, footerY, { lineBreak: false }
+    );
+
+    // Restore graphics state to prevent blank page
+    doc.restore();
   }
 }
 

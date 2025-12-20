@@ -397,58 +397,517 @@ router.get('/employee',
   requirePermission(permissions.ASSET_READ),
   asyncHandler(async (req, res) => {
     const pool = await connectDB();
-    const userId = req.user.userId;
+    const userId = req.user.id;
 
     try {
-      // Get employee's assigned assets (Phase 2 - placeholder for now)
+      // 1. Get KPI Statistics
+      const statsResult = await pool.request()
+        .input('userId', sql.UniqueIdentifier, userId)
+        .query(`
+          SELECT
+            -- My Assets (exclude retired)
+            (SELECT COUNT(*) FROM assets WHERE assigned_to = @userId AND is_active = 1 AND status <> 'retired') as total_assets,
+
+            -- My Requisitions
+            (SELECT COUNT(*) FROM ASSET_REQUISITIONS WHERE requested_by = @userId) as total_requisitions,
+            (SELECT COUNT(*) FROM ASSET_REQUISITIONS WHERE requested_by = @userId
+              AND status IN ('pending_dept_head', 'pending_it_head', 'pending_assignment')) as pending_requisitions,
+            (SELECT COUNT(*) FROM ASSET_REQUISITIONS WHERE requested_by = @userId
+              AND status IN ('approved_by_dept_head', 'approved_by_it_head', 'assigned')) as approved_requisitions,
+            (SELECT COUNT(*) FROM ASSET_REQUISITIONS WHERE requested_by = @userId
+              AND status = 'completed') as completed_requisitions,
+
+            -- My Tickets
+            (SELECT COUNT(*) FROM TICKETS WHERE created_by_user_id = @userId) as total_tickets,
+            (SELECT COUNT(*) FROM TICKETS WHERE created_by_user_id = @userId
+              AND status IN ('open', 'assigned', 'in_progress')) as open_tickets,
+            (SELECT COUNT(*) FROM TICKETS WHERE created_by_user_id = @userId
+              AND status IN ('resolved', 'closed')) as resolved_tickets,
+
+            -- My Consumable Requests
+            (SELECT COUNT(*) FROM consumable_requests WHERE requested_by = @userId) as total_consumable_requests,
+            (SELECT COUNT(*) FROM consumable_requests WHERE requested_by = @userId
+              AND status = 'pending') as pending_consumable_requests,
+            (SELECT COUNT(*) FROM consumable_requests WHERE requested_by = @userId
+              AND status = 'delivered') as delivered_consumable_requests
+        `);
+
+      // 2. Get Recent Assets (Top 5)
       const assetsResult = await pool.request()
         .input('userId', sql.UniqueIdentifier, userId)
         .query(`
-          SELECT
-            'No assets assigned yet' as message,
-            0 as total_assets
+          SELECT TOP 5
+            a.id,
+            a.asset_tag,
+            a.serial_number,
+            p.name as product_name,
+            c.name as category_name,
+            a.status,
+            a.condition_status,
+            a.created_at as assigned_at
+          FROM assets a
+          LEFT JOIN products p ON a.product_id = p.id
+          LEFT JOIN categories c ON p.category_id = c.id
+          WHERE a.assigned_to = @userId AND a.is_active = 1 AND a.status <> 'retired'
+          ORDER BY a.created_at DESC
         `);
 
-      // Get employee's requisitions (Phase 2 - placeholder for now)
+      // 3. Get Recent Requisitions (Top 5)
       const requisitionsResult = await pool.request()
         .input('userId', sql.UniqueIdentifier, userId)
         .query(`
-          SELECT
-            'No requisitions submitted yet' as message,
-            0 as total_requests,
-            0 as pending_requests,
-            0 as approved_requests
+          SELECT TOP 5
+            requisition_id,
+            requisition_number,
+            purpose,
+            status,
+            urgency,
+            created_at,
+            required_by_date
+          FROM ASSET_REQUISITIONS
+          WHERE requested_by = @userId
+          ORDER BY created_at DESC
         `);
 
-      // Get employee's tickets (Phase 2 - placeholder for now)
+      // 4. Get Recent Tickets (Top 5)
       const ticketsResult = await pool.request()
         .input('userId', sql.UniqueIdentifier, userId)
         .query(`
-          SELECT
-            'No tickets created yet' as message,
-            0 as total_tickets,
-            0 as open_tickets
+          SELECT TOP 5
+            t.ticket_id,
+            t.ticket_number,
+            t.title,
+            t.status,
+            t.priority,
+            t.category,
+            t.created_at,
+            t.resolved_at,
+            u.first_name + ' ' + u.last_name as engineer_name
+          FROM TICKETS t
+          LEFT JOIN USER_MASTER u ON t.assigned_to_engineer_id = u.user_id
+          WHERE t.created_by_user_id = @userId
+          ORDER BY t.created_at DESC
         `);
 
+      // 5. Get Recent Consumable Requests (Top 5)
+      const consumableRequestsResult = await pool.request()
+        .input('userId', sql.UniqueIdentifier, userId)
+        .query(`
+          SELECT TOP 5
+            cr.id,
+            cr.request_number,
+            c.name as consumable_name,
+            cr.quantity_requested,
+            cr.quantity_issued,
+            cr.status,
+            cr.priority,
+            cr.created_at,
+            cr.delivered_at
+          FROM consumable_requests cr
+          JOIN consumables c ON cr.consumable_id = c.id
+          WHERE cr.requested_by = @userId
+          ORDER BY cr.created_at DESC
+        `);
+
+      const stats = statsResult.recordset[0];
+
       const dashboardData = {
-        myAssets: [],
-        myRequests: [],
-        myTickets: [],
         stats: {
-          totalAssets: assetsResult.recordset[0]?.total_assets || 0,
-          totalRequests: requisitionsResult.recordset[0]?.total_requests || 0,
-          pendingRequests: requisitionsResult.recordset[0]?.pending_requests || 0,
-          approvedRequests: requisitionsResult.recordset[0]?.approved_requests || 0,
-          totalTickets: ticketsResult.recordset[0]?.total_tickets || 0,
-          openTickets: ticketsResult.recordset[0]?.open_tickets || 0
+          totalAssets: stats.total_assets || 0,
+          totalRequisitions: stats.total_requisitions || 0,
+          pendingRequisitions: stats.pending_requisitions || 0,
+          approvedRequisitions: stats.approved_requisitions || 0,
+          completedRequisitions: stats.completed_requisitions || 0,
+          totalTickets: stats.total_tickets || 0,
+          openTickets: stats.open_tickets || 0,
+          resolvedTickets: stats.resolved_tickets || 0,
+          totalConsumableRequests: stats.total_consumable_requests || 0,
+          pendingConsumableRequests: stats.pending_consumable_requests || 0,
+          deliveredConsumableRequests: stats.delivered_consumable_requests || 0
         },
-        message: 'Employee dashboard - Phase 2 features coming soon'
+        myAssets: assetsResult.recordset,
+        myRequisitions: requisitionsResult.recordset,
+        myTickets: ticketsResult.recordset,
+        myConsumableRequests: consumableRequestsResult.recordset
       };
 
       sendSuccess(res, dashboardData, 'Employee dashboard data retrieved successfully');
     } catch (error) {
       console.error('Employee dashboard error:', error);
       sendError(res, 'Failed to load employee dashboard data', 500);
+    }
+  })
+);
+
+// GET /dashboard/engineer - Engineer dashboard data
+router.get('/engineer',
+  requireRole([USER_ROLES.ENGINEER, USER_ROLES.SUPERADMIN, USER_ROLES.ADMIN]),
+  asyncHandler(async (req, res) => {
+    const pool = await connectDB();
+    const engineerId = req.user.id;
+
+    try {
+      // 1. Get KPI Statistics
+      const kpiResult = await pool.request()
+        .input('engineerId', sql.UniqueIdentifier, engineerId)
+        .query(`
+          SELECT
+            -- Active Tickets
+            (
+              SELECT COUNT(*)
+              FROM TICKETS
+              WHERE assigned_to_engineer_id = @engineerId
+              AND status IN ('open', 'assigned', 'in_progress', 'pending')
+            ) as active_tickets,
+
+            -- Pending Deliveries
+            (
+              SELECT COUNT(*)
+              FROM ASSET_DELIVERY_TICKETS
+              WHERE delivered_by = @engineerId
+              AND status IN ('pending', 'scheduled')
+            ) as pending_deliveries,
+
+            -- SLA At Risk (tickets in warning or critical zones)
+            (
+              SELECT COUNT(*)
+              FROM TICKET_SLA_TRACKING sla
+              JOIN TICKETS t ON sla.ticket_id = t.ticket_id
+              WHERE t.assigned_to_engineer_id = @engineerId
+              AND sla.sla_status IN ('warning', 'critical')
+              AND t.status NOT IN ('resolved', 'closed')
+            ) as sla_at_risk,
+
+            -- Today's Completed
+            (
+              SELECT COUNT(*)
+              FROM TICKETS
+              WHERE assigned_to_engineer_id = @engineerId
+              AND CAST(resolved_at AS DATE) = CAST(GETDATE() AS DATE)
+            ) as today_completed,
+
+            -- Overdue Tickets (breached SLA - exceeded max TAT)
+            (
+              SELECT COUNT(*)
+              FROM TICKETS t
+              JOIN TICKET_SLA_TRACKING sla ON t.ticket_id = sla.ticket_id
+              WHERE t.assigned_to_engineer_id = @engineerId
+              AND t.status NOT IN ('resolved', 'closed')
+              AND sla.breach_triggered_at IS NOT NULL
+            ) as overdue_tickets,
+
+            -- Pending Consumable Deliveries (assigned to engineer)
+            (
+              SELECT COUNT(*)
+              FROM consumable_requests
+              WHERE assigned_engineer = @engineerId
+              AND status = 'approved'
+            ) as pending_consumable_deliveries
+        `);
+
+      // 2. Get Active Tickets (Top 10 most urgent)
+      const activeTicketsResult = await pool.request()
+        .input('engineerId', sql.UniqueIdentifier, engineerId)
+        .query(`
+          SELECT TOP 10
+            t.ticket_id,
+            t.ticket_number,
+            t.title,
+            t.priority,
+            t.status,
+            t.category,
+            t.created_at,
+            t.due_date,
+            sla.sla_status,
+            sla.business_elapsed_minutes,
+            sla.max_target_time,
+            sla.warning_triggered_at,
+            sla.breach_triggered_at,
+            CASE
+              WHEN sla.breach_triggered_at IS NOT NULL THEN
+                DATEDIFF(MINUTE, sla.breach_triggered_at, GETDATE())
+              WHEN sla.warning_triggered_at IS NOT NULL THEN
+                DATEDIFF(MINUTE, GETDATE(), sla.max_target_time)
+              ELSE NULL
+            END as time_remaining_minutes
+          FROM TICKETS t
+          LEFT JOIN TICKET_SLA_TRACKING sla ON t.ticket_id = sla.ticket_id
+          WHERE t.assigned_to_engineer_id = @engineerId
+          AND t.status IN ('open', 'assigned', 'in_progress', 'pending')
+          ORDER BY
+            CASE t.priority
+              WHEN 'critical' THEN 1
+              WHEN 'emergency' THEN 1
+              WHEN 'high' THEN 2
+              WHEN 'medium' THEN 3
+              WHEN 'low' THEN 4
+              ELSE 5
+            END,
+            CASE
+              WHEN sla.breach_triggered_at IS NOT NULL THEN 1
+              WHEN sla.sla_status = 'critical' THEN 2
+              WHEN sla.sla_status = 'warning' THEN 3
+              ELSE 4
+            END,
+            t.due_date ASC
+        `);
+
+      // 3. Get Pending Deliveries (Top 10)
+      const deliveriesResult = await pool.request()
+        .input('engineerId', sql.UniqueIdentifier, engineerId)
+        .query(`
+          SELECT TOP 10
+            ticket_id,
+            ticket_number,
+            asset_tag,
+            user_name,
+            delivery_location_name,
+            scheduled_delivery_date,
+            status
+          FROM ASSET_DELIVERY_TICKETS
+          WHERE delivered_by = @engineerId
+          AND status IN ('pending', 'scheduled')
+          ORDER BY scheduled_delivery_date ASC
+        `);
+
+      // 4. Get Pending Consumable Deliveries (Top 10)
+      const consumableDeliveriesResult = await pool.request()
+        .input('engineerId', sql.UniqueIdentifier, engineerId)
+        .query(`
+          SELECT TOP 10
+            cr.id,
+            cr.request_number,
+            c.name as consumable_name,
+            cr.quantity_requested,
+            u.first_name + ' ' + u.last_name as requested_for_name,
+            loc.name as location_name,
+            cr.priority,
+            cr.approved_at,
+            cr.created_at
+          FROM consumable_requests cr
+          JOIN consumables c ON cr.consumable_id = c.id
+          JOIN USER_MASTER u ON cr.requested_by = u.user_id
+          LEFT JOIN locations loc ON u.location_id = loc.id
+          WHERE cr.assigned_engineer = @engineerId
+          AND cr.status = 'approved'
+          ORDER BY
+            CASE cr.priority
+              WHEN 'urgent' THEN 1
+              WHEN 'high' THEN 2
+              WHEN 'normal' THEN 3
+              WHEN 'low' THEN 4
+              ELSE 5
+            END,
+            cr.approved_at ASC
+        `);
+
+      // 5. Get Ticket Resolution Trend (Last 7 days)
+      const resolutionTrendResult = await pool.request()
+        .input('engineerId', sql.UniqueIdentifier, engineerId)
+        .query(`
+          SELECT
+            CAST(resolved_at AS DATE) as date,
+            COUNT(*) as resolved_count
+          FROM TICKETS
+          WHERE assigned_to_engineer_id = @engineerId
+          AND resolved_at >= DATEADD(DAY, -7, GETDATE())
+          GROUP BY CAST(resolved_at AS DATE)
+          ORDER BY date
+        `);
+
+      // 5. Get Tickets by Priority Distribution
+      const priorityDistributionResult = await pool.request()
+        .input('engineerId', sql.UniqueIdentifier, engineerId)
+        .query(`
+          SELECT
+            priority,
+            COUNT(*) as count
+          FROM TICKETS
+          WHERE assigned_to_engineer_id = @engineerId
+          AND status NOT IN ('closed', 'cancelled')
+          GROUP BY priority
+        `);
+
+      // 6. Get SLA Compliance Rate
+      const slaComplianceResult = await pool.request()
+        .input('engineerId', sql.UniqueIdentifier, engineerId)
+        .query(`
+          SELECT
+            COUNT(CASE WHEN sla.final_status = 'on_track' THEN 1 END) as within_sla_count,
+            COUNT(*) as total_resolved,
+            CASE
+              WHEN COUNT(*) > 0 THEN
+                CAST(COUNT(CASE WHEN sla.final_status = 'on_track' THEN 1 END) AS FLOAT) / COUNT(*) * 100
+              ELSE 0
+            END as compliance_percentage
+          FROM TICKETS t
+          JOIN TICKET_SLA_TRACKING sla ON t.ticket_id = sla.ticket_id
+          WHERE t.assigned_to_engineer_id = @engineerId
+          AND t.status IN ('resolved', 'closed')
+          AND t.resolved_at >= DATEADD(DAY, -30, GETDATE())
+        `);
+
+      // 8. Get Average Resolution Time
+      const avgResolutionResult = await pool.request()
+        .input('engineerId', sql.UniqueIdentifier, engineerId)
+        .query(`
+          SELECT
+            AVG(sla.business_elapsed_minutes) as avg_resolution_minutes,
+            AVG(DATEDIFF(MINUTE, sla.sla_start_time, sla.max_target_time)) as avg_sla_target_minutes
+          FROM TICKETS t
+          JOIN TICKET_SLA_TRACKING sla ON t.ticket_id = sla.ticket_id
+          WHERE t.assigned_to_engineer_id = @engineerId
+          AND t.status IN ('resolved', 'closed')
+          AND t.resolved_at >= DATEADD(DAY, -30, GETDATE())
+          AND sla.sla_start_time IS NOT NULL
+          AND sla.max_target_time IS NOT NULL
+        `);
+
+      // 7. Get Recent Service Reports (Top 5)
+      const serviceReportsResult = await pool.request()
+        .input('engineerId', sql.UniqueIdentifier, engineerId)
+        .query(`
+          SELECT TOP 5
+            sr.report_id,
+            sr.report_number,
+            sr.ticket_id,
+            sr.service_type,
+            sr.asset_id,
+            sr.created_at,
+            sr.status,
+            t.ticket_number,
+            a.asset_tag
+          FROM SERVICE_REPORTS sr
+          LEFT JOIN TICKETS t ON sr.ticket_id = t.ticket_id
+          LEFT JOIN assets a ON sr.asset_id = a.id
+          WHERE sr.created_by = @engineerId
+          ORDER BY sr.created_at DESC
+        `);
+
+      // 8. Get Work Summary (This Week and This Month - calendar based)
+      const workSummaryResult = await pool.request()
+        .input('engineerId', sql.UniqueIdentifier, engineerId)
+        .query(`
+          SELECT
+            -- This Week (current calendar week starting Sunday)
+            (
+              SELECT COUNT(*)
+              FROM TICKETS
+              WHERE assigned_to_engineer_id = @engineerId
+              AND status IN ('resolved', 'closed')
+              AND resolved_at >= DATETRUNC(WEEK, GETDATE())
+            ) as week_tickets_resolved,
+
+            (
+              SELECT COUNT(*)
+              FROM ASSET_DELIVERY_TICKETS
+              WHERE delivered_by = @engineerId
+              AND status = 'delivered'
+              AND actual_delivery_date >= DATETRUNC(WEEK, GETDATE())
+            ) as week_asset_deliveries_completed,
+
+            (
+              SELECT COUNT(*)
+              FROM consumable_requests
+              WHERE assigned_engineer = @engineerId
+              AND status = 'delivered'
+              AND delivered_at >= DATETRUNC(WEEK, GETDATE())
+            ) as week_consumable_deliveries_completed,
+
+            (
+              SELECT COUNT(*)
+              FROM RECONCILIATION_RECORDS
+              WHERE reconciled_by = @engineerId
+              AND reconciliation_status IN ('verified', 'discrepancy', 'damaged')
+              AND reconciled_at >= DATETRUNC(WEEK, GETDATE())
+            ) as week_assets_reconciled,
+
+            -- This Month (current calendar month)
+            (
+              SELECT COUNT(*)
+              FROM TICKETS
+              WHERE assigned_to_engineer_id = @engineerId
+              AND status IN ('resolved', 'closed')
+              AND resolved_at >= DATETRUNC(MONTH, GETDATE())
+            ) as month_tickets_resolved,
+
+            (
+              SELECT COUNT(*)
+              FROM ASSET_DELIVERY_TICKETS
+              WHERE delivered_by = @engineerId
+              AND status = 'delivered'
+              AND actual_delivery_date >= DATETRUNC(MONTH, GETDATE())
+            ) as month_asset_deliveries_completed,
+
+            (
+              SELECT COUNT(*)
+              FROM consumable_requests
+              WHERE assigned_engineer = @engineerId
+              AND status = 'delivered'
+              AND delivered_at >= DATETRUNC(MONTH, GETDATE())
+            ) as month_consumable_deliveries_completed,
+
+            (
+              SELECT COUNT(*)
+              FROM RECONCILIATION_RECORDS
+              WHERE reconciled_by = @engineerId
+              AND reconciliation_status IN ('verified', 'discrepancy', 'damaged')
+              AND reconciled_at >= DATETRUNC(MONTH, GETDATE())
+            ) as month_assets_reconciled
+        `);
+
+      // Build dashboard response
+      const kpi = kpiResult.recordset[0];
+      const slaCompliance = slaComplianceResult.recordset[0];
+      const avgResolution = avgResolutionResult.recordset[0];
+      const workSummary = workSummaryResult.recordset[0];
+
+      const dashboardData = {
+        kpi: {
+          activeTickets: kpi.active_tickets,
+          pendingDeliveries: kpi.pending_deliveries,
+          pendingConsumableDeliveries: kpi.pending_consumable_deliveries,
+          slaAtRisk: kpi.sla_at_risk,
+          todayCompleted: kpi.today_completed,
+          overdueTickets: kpi.overdue_tickets
+        },
+        activeTickets: activeTicketsResult.recordset,
+        pendingDeliveries: deliveriesResult.recordset,
+        pendingConsumableDeliveries: consumableDeliveriesResult.recordset,
+        performance: {
+          resolutionTrend: resolutionTrendResult.recordset,
+          priorityDistribution: priorityDistributionResult.recordset,
+          slaCompliance: {
+            withinSla: slaCompliance?.within_sla_count || 0,
+            totalResolved: slaCompliance?.total_resolved || 0,
+            compliancePercentage: slaCompliance?.compliance_percentage || 0
+          },
+          averageResolutionTime: {
+            avgMinutes: avgResolution?.avg_resolution_minutes || 0,
+            avgSlaTargetMinutes: avgResolution?.avg_sla_target_minutes || 0
+          }
+        },
+        recentServiceReports: serviceReportsResult.recordset,
+        workSummary: {
+          thisWeek: {
+            ticketsResolved: workSummary?.week_tickets_resolved || 0,
+            assetDeliveries: workSummary?.week_asset_deliveries_completed || 0,
+            consumableDeliveries: workSummary?.week_consumable_deliveries_completed || 0,
+            assetsReconciled: workSummary?.week_assets_reconciled || 0
+          },
+          thisMonth: {
+            ticketsResolved: workSummary?.month_tickets_resolved || 0,
+            assetDeliveries: workSummary?.month_asset_deliveries_completed || 0,
+            consumableDeliveries: workSummary?.month_consumable_deliveries_completed || 0,
+            assetsReconciled: workSummary?.month_assets_reconciled || 0
+          }
+        }
+      };
+
+      sendSuccess(res, dashboardData, 'Engineer dashboard data retrieved successfully');
+    } catch (error) {
+      console.error('Engineer dashboard error:', error);
+      sendError(res, 'Failed to load engineer dashboard data', 500);
     }
   })
 );

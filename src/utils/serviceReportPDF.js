@@ -56,7 +56,7 @@ class ServiceReportPDF {
   /**
    * Generate PDF for a single service report
    */
-  static async generateSingleReport(report) {
+  static async generateSingleReport(report, options = {}) {
     const companySettings = await this.getCompanySettings();
 
     return new Promise((resolve, reject) => {
@@ -72,7 +72,7 @@ class ServiceReportPDF {
         doc.on('end', () => resolve(Buffer.concat(chunks)));
         doc.on('error', reject);
 
-        this.renderReport(doc, report, companySettings);
+        this.renderReport(doc, report, companySettings, options);
         this.addFooter(doc, 1, 1);
         doc.end();
       } catch (error) {
@@ -84,7 +84,7 @@ class ServiceReportPDF {
   /**
    * Generate PDF for multiple service reports (bulk)
    */
-  static async generateBulkReport(reports) {
+  static async generateBulkReport(reports, options = {}) {
     const companySettings = await this.getCompanySettings();
 
     return new Promise((resolve, reject) => {
@@ -102,7 +102,7 @@ class ServiceReportPDF {
 
         reports.forEach((report, index) => {
           doc.addPage();
-          this.renderReport(doc, report, companySettings);
+          this.renderReport(doc, report, companySettings, options);
           this.addFooter(doc, index + 1, reports.length);
         });
 
@@ -116,11 +116,12 @@ class ServiceReportPDF {
   /**
    * Render full report on current page
    */
-  static renderReport(doc, report, companySettings) {
+  static renderReport(doc, report, companySettings, options = {}) {
     const margin = 40;
     const pageWidth = doc.page.width - margin * 2;
     const maxY = doc.page.height - 80; // Leave space for footer
     let y = margin;
+    const hideCost = options.hideCost || false;
 
     // ===== HEADER =====
     y = this.renderHeader(doc, report, companySettings, margin, y, pageWidth);
@@ -196,11 +197,11 @@ class ServiceReportPDF {
 
     // ===== SPARE PARTS TABLE (with bounds check) =====
     if (report.parts_used && report.parts_used.length > 0 && y < maxY - 60) {
-      y = this.renderPartsTable(doc, report.parts_used, margin, y, pageWidth);
+      y = this.renderPartsTable(doc, report.parts_used, margin, y, pageWidth, hideCost);
     }
 
-    // ===== COST SUMMARY (with bounds check) =====
-    if (y < maxY) {
+    // ===== COST SUMMARY (with bounds check) - Only show if hideCost is false =====
+    if (!hideCost && y < maxY) {
       this.renderCostSummary(doc, report, margin, y, pageWidth);
     }
 
@@ -380,7 +381,7 @@ class ServiceReportPDF {
   /**
    * Render spare parts table
    */
-  static renderPartsTable(doc, parts, x, y, width) {
+  static renderPartsTable(doc, parts, x, y, width, hideCost = false) {
     const titleH = 14;
     const headerH = 12;
     const rowH = 11;
@@ -389,8 +390,12 @@ class ServiceReportPDF {
     const displayParts = parts.slice(0, 3);
     const tableH = titleH + headerH + displayParts.length * rowH + padding;
 
-    // Columns
-    const cols = [
+    // Columns - conditionally hide cost columns
+    const cols = hideCost ? [
+      { label: 'Part Name', w: width * 0.50 },
+      { label: 'Asset Tag', w: width * 0.35 },
+      { label: 'Qty', w: width * 0.15 }
+    ] : [
       { label: 'Part Name', w: width * 0.35 },
       { label: 'Asset Tag', w: width * 0.20 },
       { label: 'Qty', w: width * 0.10 },
@@ -427,7 +432,12 @@ class ServiceReportPDF {
       doc.font('Helvetica').fontSize(7).fillColor(this.colors.black);
       colX = x;
 
-      const values = [
+      // Values - conditionally exclude cost columns
+      const values = hideCost ? [
+        part.product_name || 'N/A',
+        part.asset_tag || 'N/A',
+        String(part.quantity || 1)
+      ] : [
         part.product_name || 'N/A',
         part.asset_tag || 'N/A',
         String(part.quantity || 1),
@@ -489,15 +499,32 @@ class ServiceReportPDF {
   }
 
   /**
-   * Add footer to page - uses only line drawing to avoid page creation
+   * Add footer to page with company branding and page numbers
    */
   static addFooter(doc, pageNum, totalPages) {
-    const footerY = doc.page.height - 20;
+    const footerY = doc.page.height - 30;
     const x = 40;
     const width = doc.page.width - 80;
 
-    // Draw footer line only - text causes page creation issues
+    // Draw footer line
     doc.moveTo(x, footerY - 8).lineTo(x + width, footerY - 8).strokeColor(this.colors.border).lineWidth(0.5).stroke();
+
+    // Save graphics state
+    doc.save();
+
+    // Footer text - left aligned with explicit positioning
+    doc.font('Helvetica').fontSize(7).fillColor(this.colors.gray);
+    doc.text('Report Generated from Poleplus ITSM ©2026. Polestar Consulting Pvt. Ltd.',
+      x, footerY, { lineBreak: false }
+    );
+
+    // Page number - right aligned with explicit positioning
+    doc.text(`Page ${pageNum} of ${totalPages}`,
+      x + width - 80, footerY, { lineBreak: false }
+    );
+
+    // Restore graphics state to prevent page creation
+    doc.restore();
   }
 
   // Helper methods

@@ -728,11 +728,16 @@ class SlaRulesModel {
             escalation_type = @escalationType,
             notification_template = @notificationTemplate,
             include_ticket_details = @includeTicketDetails,
+            custom_emails = @customEmails,
             is_active = @isActive,
             updated_at = GETDATE()
           OUTPUT INSERTED.*
           WHERE escalation_rule_id = @escalationRuleId
         `;
+
+        const customEmailsJson = escalationData.custom_emails && Array.isArray(escalationData.custom_emails)
+          ? JSON.stringify(escalationData.custom_emails)
+          : null;
 
         const result = await pool.request()
           .input('escalationRuleId', sql.UniqueIdentifier, escalationData.escalation_rule_id)
@@ -749,6 +754,7 @@ class SlaRulesModel {
           .input('escalationType', sql.NVarChar(20), escalationData.escalation_type)
           .input('notificationTemplate', sql.NVarChar(100), escalationData.notification_template)
           .input('includeTicketDetails', sql.Bit, escalationData.include_ticket_details !== false)
+          .input('customEmails', sql.NVarChar(sql.MAX), customEmailsJson)
           .input('isActive', sql.Bit, escalationData.is_active !== false)
           .query(query);
 
@@ -760,16 +766,20 @@ class SlaRulesModel {
             escalation_rule_id, sla_rule_id, escalation_level, trigger_type,
             reference_threshold, trigger_offset_minutes, repeat_interval_minutes, max_repeat_count,
             recipient_type, recipient_group_id, recipient_role, number_of_recipients,
-            escalation_type, notification_template, include_ticket_details, is_active, created_at
+            escalation_type, notification_template, include_ticket_details, custom_emails, is_active, created_at
           )
           OUTPUT INSERTED.*
           VALUES (
             NEWID(), @slaRuleId, @escalationLevel, @triggerType,
             @referenceThreshold, @triggerOffsetMinutes, @repeatIntervalMinutes, @maxRepeatCount,
             @recipientType, @recipientGroupId, @recipientRole, @numberOfRecipients,
-            @escalationType, @notificationTemplate, @includeTicketDetails, @isActive, GETDATE()
+            @escalationType, @notificationTemplate, @includeTicketDetails, @customEmails, @isActive, GETDATE()
           )
         `;
+
+        const customEmailsJson = escalationData.custom_emails && Array.isArray(escalationData.custom_emails)
+          ? JSON.stringify(escalationData.custom_emails)
+          : null;
 
         const result = await pool.request()
           .input('slaRuleId', sql.UniqueIdentifier, escalationData.sla_rule_id)
@@ -786,6 +796,7 @@ class SlaRulesModel {
           .input('escalationType', sql.NVarChar(20), escalationData.escalation_type)
           .input('notificationTemplate', sql.NVarChar(100), escalationData.notification_template)
           .input('includeTicketDetails', sql.Bit, escalationData.include_ticket_details !== false)
+          .input('customEmails', sql.NVarChar(sql.MAX), customEmailsJson)
           .input('isActive', sql.Bit, escalationData.is_active !== false)
           .query(query);
 

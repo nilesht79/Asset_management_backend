@@ -4,6 +4,8 @@
  */
 
 const TicketAssetsModel = require('../models/ticketAssets');
+const TicketModel = require('../models/ticket');
+const SlaTrackingModel = require('../models/slaTracking');
 const { sendSuccess, sendError, sendCreated, sendNotFound } = require('../utils/response');
 
 class TicketAssetsController {
@@ -27,6 +29,31 @@ class TicketAssetsController {
       }
 
       const result = await TicketAssetsModel.linkAsset(ticketId, asset_id, addedBy, notes);
+
+      // Check if SLA tracking exists - if not, initialize it now that assets are linked
+      try {
+        const existingTracking = await SlaTrackingModel.getTracking(ticketId);
+        if (!existingTracking) {
+          const ticket = await TicketModel.getTicketById(ticketId);
+          if (ticket) {
+            const ticketContext = {
+              ticket_id: ticketId,
+              ticket_type: ticket.ticket_type || 'internal',
+              service_type: ticket.service_type || 'general',
+              ticket_channel: 'portal',
+              priority: ticket.priority || 'medium',
+              user_id: ticket.created_by_user_id,
+              asset_ids: [asset_id]
+            };
+            await SlaTrackingModel.initializeTracking(ticketId, ticketContext);
+            console.log(`SLA tracking initialized for ticket ${ticket.ticket_number} after asset link`);
+          }
+        }
+      } catch (slaError) {
+        console.error('Failed to initialize SLA tracking after asset link:', slaError.message);
+        // Continue - asset was linked successfully
+      }
+
       return sendCreated(res, result, 'Asset linked to ticket successfully');
     } catch (error) {
       console.error('Error linking asset:', error);
@@ -57,6 +84,33 @@ class TicketAssetsController {
       }
 
       const results = await TicketAssetsModel.linkMultipleAssets(ticketId, asset_ids, addedBy);
+
+      // Check if SLA tracking exists - if not, initialize it now that assets are linked
+      if (results.length > 0) {
+        try {
+          const existingTracking = await SlaTrackingModel.getTracking(ticketId);
+          if (!existingTracking) {
+            const ticket = await TicketModel.getTicketById(ticketId);
+            if (ticket) {
+              const ticketContext = {
+                ticket_id: ticketId,
+                ticket_type: ticket.ticket_type || 'internal',
+                service_type: ticket.service_type || 'general',
+                ticket_channel: 'portal',
+                priority: ticket.priority || 'medium',
+                user_id: ticket.created_by_user_id,
+                asset_ids: asset_ids
+              };
+              await SlaTrackingModel.initializeTracking(ticketId, ticketContext);
+              console.log(`SLA tracking initialized for ticket ${ticket.ticket_number} after bulk asset link`);
+            }
+          }
+        } catch (slaError) {
+          console.error('Failed to initialize SLA tracking after bulk asset link:', slaError.message);
+          // Continue - assets were linked successfully
+        }
+      }
+
       return sendCreated(res, {
         linked_count: results.length,
         assets: results
@@ -96,9 +150,19 @@ class TicketAssetsController {
     try {
       // Support both :id and :ticketId parameter names
       const ticketId = req.params.id || req.params.ticketId;
+      const userId = req.user?.id || req.oauth?.user?.id;
+      const userRole = req.user?.role || req.oauth?.user?.role;
 
       if (!ticketId) {
         return sendError(res, 'Ticket ID is required', 400);
+      }
+
+      // If user is an employee, verify they own the ticket
+      if (userRole === 'employee') {
+        const ticket = await TicketModel.getTicketById(ticketId);
+        if (!ticket || ticket.created_by_user_id !== userId) {
+          return sendError(res, 'Access denied. You can only view your own tickets.', 403);
+        }
       }
 
       const assets = await TicketAssetsModel.getTicketAssets(ticketId);
@@ -184,9 +248,19 @@ class TicketAssetsController {
     try {
       // Support both :id and :ticketId parameter names
       const ticketId = req.params.id || req.params.ticketId;
+      const userId = req.user?.id || req.oauth?.user?.id;
+      const userRole = req.user?.role || req.oauth?.user?.role;
 
       if (!ticketId) {
         return sendError(res, 'Ticket ID is required', 400);
+      }
+
+      // If user is an employee, verify they own the ticket
+      if (userRole === 'employee') {
+        const ticket = await TicketModel.getTicketById(ticketId);
+        if (!ticket || ticket.created_by_user_id !== userId) {
+          return sendError(res, 'Access denied. You can only view your own tickets.', 403);
+        }
       }
 
       const count = await TicketAssetsModel.getTicketAssetCount(ticketId);

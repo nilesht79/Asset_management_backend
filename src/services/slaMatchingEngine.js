@@ -188,6 +188,9 @@ class SlaMatchingEngine {
       } else if (assetImportance) {
         // Rule specifies importance but asset doesn't match
         return { matches: false };
+      } else {
+        // Rule requires specific asset importance but ticket has no assets
+        return { matches: false };
       }
     } else if (rule.applicable_asset_importance?.toLowerCase() === 'all' && assetImportance) {
       // 'all' matches any asset importance
@@ -204,8 +207,11 @@ class SlaMatchingEngine {
       if (matchingCategories.length > 0) {
         score += 2;
         reasons.push(`Asset category: ${matchingCategories.join(', ')}`);
-      } else if (rule.applicable_asset_categories && assetCategories.length > 0) {
+      } else if (assetCategories.length > 0) {
         // Rule specifies categories but none match
+        return { matches: false };
+      } else {
+        // Rule requires specific asset categories but ticket has no assets
         return { matches: false };
       }
     }

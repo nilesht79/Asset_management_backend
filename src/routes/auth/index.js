@@ -105,15 +105,17 @@ router.get('/profile',
   authenticateToken,
   asyncHandler(async (req, res) => {
     const pool = await connectDB();
-    
+
     const result = await pool.request()
       .input('userId', sql.UniqueIdentifier, req.user.id)
       .query(`
         SELECT u.user_id, u.email, u.first_name, u.last_name, u.role,
                u.employee_id, u.is_active, u.last_login, u.created_at,
-               d.department_name, d.department_id
+               d.department_name, d.department_id,
+               l.name as location_name, l.id as location_id
         FROM USER_MASTER u
         LEFT JOIN DEPARTMENT_MASTER d ON u.department_id = d.department_id
+        LEFT JOIN locations l ON u.location_id = l.id
         WHERE u.user_id = @userId
       `);
 
@@ -122,7 +124,7 @@ router.get('/profile',
     }
 
     const user = result.recordset[0];
-    
+
     const userData = {
       id: user.user_id,
       email: user.email,
@@ -136,6 +138,10 @@ router.get('/profile',
       department: {
         id: user.department_id,
         name: user.department_name
+      },
+      location: {
+        id: user.location_id,
+        name: user.location_name
       },
       permissions: authConfig.ROLE_PERMISSIONS[user.role] || []
     };

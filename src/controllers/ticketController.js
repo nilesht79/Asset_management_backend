@@ -4,13 +4,18 @@
  */
 
 const TicketModel = require('../models/ticket');
+const TicketAssetsModel = require('../models/ticketAssets');
 const { sendSuccess, sendError, sendCreated, sendNotFound } = require('../utils/response');
 const ExcelJS = require('exceljs');
 const SlaTrackingModel = require('../models/slaTracking');
+const inAppNotificationService = require('../services/inAppNotificationService');
+const NotificationModel = require('../models/notification');
+const emailService = require('../services/emailService');
+const { connectDB, sql } = require('../config/database');
 
 class TicketController {
   /**
-   * Create new ticket (Coordinator creates on behalf of employee or for guest)
+   * Create new ticket (Coordinator creates on behalf of employee, employee creates own, or for guest)
    * POST /api/tickets
    */
   static async createTicket(req, res) {
@@ -28,11 +33,30 @@ class TicketController {
         ticket_type,
         service_type,
         assigned_to_engineer_id,
-        due_date
+        due_date,
+        asset_ids // Optional array of asset IDs to link to ticket
       } = req.body;
 
-      // Get coordinator ID from authenticated user
-      const created_by_coordinator_id = req.oauth.user.id;
+      // Get creator ID from authenticated user
+      const authUserId = req.user?.id || req.oauth?.user?.id;
+      const authUserRole = req.user?.role || req.oauth?.user?.role;
+
+      // For employees, they create tickets for themselves
+      // For coordinators/admins, they can create on behalf of someone else
+      let ticketCreatorId = created_by_user_id;
+      let coordinatorId = null;
+
+      // Employee-like roles that create tickets for themselves (self-service)
+      const selfServiceRoles = ['employee', 'dept_head', 'it_head'];
+
+      if (selfServiceRoles.includes(authUserRole)) {
+        // Self-service: employees create tickets for themselves
+        ticketCreatorId = authUserId;
+        coordinatorId = null; // No coordinator for self-service
+      } else {
+        // Coordinators/Admins/Engineers create on behalf of employees
+        coordinatorId = authUserId;
+      }
 
       // Validation based on ticket type
       if (is_guest) {
@@ -50,15 +74,15 @@ class TicketController {
         }
       } else {
         // Employee ticket validation
-        if (!created_by_user_id || !title) {
-          return sendError(res, 'Employee and title are required', 400);
+        if (!ticketCreatorId || !title) {
+          return sendError(res, 'Title is required', 400);
         }
       }
 
       // Prepare ticket data
       const ticketData = {
-        created_by_user_id: is_guest ? null : created_by_user_id,
-        created_by_coordinator_id,
+        created_by_user_id: is_guest ? null : ticketCreatorId,
+        created_by_coordinator_id: coordinatorId,
         title,
         description,
         priority: priority || 'medium',
@@ -92,23 +116,88 @@ class TicketController {
       // Fetch full ticket details with user/guest info
       const fullTicket = await TicketModel.getTicketById(ticket.ticket_id);
 
-      // Initialize SLA tracking for the ticket
-      try {
-        const ticketContext = {
-          ticket_id: ticket.ticket_id,
-          ticket_type: fullTicket.ticket_type || 'internal',
-          service_type: fullTicket.service_type || 'general',
-          ticket_channel: 'portal', // Default channel
-          priority: fullTicket.priority || 'medium',
-          user_id: fullTicket.created_by_user_id,
-          asset_ids: [] // Can be populated if assets are linked
-        };
+      // Link assets to ticket if provided (BEFORE SLA initialization)
+      let linkedAssetIds = [];
+      if (asset_ids && Array.isArray(asset_ids) && asset_ids.length > 0) {
+        try {
+          await TicketAssetsModel.linkMultipleAssets(
+            ticket.ticket_id,
+            asset_ids,
+            created_by_coordinator_id
+          );
+          linkedAssetIds = asset_ids;
+          console.log(`Linked ${asset_ids.length} assets to ticket ${ticket.ticket_number}`);
+        } catch (assetError) {
+          console.error('Failed to link assets during ticket creation:', assetError.message);
+          // Continue with ticket creation even if asset linking fails
+        }
+      }
 
-        await SlaTrackingModel.initializeTracking(ticket.ticket_id, ticketContext);
-        console.log(`SLA tracking initialized for ticket ${ticket.ticket_number}`);
-      } catch (slaError) {
-        // Log but don't fail the ticket creation if SLA init fails
-        console.error('Failed to initialize SLA tracking:', slaError.message);
+      // Initialize SLA tracking ONLY if assets are linked to the ticket
+      if (linkedAssetIds.length > 0) {
+        try {
+          const ticketContext = {
+            ticket_id: ticket.ticket_id,
+            ticket_type: fullTicket.ticket_type || 'internal',
+            service_type: fullTicket.service_type || 'general',
+            ticket_channel: 'portal', // Default channel
+            priority: fullTicket.priority || 'medium',
+            user_id: fullTicket.created_by_user_id,
+            asset_ids: linkedAssetIds
+          };
+
+          await SlaTrackingModel.initializeTracking(ticket.ticket_id, ticketContext);
+          console.log(`SLA tracking initialized for ticket ${ticket.ticket_number}`);
+        } catch (slaError) {
+          // Log but don't fail the ticket creation if SLA init fails
+          console.error('Failed to initialize SLA tracking:', slaError.message);
+        }
+      } else {
+        console.log(`SLA tracking skipped for ticket ${ticket.ticket_number} - no assets linked`);
+      }
+
+      // Create notification for assigned engineer
+      if (assigned_to_engineer_id) {
+        try {
+          await inAppNotificationService.createTicketAssignmentNotification({
+            engineer_id: assigned_to_engineer_id,
+            ticket_id: ticket.ticket_id,
+            ticket_number: ticket.ticket_number,
+            ticket_title: title,
+            assigned_by_name: req.oauth.user.name || req.oauth.user.email || 'Coordinator'
+          });
+
+          // Send email notification
+          const engineerEmail = await TicketController.getEngineerEmail(assigned_to_engineer_id);
+          if (engineerEmail) {
+            const assignedByName = req.oauth.user.name || req.oauth.user.email || 'Coordinator';
+            const emailSubject = `New Ticket Assigned: ${ticket.ticket_number}`;
+            const emailBody = `
+Hello,
+
+A new ticket has been assigned to you.
+
+Ticket Number: ${ticket.ticket_number}
+Title: ${title}
+Priority: ${fullTicket.priority || 'medium'}
+Status: ${fullTicket.status}
+Assigned By: ${assignedByName}
+
+Description:
+${description || 'No description provided'}
+
+Please log in to the Asset Management System to view and work on this ticket.
+
+This is an automated notification. Please do not reply to this email.
+            `;
+
+            await emailService.sendEmail(engineerEmail, emailSubject, emailBody.trim());
+            console.log(`Assignment email sent to ${engineerEmail} for ticket ${ticket.ticket_number}`);
+          }
+        } catch (notificationError) {
+          // Log but don't fail ticket creation if notification fails
+          console.error('Failed to create assignment notification:', notificationError.message);
+        }
       }
 
       return sendCreated(res, fullTicket, 'Ticket created successfully');
@@ -170,11 +259,18 @@ class TicketController {
   static async getTicketById(req, res) {
     try {
       const { id } = req.params;
+      const userId = req.user.id;
+      const userRole = req.user.role;
 
       const ticket = await TicketModel.getTicketById(id);
 
       if (!ticket) {
         return sendNotFound(res, 'Ticket not found');
+      }
+
+      // If user is an employee, they can only view their own tickets
+      if (userRole === 'employee' && ticket.created_by_user_id !== userId) {
+        return sendError(res, 'Access denied. You can only view your own tickets.', 403);
       }
 
       // Get comments
@@ -204,6 +300,7 @@ class TicketController {
 
       const previousStatus = existingTicket.status;
       const previousPriority = existingTicket.priority;
+      const previousEngineerId = existingTicket.assigned_to_engineer_id;
 
       // Update ticket
       const updatedTicket = await TicketModel.updateTicket(id, updateData);
@@ -238,6 +335,113 @@ class TicketController {
         }
       }
 
+      // Create notification if engineer was assigned or reassigned
+      if (updateData.assigned_to_engineer_id && updateData.assigned_to_engineer_id !== previousEngineerId) {
+        try {
+          await inAppNotificationService.createTicketAssignmentNotification({
+            engineer_id: updateData.assigned_to_engineer_id,
+            ticket_id: id,
+            ticket_number: fullTicket.ticket_number,
+            ticket_title: fullTicket.title,
+            assigned_by_name: req.oauth.user.name || req.oauth.user.email || 'Coordinator'
+          });
+
+          // Send email notification
+          const engineerEmail = await TicketController.getEngineerEmail(updateData.assigned_to_engineer_id);
+          if (engineerEmail) {
+            const assignedByName = req.oauth.user.name || req.oauth.user.email || 'Coordinator';
+            const isReassignment = previousEngineerId !== null;
+            const emailSubject = `Ticket ${isReassignment ? 'Reassigned' : 'Assigned'}: ${fullTicket.ticket_number}`;
+            const emailBody = `
+Hello,
+
+A ticket has been ${isReassignment ? 'reassigned' : 'assigned'} to you.
+
+Ticket Number: ${fullTicket.ticket_number}
+Title: ${fullTicket.title}
+Priority: ${fullTicket.priority || 'medium'}
+Status: ${fullTicket.status}
+${isReassignment ? 'Reassigned' : 'Assigned'} By: ${assignedByName}
+
+Description:
+${fullTicket.description || 'No description provided'}
+
+Please log in to the Asset Management System to view and work on this ticket.
+
+This is an automated notification. Please do not reply to this email.
+            `;
+
+            await emailService.sendEmail(engineerEmail, emailSubject, emailBody.trim());
+            console.log(`${isReassignment ? 'Reassignment' : 'Assignment'} email sent to ${engineerEmail} for ticket ${fullTicket.ticket_number}`);
+          }
+        } catch (notificationError) {
+          // Log but don't fail update if notification fails
+          console.error('Failed to create assignment notification:', notificationError.message);
+        }
+      }
+
+      // Create notification if ticket was reopened
+      const closedStatuses = ['closed', 'resolved'];
+      const activeStatuses = ['open', 'assigned', 'in_progress', 'pending'];
+      const wasReopened = closedStatuses.includes(previousStatus) &&
+                         activeStatuses.includes(newStatus) &&
+                         fullTicket.assigned_to_engineer_id;
+
+      if (wasReopened) {
+        try {
+          await NotificationModel.createNotification({
+            user_id: fullTicket.assigned_to_engineer_id,
+            ticket_id: id,
+            notification_type: 'ticket_reopened',
+            title: `Ticket Reopened: ${fullTicket.ticket_number}`,
+            message: `Ticket "${fullTicket.title}" has been reopened and requires your attention.`,
+            priority: 'high',
+            related_data: {
+              ticket_number: fullTicket.ticket_number,
+              ticket_title: fullTicket.title,
+              previous_status: previousStatus,
+              new_status: newStatus,
+              reopened_by: req.oauth.user.name || req.oauth.user.email || 'System'
+            }
+          });
+          console.log(`Created reopen notification for ticket ${fullTicket.ticket_number}`);
+
+          // Send email notification
+          const engineerEmail = await TicketController.getEngineerEmail(fullTicket.assigned_to_engineer_id);
+          if (engineerEmail) {
+            const reopenedByName = req.oauth.user.name || req.oauth.user.email || 'System';
+            const emailSubject = `Ticket Reopened: ${fullTicket.ticket_number}`;
+            const emailBody = `
+Hello,
+
+A previously ${previousStatus} ticket has been reopened and requires your attention.
+
+Ticket Number: ${fullTicket.ticket_number}
+Title: ${fullTicket.title}
+Priority: ${fullTicket.priority || 'medium'}
+Previous Status: ${previousStatus}
+Current Status: ${newStatus}
+Reopened By: ${reopenedByName}
+
+Description:
+${fullTicket.description || 'No description provided'}
+
+This ticket has been reactivated and the SLA tracking has been resumed. Please review and take necessary action.
+
+Please log in to the Asset Management System to view and work on this ticket.
+
+This is an automated notification. Please do not reply to this email.
+            `;
+
+            await emailService.sendEmail(engineerEmail, emailSubject, emailBody.trim());
+            console.log(`Reopen email sent to ${engineerEmail} for ticket ${fullTicket.ticket_number}`);
+          }
+        } catch (notificationError) {
+          // Log but don't fail update if notification fails
+          console.error('Failed to create reopen notification:', notificationError.message);
+        }
+      }
+
       return sendSuccess(res, fullTicket, 'Ticket updated successfully');
     } catch (error) {
       console.error('Update ticket error:', error);
@@ -269,6 +473,48 @@ class TicketController {
 
       // Fetch updated ticket
       const updatedTicket = await TicketModel.getTicketById(id);
+
+      // Create notification for assigned engineer
+      try {
+        await inAppNotificationService.createTicketAssignmentNotification({
+          engineer_id: engineer_id,
+          ticket_id: id,
+          ticket_number: updatedTicket.ticket_number,
+          ticket_title: updatedTicket.title,
+          assigned_by_name: req.oauth.user.name || req.oauth.user.email || 'Coordinator'
+        });
+
+        // Send email notification
+        const engineerEmail = await TicketController.getEngineerEmail(engineer_id);
+        if (engineerEmail) {
+          const assignedByName = req.oauth.user.name || req.oauth.user.email || 'Coordinator';
+          const emailSubject = `Ticket Assigned: ${updatedTicket.ticket_number}`;
+          const emailBody = `
+Hello,
+
+A ticket has been assigned to you.
+
+Ticket Number: ${updatedTicket.ticket_number}
+Title: ${updatedTicket.title}
+Priority: ${updatedTicket.priority || 'medium'}
+Status: ${updatedTicket.status}
+Assigned By: ${assignedByName}
+
+Description:
+${updatedTicket.description || 'No description provided'}
+
+Please log in to the Asset Management System to view and work on this ticket.
+
+This is an automated notification. Please do not reply to this email.
+          `;
+
+          await emailService.sendEmail(engineerEmail, emailSubject, emailBody.trim());
+          console.log(`Assignment email sent to ${engineerEmail} for ticket ${updatedTicket.ticket_number}`);
+        }
+      } catch (notificationError) {
+        // Log but don't fail assignment if notification fails
+        console.error('Failed to create assignment notification:', notificationError.message);
+      }
 
       return sendSuccess(res, updatedTicket, 'Engineer assigned successfully');
     } catch (error) {
@@ -369,6 +615,8 @@ class TicketController {
     try {
       const { id } = req.params;
       const { comment_text, is_internal } = req.body;
+      const userId = req.user?.id || req.oauth?.user?.id;
+      const userRole = req.user?.role || req.oauth?.user?.role;
 
       if (!comment_text) {
         return sendError(res, 'Comment text is required', 400);
@@ -380,9 +628,14 @@ class TicketController {
         return sendNotFound(res, 'Ticket not found');
       }
 
+      // If user is an employee, verify they own the ticket
+      if (userRole === 'employee' && existingTicket.created_by_user_id !== userId) {
+        return sendError(res, 'Access denied. You can only comment on your own tickets.', 403);
+      }
+
       const commentData = {
         ticket_id: id,
-        user_id: req.oauth.user.id,
+        user_id: userId,
         comment_text,
         is_internal: is_internal || false
       };
@@ -403,6 +656,16 @@ class TicketController {
   static async getComments(req, res) {
     try {
       const { id } = req.params;
+      const userId = req.user.id;
+      const userRole = req.user.role;
+
+      // If user is an employee, verify they own the ticket
+      if (userRole === 'employee') {
+        const ticket = await TicketModel.getTicketById(id);
+        if (!ticket || ticket.created_by_user_id !== userId) {
+          return sendError(res, 'Access denied. You can only view your own tickets.', 403);
+        }
+      }
 
       const comments = await TicketModel.getComments(id);
 
@@ -591,6 +854,106 @@ class TicketController {
   }
 
   /**
+   * Get tickets created by current user (employee view)
+   * GET /api/tickets/my-created-tickets
+   */
+  static async getMyCreatedTickets(req, res) {
+    try {
+      const userId = req.oauth.user.id;
+      const {
+        page = 1,
+        limit = 10,
+        status,
+        priority,
+        search
+      } = req.query;
+
+      const pool = await connectDB();
+
+      // Build WHERE clause
+      let whereClause = 'WHERE t.created_by_user_id = @userId';
+      if (status) whereClause += ' AND t.status = @status';
+      if (priority) whereClause += ' AND t.priority = @priority';
+      if (search) whereClause += ' AND (t.ticket_number LIKE @search OR t.title LIKE @search)';
+
+      const offset = (parseInt(page) - 1) * parseInt(limit);
+
+      // Get tickets
+      const request = pool.request()
+        .input('userId', sql.UniqueIdentifier, userId)
+        .input('offset', sql.Int, offset)
+        .input('limit', sql.Int, parseInt(limit));
+
+      if (status) request.input('status', sql.VarChar, status);
+      if (priority) request.input('priority', sql.VarChar, priority);
+      if (search) request.input('search', sql.NVarChar, `%${search}%`);
+
+      const ticketsResult = await request.query(`
+        SELECT
+          t.ticket_id,
+          t.ticket_number,
+          t.title,
+          t.description,
+          t.status,
+          t.priority,
+          t.category,
+          t.created_at,
+          t.updated_at,
+          t.resolved_at,
+          t.closed_at,
+          t.created_by_user_id,
+          t.created_by_coordinator_id,
+          -- Created By User (Employee)
+          u.first_name + ' ' + u.last_name as created_by_user_name,
+          u.email as created_by_user_email,
+          -- Coordinator who created the ticket
+          c.first_name + ' ' + c.last_name as coordinator_name,
+          c.email as coordinator_email,
+          -- Assigned Engineer
+          e.first_name + ' ' + e.last_name as engineer_name,
+          e.email as engineer_email,
+          d.department_name as department_name,
+          l.name as location_name
+        FROM TICKETS t
+        LEFT JOIN USER_MASTER u ON t.created_by_user_id = u.user_id
+        LEFT JOIN USER_MASTER c ON t.created_by_coordinator_id = c.user_id
+        LEFT JOIN USER_MASTER e ON t.assigned_to_engineer_id = e.user_id
+        LEFT JOIN DEPARTMENT_MASTER d ON t.department_id = d.department_id
+        LEFT JOIN locations l ON t.location_id = l.id
+        ${whereClause}
+        ORDER BY t.created_at DESC
+        OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+      `);
+
+      // Get total count
+      const countRequest = pool.request()
+        .input('userId', sql.UniqueIdentifier, userId);
+      if (status) countRequest.input('status', sql.VarChar, status);
+      if (priority) countRequest.input('priority', sql.VarChar, priority);
+      if (search) countRequest.input('search', sql.NVarChar, `%${search}%`);
+
+      const countResult = await countRequest.query(`
+        SELECT COUNT(*) as total FROM TICKETS t ${whereClause}
+      `);
+
+      const total = countResult.recordset[0].total;
+
+      return sendSuccess(res, {
+        tickets: ticketsResult.recordset,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          totalPages: Math.ceil(total / parseInt(limit))
+        }
+      }, 'Tickets fetched successfully');
+    } catch (error) {
+      console.error('Get my created tickets error:', error);
+      return sendError(res, error.message || 'Failed to fetch tickets', 500);
+    }
+  }
+
+  /**
    * Engineer requests to close a ticket
    * POST /api/tickets/:id/request-close
    */
@@ -716,6 +1079,16 @@ class TicketController {
   static async getCloseRequestHistory(req, res) {
     try {
       const { id } = req.params;
+      const userId = req.user.id;
+      const userRole = req.user.role;
+
+      // If user is an employee, verify they own the ticket
+      if (userRole === 'employee') {
+        const ticket = await TicketModel.getTicketById(id);
+        if (!ticket || ticket.created_by_user_id !== userId) {
+          return sendError(res, 'Access denied. You can only view your own tickets.', 403);
+        }
+      }
 
       const history = await TicketModel.getCloseRequestHistory(id);
 
@@ -1048,6 +1421,62 @@ class TicketController {
 
       const ticket = await TicketModel.reopenTicket(ticketId, reopenedBy, reopen_reason || '');
 
+      // Send notifications if ticket has an assigned engineer
+      if (ticket.assigned_to_engineer_id) {
+        try {
+          // Create in-app notification
+          await NotificationModel.createNotification({
+            user_id: ticket.assigned_to_engineer_id,
+            ticket_id: ticketId,
+            notification_type: 'ticket_reopened',
+            title: `Ticket Reopened: ${ticket.ticket_number}`,
+            message: `Ticket "${ticket.title}" has been reopened and requires your attention.`,
+            priority: 'high',
+            related_data: {
+              ticket_number: ticket.ticket_number,
+              ticket_title: ticket.title,
+              reopen_reason: reopen_reason || '',
+              reopened_by: req.oauth.user.name || req.oauth.user.email || 'System'
+            }
+          });
+          console.log(`Created reopen notification for ticket ${ticket.ticket_number}`);
+
+          // Send email notification
+          const engineerEmail = await TicketController.getEngineerEmail(ticket.assigned_to_engineer_id);
+          if (engineerEmail) {
+            const reopenedByName = req.oauth.user.name || req.oauth.user.email || 'System';
+            const emailSubject = `Ticket Reopened: ${ticket.ticket_number}`;
+            const emailBody = `
+Hello,
+
+A previously closed ticket has been reopened and requires your attention.
+
+Ticket Number: ${ticket.ticket_number}
+Title: ${ticket.title}
+Priority: ${ticket.priority || 'medium'}
+Status: ${ticket.status}
+Reopened By: ${reopenedByName}
+${reopen_reason ? `Reason: ${reopen_reason}` : ''}
+
+Description:
+${ticket.description || 'No description provided'}
+
+This ticket has been reactivated and the SLA tracking has been resumed. Please review and take necessary action.
+
+Please log in to the Asset Management System to view and work on this ticket.
+
+This is an automated notification. Please do not reply to this email.
+            `;
+
+            await emailService.sendEmail(engineerEmail, emailSubject, emailBody.trim());
+            console.log(`Reopen email sent to ${engineerEmail} for ticket ${ticket.ticket_number}`);
+          }
+        } catch (notificationError) {
+          // Log but don't fail reopening if notification fails
+          console.error('Failed to send reopen notification:', notificationError.message);
+        }
+      }
+
       return sendSuccess(res, ticket, 'Ticket reopened successfully');
     } catch (error) {
       console.error('Reopen ticket error:', error);
@@ -1069,6 +1498,27 @@ class TicketController {
     } catch (error) {
       console.error('Get reopen history error:', error);
       return sendError(res, error.message || 'Failed to fetch reopen history', 500);
+    }
+  }
+
+  /**
+   * Helper: Get engineer's email by user ID
+   * @private
+   */
+  static async getEngineerEmail(engineerId) {
+    try {
+      const pool = await connectDB();
+      const result = await pool.request()
+        .input('engineerId', sql.UniqueIdentifier, engineerId)
+        .query('SELECT email FROM USER_MASTER WHERE user_id = @engineerId');
+
+      if (result.recordset.length > 0) {
+        return result.recordset[0].email;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error fetching engineer email:', error);
+      return null;
     }
   }
 }

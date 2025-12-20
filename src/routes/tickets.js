@@ -64,6 +64,17 @@ router.get(
 );
 
 /**
+ * @route   GET /api/tickets/my-created-tickets
+ * @desc    Get tickets created by current user (employee view)
+ * @access  All authenticated users
+ */
+router.get(
+  '/my-created-tickets',
+  authenticateOAuth,
+  TicketController.getMyCreatedTickets
+);
+
+/**
  * @route   GET /api/tickets/pending-close-requests
  * @desc    Get pending close requests for coordinator review
  * @access  Coordinator, Superadmin
@@ -222,60 +233,60 @@ router.get(
 /**
  * @route   GET /api/tickets/:id/assets
  * @desc    Get all assets linked to a ticket
- * @access  Coordinator, Superadmin, Engineer
+ * @access  All authenticated (employees can only view their own tickets)
  */
 router.get(
   '/:id/assets',
   authenticateOAuth,
-  requireRole(TICKET_MANAGERS),
+  requireRole(ALL_AUTHENTICATED),
   TicketAssetsController.getTicketAssets
 );
 
 /**
  * @route   GET /api/tickets/:id/assets/count
  * @desc    Get count of assets linked to a ticket
- * @access  Coordinator, Superadmin, Engineer
+ * @access  All authenticated (employees can only view their own tickets)
  */
 router.get(
   '/:id/assets/count',
   authenticateOAuth,
-  requireRole(TICKET_MANAGERS),
+  requireRole(ALL_AUTHENTICATED),
   TicketAssetsController.getAssetCount
 );
 
 /**
  * @route   GET /api/tickets/:id/comments
  * @desc    Get comments for a ticket
- * @access  Coordinator, Superadmin, Engineer
+ * @access  All authenticated (employees can only view their own tickets)
  */
 router.get(
   '/:id/comments',
   authenticateOAuth,
-  requireRole([...TICKET_MANAGERS, 'engineer']),
+  requireRole(ALL_AUTHENTICATED),
   TicketController.getComments
 );
 
 /**
  * @route   GET /api/tickets/:id/close-request-history
  * @desc    Get close request history for a ticket
- * @access  Coordinator, Superadmin, Engineer
+ * @access  All authenticated (employees can only view their own tickets)
  */
 router.get(
   '/:id/close-request-history',
   authenticateOAuth,
-  requireRole(TICKET_MANAGERS),
+  requireRole(ALL_AUTHENTICATED),
   TicketController.getCloseRequestHistory
 );
 
 /**
  * @route   GET /api/tickets/:id
  * @desc    Get single ticket by ID
- * @access  Coordinator, Superadmin, Engineer
+ * @access  All authenticated (employees can only view their own tickets)
  */
 router.get(
   '/:id',
   authenticateOAuth,
-  requireRole([...TICKET_MANAGERS, 'engineer']),
+  requireRole(ALL_AUTHENTICATED),
   TicketController.getTicketById
 );
 
@@ -293,25 +304,25 @@ router.get(
 
 /**
  * @route   POST /api/tickets
- * @desc    Create new ticket (on behalf of employee)
- * @access  Coordinator, Superadmin, Engineer
+ * @desc    Create new ticket
+ * @access  All authenticated users
  */
 router.post(
   '/',
   authenticateOAuth,
-  requireRole([...TICKET_MANAGERS, 'engineer']),
+  requireRole(ALL_AUTHENTICATED),
   TicketController.createTicket
 );
 
 /**
  * @route   POST /api/tickets/:id/comments
  * @desc    Add comment to ticket
- * @access  Coordinator, Superadmin, Engineer
+ * @access  All authenticated users (employees can only comment on their own tickets)
  */
 router.post(
   '/:id/comments',
   authenticateOAuth,
-  requireRole([...TICKET_MANAGERS, 'engineer']),
+  requireRole(ALL_AUTHENTICATED),
   TicketController.addComment
 );
 

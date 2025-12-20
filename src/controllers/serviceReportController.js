@@ -259,11 +259,12 @@ class ServiceReportController {
 
   /**
    * Generate PDF for a single service report
-   * GET /api/service-reports/:reportId/pdf
+   * GET /api/service-reports/:reportId/pdf?hideCost=true
    */
   static async generatePDF(req, res) {
     try {
       const { reportId } = req.params;
+      const { hideCost } = req.query;
 
       const report = await ServiceReportModel.getReportForPDF(reportId);
 
@@ -271,7 +272,12 @@ class ServiceReportController {
         return sendNotFound(res, 'Service report not found');
       }
 
-      const pdfBuffer = await ServiceReportPDF.generateSingleReport(report);
+      // Pass hideCost option to PDF generator
+      const options = {
+        hideCost: hideCost === 'true' || hideCost === '1'
+      };
+
+      const pdfBuffer = await ServiceReportPDF.generateSingleReport(report, options);
 
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="ServiceReport_${report.report_number}.pdf"`);
@@ -287,10 +293,11 @@ class ServiceReportController {
   /**
    * Generate PDF for multiple service reports (bulk)
    * POST /api/service-reports/pdf/bulk
+   * Body: { report_ids: [], hideCost: true }
    */
   static async generateBulkPDF(req, res) {
     try {
-      const { report_ids } = req.body;
+      const { report_ids, hideCost } = req.body;
 
       if (!report_ids || !Array.isArray(report_ids) || report_ids.length === 0) {
         return sendError(res, 'report_ids array is required', 400);
@@ -306,7 +313,12 @@ class ServiceReportController {
         return sendNotFound(res, 'No service reports found');
       }
 
-      const pdfBuffer = await ServiceReportPDF.generateBulkReport(reports);
+      // Pass hideCost option to PDF generator
+      const options = {
+        hideCost: hideCost === true || hideCost === 'true' || hideCost === '1'
+      };
+
+      const pdfBuffer = await ServiceReportPDF.generateBulkReport(reports, options);
 
       const filename = `ServiceReports_Bulk_${new Date().toISOString().split('T')[0]}.pdf`;
 

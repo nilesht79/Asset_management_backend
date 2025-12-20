@@ -6,6 +6,7 @@
 const cron = require('node-cron');
 const { runStandbyJobs } = require('../jobs/standbyAutoConversion');
 const slaMonitoringJob = require('../jobs/slaMonitoringJob');
+const notificationCleanupJob = require('../jobs/notificationCleanupJob');
 
 // Track active jobs
 const activeJobs = new Map();
@@ -50,6 +51,27 @@ const initializeScheduler = () => {
 
   activeJobs.set('slaMonitoring', slaJob);
 
+  // Notification Cleanup Job
+  // Runs daily at 3:00 AM IST to delete old read notifications
+  const notificationCleanup = cron.schedule('0 3 * * *', async () => {
+    console.log('⏰ Running notification cleanup job...');
+    try {
+      const result = await notificationCleanupJob.run();
+      if (result.success) {
+        console.log(`✅ Notification cleanup completed: ${result.deletedCount} notifications deleted`);
+      } else {
+        console.error(`❌ Notification cleanup failed: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('❌ Notification cleanup job failed:', error);
+    }
+  }, {
+    scheduled: true,
+    timezone: process.env.TZ || 'Asia/Kolkata'  // IST timezone
+  });
+
+  activeJobs.set('notificationCleanup', notificationCleanup);
+
   // Optional: Run immediately on startup (for testing)
   if (process.env.RUN_JOBS_ON_STARTUP === 'true') {
     console.log('🔄 Running jobs on startup...');
@@ -58,6 +80,9 @@ const initializeScheduler = () => {
     });
     slaMonitoringJob.run().catch(error => {
       console.error('❌ Startup SLA monitoring job execution failed:', error);
+    });
+    notificationCleanupJob.run().catch(error => {
+      console.error('❌ Startup notification cleanup job execution failed:', error);
     });
   }
 
@@ -108,6 +133,9 @@ const triggerJob = async (jobName) => {
       break;
     case 'slaMonitoring':
       await slaMonitoringJob.run();
+      break;
+    case 'notificationCleanup':
+      await notificationCleanupJob.run();
       break;
     default:
       throw new Error(`Unknown job: ${jobName}`);

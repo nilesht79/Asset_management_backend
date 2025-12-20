@@ -427,15 +427,32 @@ class AssetJobReportPDF {
   }
 
   /**
-   * Add footer - uses only line drawing to avoid page creation issues
+   * Add footer with company branding and page numbers
    */
   static addFooter(doc, pageNum, totalPages) {
-    const footerY = doc.page.height - 20;
+    const footerY = doc.page.height - 30;
     const x = 40;
     const width = doc.page.width - 80;
 
-    // Draw footer line only
+    // Draw footer line
     doc.moveTo(x, footerY - 8).lineTo(x + width, footerY - 8).strokeColor(this.colors.border).lineWidth(0.5).stroke();
+
+    // Save graphics state
+    doc.save();
+
+    // Footer text - left aligned with explicit positioning
+    doc.font('Helvetica').fontSize(7).fillColor(this.colors.gray);
+    doc.text('Report Generated from Poleplus ITSM ©2026. Polestar Consulting Pvt. Ltd.',
+      x, footerY, { lineBreak: false }
+    );
+
+    // Page number - right aligned with explicit positioning
+    doc.text(`Page ${pageNum} of ${totalPages}`,
+      x + width - 80, footerY, { lineBreak: false }
+    );
+
+    // Restore graphics state to prevent page creation
+    doc.restore();
   }
 
   // ===== UTILITY FUNCTIONS =====

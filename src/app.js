@@ -31,9 +31,9 @@ app.use(helmet({
 app.use(cors(appConfig.cors));
 app.use(corsMiddleware);
 
-// Rate limiting
-const limiter = rateLimit(appConfig.rateLimit);
-app.use('/api/', limiter);
+// Rate limiting - DISABLED for now
+// const limiter = rateLimit(appConfig.rateLimit);
+// app.use('/api/', limiter);
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));

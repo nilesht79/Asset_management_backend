@@ -54,9 +54,12 @@ class OAuth2Model {
         .query(`
           SELECT u.user_id, u.email, u.password_hash, u.first_name, u.last_name, u.role,
                  u.is_active, u.failed_login_attempts, u.account_locked_until,
-                 d.department_name, d.department_id
+                 u.employee_id,
+                 d.department_name, d.department_id,
+                 l.name as location_name, l.id as location_id
           FROM USER_MASTER u
           LEFT JOIN DEPARTMENT_MASTER d ON u.department_id = d.department_id
+          LEFT JOIN locations l ON u.location_id = l.id
           WHERE u.email = @email
         `);
 
@@ -121,9 +124,14 @@ class OAuth2Model {
         firstName: user.first_name,
         lastName: user.last_name,
         role: user.role,
+        employeeId: user.employee_id,
         department: {
           id: user.department_id,
           name: user.department_name
+        },
+        location: {
+          id: user.location_id,
+          name: user.location_name
         },
         permissions: authConfig.ROLE_PERMISSIONS[user.role] || []
       };

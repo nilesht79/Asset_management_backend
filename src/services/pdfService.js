@@ -128,10 +128,10 @@ async function generateAssetLabelPDF(assetData) {
         .font('Helvetica')
         .text(assetData.status ? assetData.status.toUpperCase() : 'N/A', 135, yPosition)
 
-      // Footer - Generated date
+      // Footer - Generated date and branding
       doc.fontSize(5)
         .font('Helvetica')
-        .text(`Generated: ${new Date().toLocaleDateString('en-GB')}`, 10, 133, {
+        .text(`Poleplus ITSM ©️ 2026 | Generated: ${new Date().toLocaleDateString('en-GB')}`, 10, 133, {
           width: 268,
           align: 'center'
         })
@@ -297,7 +297,7 @@ async function generateBulkAssetLabelsPDF(assetsData) {
         // Footer
         doc.fontSize(5)
           .font('Helvetica')
-          .text(`Generated: ${new Date().toLocaleDateString('en-GB')}`, x, y + 128, {
+          .text(`Poleplus ITSM ©️ 2026 | Generated: ${new Date().toLocaleDateString('en-GB')}`, x, y + 128, {
             width: labelWidth,
             align: 'center'
           })
