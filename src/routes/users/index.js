@@ -159,6 +159,7 @@ router.get('/',
     const result = await dataRequest.query(`
       SELECT u.user_id, u.first_name, u.last_name, u.email, u.role,
              u.employee_id, u.designation, u.is_active, u.is_vip, u.allow_multi_assets, u.last_login, u.created_at, u.updated_at,
+             u.room_no,
              d.department_name, d.department_id,
              l.name as location_name, l.id as location_id
       FROM USER_MASTER u
@@ -187,6 +188,7 @@ router.get('/',
       lastLogin: user.last_login,
       createdAt: user.created_at,
       updatedAt: user.updated_at,
+      roomNo: user.room_no,
       department: {
         id: user.department_id,
         name: user.department_name
@@ -252,6 +254,7 @@ router.get('/export',
         u.designation,
         u.role,
         u.is_active,
+        u.room_no,
         d.department_name,
         l.name as location_name,
         l.building as location_building,
@@ -281,6 +284,7 @@ router.get('/export',
       { header: 'Location', key: 'location_name', width: 25 },
       { header: 'Building', key: 'location_building', width: 20 },
       { header: 'Floor', key: 'location_floor', width: 15 },
+      { header: 'Room No', key: 'room_no', width: 15 },
       { header: 'Status', key: 'is_active', width: 10 },
       { header: 'Created At', key: 'created_at', width: 20 }
     ];
@@ -307,6 +311,7 @@ router.get('/export',
         location_name: user.location_name || '',
         location_building: user.location_building || '',
         location_floor: user.location_floor || '',
+        room_no: user.room_no || '',
         is_active: user.is_active ? 'Active' : 'Inactive',
         created_at: user.created_at ? new Date(user.created_at).toISOString().split('T')[0] : ''
       });
@@ -406,6 +411,7 @@ router.get('/:id',
         SELECT u.user_id, u.first_name, u.last_name, u.email, u.role,
                u.employee_id, u.designation, u.is_active, u.is_vip, u.allow_multi_assets, u.last_login, u.created_at, u.updated_at,
                u.password_changed_at, u.failed_login_attempts, u.locked_until,
+               u.room_no,
                d.department_name, d.department_id,
                l.name as location_name, l.id as location_id
         FROM USER_MASTER u
@@ -437,6 +443,7 @@ router.get('/:id',
       passwordChangedAt: user.password_changed_at,
       failedLoginAttempts: user.failed_login_attempts,
       lockedUntil: user.locked_until,
+      roomNo: user.room_no,
       department: {
         id: user.department_id,
         name: user.department_name
@@ -468,6 +475,7 @@ router.post('/',
       location_id,
       employee_id,
       designation,
+      room_no,
       is_active = true,
       is_vip = false,
       allow_multi_assets = false
@@ -562,6 +570,7 @@ router.post('/',
       .input('locationId', sql.UniqueIdentifier, location_id)
       .input('employeeId', sql.VarChar(20), finalEmployeeId)
       .input('designation', sql.VarChar(100), designation || null)
+      .input('roomNo', sql.VarChar(50), room_no || null)
       .input('isActive', sql.Bit, is_active)
       .input('isVip', sql.Bit, is_vip)
       .input('allowMultiAssets', sql.Bit, allow_multi_assets)
@@ -570,17 +579,17 @@ router.post('/',
       .query(`
         INSERT INTO USER_MASTER (
           user_id, first_name, last_name, email, password_hash, role,
-          department_id, location_id, employee_id, designation, is_active, is_vip, allow_multi_assets, registration_type, user_status,
+          department_id, location_id, employee_id, designation, room_no, is_active, is_vip, allow_multi_assets, registration_type, user_status,
           created_at, updated_at
         )
         VALUES (
           @id, @firstName, @lastName, @email, @passwordHash, @role,
-          @departmentId, @locationId, @employeeId, @designation, @isActive, @isVip, @allowMultiAssets, @registrationType, @userStatus,
+          @departmentId, @locationId, @employeeId, @designation, @roomNo, @isActive, @isVip, @allowMultiAssets, @registrationType, @userStatus,
           GETUTCDATE(), GETUTCDATE()
         );
 
         SELECT u.user_id, u.first_name, u.last_name, u.email, u.role,
-               u.employee_id, u.designation, u.is_active, u.is_vip, u.allow_multi_assets, u.created_at, u.updated_at,
+               u.employee_id, u.designation, u.room_no, u.is_active, u.is_vip, u.allow_multi_assets, u.created_at, u.updated_at,
                d.department_name, d.department_id,
                l.name as location_name, l.id as location_id
         FROM USER_MASTER u
@@ -599,6 +608,7 @@ router.post('/',
       role: user.role,
       employeeId: user.employee_id,
       designation: user.designation,
+      roomNo: user.room_no,
       isActive: user.is_active,
       isVip: user.is_vip,
       allowMultiAssets: user.allow_multi_assets,
@@ -635,6 +645,7 @@ router.put('/:id',
       location_id,
       employee_id,
       designation,
+      room_no,
       is_active,
       is_vip,
       allow_multi_assets
@@ -765,6 +776,10 @@ router.put('/:id',
         updateFields.push('designation = @designation');
         updateRequest.input('designation', sql.VarChar(100), designation || null);
       }
+      if (room_no !== undefined) {
+        updateFields.push('room_no = @roomNo');
+        updateRequest.input('roomNo', sql.VarChar(50), room_no || null);
+      }
     }
 
     if (updateFields.length === 0) {
@@ -779,7 +794,7 @@ router.put('/:id',
       WHERE user_id = @id;
 
       SELECT u.user_id, u.first_name, u.last_name, u.email, u.role,
-             u.employee_id, u.designation, u.is_active, u.is_vip, u.allow_multi_assets, u.created_at, u.updated_at,
+             u.employee_id, u.designation, u.room_no, u.is_active, u.is_vip, u.allow_multi_assets, u.created_at, u.updated_at,
              d.department_name, d.department_id,
              l.name as location_name, l.id as location_id
       FROM USER_MASTER u
@@ -798,6 +813,7 @@ router.put('/:id',
       role: user.role,
       employeeId: user.employee_id,
       designation: user.designation,
+      roomNo: user.room_no,
       isActive: user.is_active,
       isVip: user.is_vip,
       allowMultiAssets: user.allow_multi_assets,

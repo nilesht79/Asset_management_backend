@@ -195,7 +195,7 @@ class EmailService {
 
       // Use authentication email as sender (Gmail or SMTP user)
       const senderEmail = this.getSenderEmail();
-      const senderName = 'Asset Management System';
+      const senderName = 'Unified ITSM Platform';
 
       const mailOptions = {
         from: `"${senderName}" <${senderEmail}>`,
@@ -253,15 +253,15 @@ class EmailService {
       }
 
       const senderEmail = this.getSenderEmail();
-      const subject = 'Test Email - Asset Management System';
+      const subject = 'Test Email - Unified ITSM Platform';
       const body = `
-This is a test email from the Asset Management System.
+This is a test email from the Unified ITSM Platform.
 
 If you received this email, your email configuration is working correctly.
 
 Configuration Details:
 - Provider: ${this.config.provider}
-- From: Asset Management System <${senderEmail}>
+- From: Unified ITSM Platform <${senderEmail}>
 - Sent at: ${new Date().toISOString()}
 
 This is an automated message. Please do not reply.

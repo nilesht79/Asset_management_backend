@@ -126,7 +126,8 @@ router.get('/dropdown',
     const request = pool.request();
     let query = `
       SELECT l.id, l.name as label, l.id as value,
-             l.id, l.location_type_id, l.city_name, l.state_name, l.pincode
+             l.id, l.location_type_id, l.city_name, l.state_name, l.pincode,
+             l.building, l.floor
       FROM locations l
       WHERE l.is_active = 1
     `;

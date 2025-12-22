@@ -43,13 +43,13 @@ class ServiceReportPDF {
 
       return {
         logo: settings.COMPANY_LOGO || null,
-        name: settings.COMPANY_NAME || 'Asset Management System',
+        name: settings.COMPANY_NAME || 'Unified ITSM Platform',
         address: settings.COMPANY_ADDRESS || '',
         showNameInPdf: settings.SHOW_COMPANY_NAME_IN_PDF === 'true' || settings.SHOW_COMPANY_NAME_IN_PDF === '1' || settings.SHOW_COMPANY_NAME_IN_PDF === undefined
       };
     } catch (error) {
       console.error('Error fetching company settings:', error);
-      return { logo: null, name: 'Asset Management System', address: '' };
+      return { logo: null, name: 'Unified ITSM Platform', address: '' };
     }
   }
 

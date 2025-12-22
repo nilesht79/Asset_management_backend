@@ -138,7 +138,7 @@ async function getDepartmentHead(departmentId) {
 }
 
 /**
- * Get IT head (any active coordinator)
+ * Get IT head (any active IT head user)
  * @returns {object|null} - IT head user object
  */
 async function getITHead() {
@@ -147,7 +147,7 @@ async function getITHead() {
     const result = await pool.request().query(`
       SELECT TOP 1 user_id, first_name, last_name, email, role
       FROM USER_MASTER
-      WHERE role = 'coordinator' AND is_active = 1
+      WHERE role = 'it_head' AND is_active = 1
       ORDER BY created_at ASC
     `);
 

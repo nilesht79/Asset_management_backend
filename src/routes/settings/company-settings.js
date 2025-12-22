@@ -38,7 +38,7 @@ router.get('/',
     const settings = {
       logo: null,
       logoUrl: null,
-      name: 'Asset Management System',
+      name: 'Unified ITSM Platform',
       address: '',
       showNameInPdf: true // Default to true for backward compatibility
     };
@@ -50,7 +50,7 @@ router.get('/',
           settings.logoUrl = `/settings/company/logo/${row.config_value}`;
         }
       } else if (row.config_key === 'COMPANY_NAME') {
-        settings.name = row.config_value || 'Asset Management System';
+        settings.name = row.config_value || 'Unified ITSM Platform';
       } else if (row.config_key === 'COMPANY_ADDRESS') {
         settings.address = row.config_value || '';
       } else if (row.config_key === 'SHOW_COMPANY_NAME_IN_PDF') {
@@ -126,7 +126,7 @@ router.put('/',
     const settings = {
       logo: null,
       logoUrl: null,
-      name: 'Asset Management System',
+      name: 'Unified ITSM Platform',
       address: '',
       showNameInPdf: true
     };
@@ -138,7 +138,7 @@ router.put('/',
           settings.logoUrl = `/settings/company/logo/${row.config_value}`;
         }
       } else if (row.config_key === 'COMPANY_NAME') {
-        settings.name = row.config_value || 'Asset Management System';
+        settings.name = row.config_value || 'Unified ITSM Platform';
       } else if (row.config_key === 'COMPANY_ADDRESS') {
         settings.address = row.config_value || '';
       } else if (row.config_key === 'SHOW_COMPANY_NAME_IN_PDF') {

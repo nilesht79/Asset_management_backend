@@ -898,7 +898,7 @@ class SlaController {
 
       // Create workbook
       const workbook = new ExcelJS.Workbook();
-      workbook.creator = 'Asset Management System';
+      workbook.creator = 'Unified ITSM Platform';
       workbook.created = new Date();
 
       // Summary Sheet

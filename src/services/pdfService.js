@@ -50,7 +50,7 @@ async function generateAssetLabelPDF(assetData) {
 
       doc.fontSize(6)
         .font('Helvetica')
-        .text('Asset Management System', 10, 24, { width: 268, align: 'center' })
+        .text('Unified ITSM Platform', 10, 24, { width: 268, align: 'center' })
 
       // Divider line
       doc.moveTo(10, 35).lineTo(278, 35).stroke()
@@ -219,7 +219,7 @@ async function generateBulkAssetLabelsPDF(assetsData) {
 
         doc.fontSize(6)
           .font('Helvetica')
-          .text('Asset Management System', x, y + 19, { width: labelWidth, align: 'center' })
+          .text('Unified ITSM Platform', x, y + 19, { width: labelWidth, align: 'center' })
 
         // Divider
         doc.moveTo(x + 5, y + 30).lineTo(x + labelWidth - 5, y + 30).stroke()

@@ -13,6 +13,7 @@ const authConfig = require('../../config/auth');
 const loginRoutes = require('./login');
 const registerRoutes = require('./register');
 const oauthLoginRoutes = require('./oauth-login');
+const passwordResetRoutes = require('./password-reset');
 
 const router = express.Router();
 
@@ -20,6 +21,9 @@ const router = express.Router();
 router.use('/login', loginRoutes);
 router.use('/register', registerRoutes);
 router.use('/', oauthLoginRoutes);
+
+// Mount password reset routes
+router.use('/', passwordResetRoutes);
 
 
 // Legacy JWT refresh token endpoint has been deprecated

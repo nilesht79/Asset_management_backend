@@ -11,6 +11,7 @@ const {
   getITHead,
   logApprovalHistory
 } = require('../../utils/requisition-helpers');
+const requisitionNotificationService = require('../../services/requisitionNotificationService');
 
 const router = express.Router();
 
@@ -181,6 +182,9 @@ router.put('/:id/dept-head-approve',
       new_status: 'pending_it_head'
     });
 
+    // Send notifications to IT Head and Employee
+    requisitionNotificationService.notifyDeptHeadApproved(requisition, user);
+
     sendSuccess(res, null, 'Requisition approved successfully');
   })
 );
@@ -258,6 +262,9 @@ router.put('/:id/dept-head-reject',
       previous_status: 'pending_dept_head',
       new_status: 'rejected_by_dept_head'
     });
+
+    // Send notification to Employee
+    requisitionNotificationService.notifyDeptHeadRejected(requisition, user, comments);
 
     sendSuccess(res, null, 'Requisition rejected successfully');
   })
@@ -392,6 +399,9 @@ router.put('/:id/it-head-approve',
       new_status: 'pending_assignment'
     });
 
+    // Send notifications to Coordinators and Employee
+    requisitionNotificationService.notifyITHeadApproved(requisition, user);
+
     sendSuccess(res, null, 'Requisition approved successfully');
   })
 );
@@ -456,6 +466,9 @@ router.put('/:id/it-head-reject',
       previous_status: 'pending_it_head',
       new_status: 'rejected_by_it_head'
     });
+
+    // Send notifications to Employee and Department Head
+    requisitionNotificationService.notifyITHeadRejected(requisition, user, comments);
 
     sendSuccess(res, null, 'Requisition rejected successfully');
   })

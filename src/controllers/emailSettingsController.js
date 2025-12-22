@@ -111,7 +111,7 @@ const EmailSettingsController = {
         gmail_user,
         gmail_app_password,
         from_email,
-        from_name: from_name || 'Asset Management System',
+        from_name: from_name || 'Unified ITSM Platform',
         is_enabled: is_enabled !== undefined ? is_enabled : true
       };
 

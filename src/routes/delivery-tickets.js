@@ -9,7 +9,8 @@ const { requireDynamicPermission } = require('../middleware/permissions');
 const { authenticateToken } = require('../middleware/auth');
 const { validatePagination } = require('../middleware/validation');
 const { uploadSignature, uploadSignedForm, handleUploadError } = require('../middleware/upload');
-const htmlPdf = require('html-pdf-node');
+const DeliveryFormPDF = require('../utils/deliveryFormPDF');
+const requisitionNotificationService = require('../services/requisitionNotificationService');
 
 // Apply authentication to all routes
 router.use(authenticateToken);
@@ -257,6 +258,23 @@ router.put(
               updated_at = GETUTCDATE()
             WHERE requisition_id = @requisition_id
           `);
+
+        // Get requisition data for notification
+        const reqResult = await pool.request()
+          .input('requisition_id', sql.UniqueIdentifier, requisitionId)
+          .query('SELECT * FROM ASSET_REQUISITIONS WHERE requisition_id = @requisition_id');
+
+        if (reqResult.recordset.length > 0) {
+          const requisition = reqResult.recordset[0];
+          // Get engineer name from ticket
+          const deliveredByName = await pool.request()
+            .input('ticket_id', sql.UniqueIdentifier, id)
+            .query('SELECT delivered_by_name FROM ASSET_DELIVERY_TICKETS WHERE ticket_id = @ticket_id');
+
+          requisitionNotificationService.notifyAssetDelivered(requisition, {
+            delivered_by_name: deliveredByName.recordset[0]?.delivered_by_name || 'Engineer'
+          });
+        }
       }
 
       await transaction.commit();
@@ -349,95 +367,8 @@ router.post(
 
     const ticket = result.recordset[0];
 
-    // Convert employee signature to base64 if it exists
-    let employeeSignatureBase64 = '';
-    if (ticket.employee_signature_path) {
-      try {
-        const signaturePath = path.join(__dirname, '../..', ticket.employee_signature_path);
-        if (fs.existsSync(signaturePath)) {
-          const imageBuffer = fs.readFileSync(signaturePath);
-          employeeSignatureBase64 = `data:image/png;base64,${imageBuffer.toString('base64')}`;
-        }
-      } catch (error) {
-        console.error('Error reading employee signature:', error);
-      }
-    }
-
-    // Generate simple HTML form (in production, use a proper PDF library like pdfkit or puppeteer)
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <style>
-          body { font-family: Arial, sans-serif; padding: 20px; }
-          .header { text-align: center; margin-bottom: 30px; }
-          .section { margin-bottom: 20px; }
-          .field { margin-bottom: 10px; }
-          .label { font-weight: bold; display: inline-block; width: 200px; }
-          .signature-box { border: 1px solid #000; height: 80px; margin-top: 10px; }
-          table { width: 100%; border-collapse: collapse; }
-          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-          th { background-color: #f2f2f2; }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <h1>Asset Delivery Form</h1>
-          <p>Delivery Ticket: <strong>${ticket.ticket_number}</strong></p>
-          <p>Date: ${new Date().toLocaleDateString()}</p>
-        </div>
-
-        <div class="section">
-          <h3>Recipient Information</h3>
-          <div class="field"><span class="label">Name:</span> ${ticket.recipient_name}</div>
-          <div class="field"><span class="label">Email:</span> ${ticket.recipient_email}</div>
-          <div class="field"><span class="label">Department:</span> ${ticket.department_name}</div>
-        </div>
-
-        <div class="section">
-          <h3>Asset Information</h3>
-          <table>
-            <tr><th>Field</th><th>Details</th></tr>
-            <tr><td>Asset Tag</td><td>${ticket.asset_tag}</td></tr>
-            <tr><td>Serial Number</td><td>${ticket.serial_number || 'N/A'}</td></tr>
-            <tr><td>Category</td><td>${ticket.category_name || 'N/A'}</td></tr>
-            <tr><td>Product</td><td>${ticket.product_name || 'N/A'} ${ticket.product_model ? '- ' + ticket.product_model : ''}</td></tr>
-            <tr><td>Requisition</td><td>${ticket.requisition_number}</td></tr>
-          </table>
-        </div>
-
-        <div class="section">
-          <h3>Delivery Details</h3>
-          <div class="field"><span class="label">Delivery Type:</span> ${ticket.delivery_type}</div>
-          <div class="field"><span class="label">Scheduled Date:</span> ${ticket.scheduled_delivery_date ? new Date(ticket.scheduled_delivery_date).toLocaleString() : 'Not scheduled'}</div>
-        </div>
-
-        <div class="section">
-          <h3>Purpose</h3>
-          <p>${ticket.purpose || 'N/A'}</p>
-        </div>
-
-        <div class="section">
-          <h3>Recipient Acknowledgment</h3>
-          <p>I acknowledge receipt of the above asset in good working condition and agree to use it responsibly according to company policies.</p>
-          <div class="field" style="margin-top: 40px;">
-            <span class="label">Recipient Signature:</span>
-            ${employeeSignatureBase64 ?
-              `<div style="margin-top: 10px;">
-                <img src="${employeeSignatureBase64}"
-                     alt="Employee Signature"
-                     style="max-width: 300px; max-height: 100px; border: 1px solid #ddd; padding: 5px;" />
-              </div>` :
-              '<div class="signature-box"></div>'
-            }
-          </div>
-          <div class="field">
-            <span class="label">Date:</span> ${ticket.employee_confirmed_at ? new Date(ticket.employee_confirmed_at).toLocaleDateString() : '_______________________'}
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
+    // Get employee signature path for PDF
+    const employeeSignaturePath = ticket.employee_signature_path || null;
 
     // Update ticket to mark form as generated
     await pool.request()
@@ -448,16 +379,9 @@ router.post(
         WHERE ticket_id = @ticket_id
       `);
 
-    // Generate PDF from HTML
-    const file = { content: htmlContent };
-    const options = {
-      format: 'A4',
-      printBackground: true,
-      margin: { top: '20px', right: '20px', bottom: '20px', left: '20px' }
-    };
-
     try {
-      const pdfBuffer = await htmlPdf.generatePdf(file, options);
+      // Generate PDF using pdfkit utility (prevents blank page issue)
+      const pdfBuffer = await DeliveryFormPDF.generate(ticket, employeeSignaturePath);
 
       // Return PDF as response
       res.setHeader('Content-Type', 'application/pdf');
@@ -983,6 +907,16 @@ router.put(
 
         await transaction.commit();
 
+        // Get full requisition data for notification
+        const reqResult = await pool.request()
+          .input('requisition_id', sql.UniqueIdentifier, ticket.requisition_id)
+          .query('SELECT * FROM ASSET_REQUISITIONS WHERE requisition_id = @requisition_id');
+
+        if (reqResult.recordset.length > 0) {
+          const requisition = reqResult.recordset[0];
+          requisitionNotificationService.notifyRequisitionCompleted(requisition);
+        }
+
         res.json({
           success: true,
           message: 'Functionality confirmed. Delivery completed successfully.'
@@ -1135,6 +1069,16 @@ router.put(
         `);
 
       await transaction.commit();
+
+      // Get full requisition data for notification
+      const reqResult = await pool.request()
+        .input('requisition_id', sql.UniqueIdentifier, ticket.requisition_id)
+        .query('SELECT * FROM ASSET_REQUISITIONS WHERE requisition_id = @requisition_id');
+
+      if (reqResult.recordset.length > 0) {
+        const fullRequisition = reqResult.recordset[0];
+        requisitionNotificationService.notifyRequisitionCompleted(fullRequisition);
+      }
 
       res.json({
         success: true,

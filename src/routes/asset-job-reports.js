@@ -419,7 +419,7 @@ router.get('/export/excel',
 
     // Create Excel workbook
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'Asset Management System';
+    workbook.creator = 'Unified ITSM Platform';
     workbook.created = new Date();
 
     const worksheet = workbook.addWorksheet('Asset Job Reports');
@@ -537,7 +537,7 @@ router.get('/:id',
           COALESCE(loc.name, am.location_name, user_loc.name) as location_name,
           COALESCE(loc.building, user_loc.building) as location_building,
           COALESCE(loc.floor, user_loc.floor) as location_floor,
-          NULL as location_room,
+          COALESCE(loc.room_no, user_loc.room_no) as location_room_no,
 
           -- Previous user (for transfers)
           am.previous_user_id,
@@ -552,7 +552,7 @@ router.get('/:id',
           COALESCE(prev_loc.name, am.previous_location_name, prev_user_loc.name) as previous_location_name,
           COALESCE(prev_loc.building, prev_user_loc.building) as previous_location_building,
           COALESCE(prev_loc.floor, prev_user_loc.floor) as previous_location_floor,
-          NULL as previous_location_room,
+          COALESCE(prev_loc.room_no, prev_user_loc.room_no) as previous_location_room_no,
 
           -- Performed by
           am.performed_by,
@@ -641,7 +641,6 @@ router.get('/:id/pdf',
           COALESCE(loc.name, am.location_name, user_loc.name) as location_name,
           COALESCE(loc.building, user_loc.building) as location_building,
           COALESCE(loc.floor, user_loc.floor) as location_floor,
-          NULL as location_room,
 
           am.previous_user_id,
           COALESCE(prev_user.first_name + ' ' + prev_user.last_name, am.previous_user_name) as previous_user_name,
@@ -655,7 +654,6 @@ router.get('/:id/pdf',
           COALESCE(prev_loc.name, am.previous_location_name, prev_user_loc.name) as previous_location_name,
           COALESCE(prev_loc.building, prev_user_loc.building) as previous_location_building,
           COALESCE(prev_loc.floor, prev_user_loc.floor) as previous_location_floor,
-          NULL as previous_location_room,
 
           am.performed_by,
           COALESCE(performer.first_name + ' ' + performer.last_name, am.performed_by_name) as performed_by_name,
@@ -765,7 +763,6 @@ router.post('/pdf/bulk',
           COALESCE(loc.name, am.location_name, user_loc.name) as location_name,
           COALESCE(loc.building, user_loc.building) as location_building,
           COALESCE(loc.floor, user_loc.floor) as location_floor,
-          NULL as location_room,
 
           am.previous_user_id,
           COALESCE(prev_user.first_name + ' ' + prev_user.last_name, am.previous_user_name) as previous_user_name,
@@ -779,7 +776,6 @@ router.post('/pdf/bulk',
           COALESCE(prev_loc.name, am.previous_location_name, prev_user_loc.name) as previous_location_name,
           COALESCE(prev_loc.building, prev_user_loc.building) as previous_location_building,
           COALESCE(prev_loc.floor, prev_user_loc.floor) as previous_location_floor,
-          NULL as previous_location_room,
 
           am.performed_by,
           COALESCE(performer.first_name + ' ' + performer.last_name, am.performed_by_name) as performed_by_name,

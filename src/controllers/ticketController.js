@@ -186,7 +186,7 @@ Assigned By: ${assignedByName}
 Description:
 ${description || 'No description provided'}
 
-Please log in to the Asset Management System to view and work on this ticket.
+Please log in to the Unified ITSM Platform to view and work on this ticket.
 
 This is an automated notification. Please do not reply to this email.
             `;
@@ -366,7 +366,7 @@ ${isReassignment ? 'Reassigned' : 'Assigned'} By: ${assignedByName}
 Description:
 ${fullTicket.description || 'No description provided'}
 
-Please log in to the Asset Management System to view and work on this ticket.
+Please log in to the Unified ITSM Platform to view and work on this ticket.
 
 This is an automated notification. Please do not reply to this email.
             `;
@@ -428,7 +428,7 @@ ${fullTicket.description || 'No description provided'}
 
 This ticket has been reactivated and the SLA tracking has been resumed. Please review and take necessary action.
 
-Please log in to the Asset Management System to view and work on this ticket.
+Please log in to the Unified ITSM Platform to view and work on this ticket.
 
 This is an automated notification. Please do not reply to this email.
             `;
@@ -503,7 +503,7 @@ Assigned By: ${assignedByName}
 Description:
 ${updatedTicket.description || 'No description provided'}
 
-Please log in to the Asset Management System to view and work on this ticket.
+Please log in to the Unified ITSM Platform to view and work on this ticket.
 
 This is an automated notification. Please do not reply to this email.
           `;
@@ -1463,7 +1463,7 @@ ${ticket.description || 'No description provided'}
 
 This ticket has been reactivated and the SLA tracking has been resumed. Please review and take necessary action.
 
-Please log in to the Asset Management System to view and work on this ticket.
+Please log in to the Unified ITSM Platform to view and work on this ticket.
 
 This is an automated notification. Please do not reply to this email.
             `;

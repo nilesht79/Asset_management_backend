@@ -108,7 +108,11 @@ class SlaTrackingModel {
       const query = `
         SELECT
           tst.*,
+          t.ticket_number,
+          t.title AS ticket_title,
+          t.priority AS ticket_priority,
           sr.rule_name,
+          sr.rule_name AS sla_rule_name,
           sr.description AS rule_description,
           sr.min_tat_minutes,
           sr.avg_tat_minutes,
@@ -120,6 +124,7 @@ class SlaTrackingModel {
           bhs.schedule_name AS business_hours_name,
           hc.calendar_name AS holiday_calendar_name
         FROM TICKET_SLA_TRACKING tst
+        INNER JOIN TICKETS t ON tst.ticket_id = t.ticket_id
         INNER JOIN SLA_RULES sr ON tst.sla_rule_id = sr.rule_id
         LEFT JOIN BUSINESS_HOURS_SCHEDULES bhs ON sr.business_hours_schedule_id = bhs.schedule_id
         LEFT JOIN HOLIDAY_CALENDARS hc ON sr.holiday_calendar_id = hc.calendar_id

@@ -61,9 +61,9 @@ router.get('/health', (req, res) => {
 // API Documentation info
 router.get('/', (req, res) => {
   res.status(200).json({
-    name: 'Asset Management System API',
+    name: 'Unified ITSM Platform API',
     version: '1.0.0',
-    description: 'RESTful API for Asset Management System',
+    description: 'RESTful API for Unified ITSM Platform',
     endpoints: {
       auth: '/auth',
       oauth: '/oauth',

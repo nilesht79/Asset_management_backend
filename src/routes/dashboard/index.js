@@ -560,12 +560,12 @@ router.get('/engineer',
               AND status IN ('open', 'assigned', 'in_progress', 'pending')
             ) as active_tickets,
 
-            -- Pending Deliveries
+            -- Pending Deliveries (including in_transit from requisition assignments)
             (
               SELECT COUNT(*)
               FROM ASSET_DELIVERY_TICKETS
               WHERE delivered_by = @engineerId
-              AND status IN ('pending', 'scheduled')
+              AND status IN ('pending', 'scheduled', 'in_transit')
             ) as pending_deliveries,
 
             -- SLA At Risk (tickets in warning or critical zones)
@@ -652,7 +652,7 @@ router.get('/engineer',
             t.due_date ASC
         `);
 
-      // 3. Get Pending Deliveries (Top 10)
+      // 3. Get Pending Deliveries (Top 10) - including in_transit from requisition assignments
       const deliveriesResult = await pool.request()
         .input('engineerId', sql.UniqueIdentifier, engineerId)
         .query(`
@@ -666,7 +666,7 @@ router.get('/engineer',
             status
           FROM ASSET_DELIVERY_TICKETS
           WHERE delivered_by = @engineerId
-          AND status IN ('pending', 'scheduled')
+          AND status IN ('pending', 'scheduled', 'in_transit')
           ORDER BY scheduled_delivery_date ASC
         `);
 

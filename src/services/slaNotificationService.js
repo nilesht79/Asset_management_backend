@@ -258,7 +258,7 @@ Ticket Details:
 
     body += `
 ---
-This is an automated notification from the Asset Management System.
+This is an automated notification from the Unified ITSM Platform.
 Please do not reply to this email.
 `;
 

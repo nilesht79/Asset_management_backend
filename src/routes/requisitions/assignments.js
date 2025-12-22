@@ -10,6 +10,7 @@ const {
   isValidStatusTransition,
   logApprovalHistory
 } = require('../../utils/requisition-helpers');
+const requisitionNotificationService = require('../../services/requisitionNotificationService');
 
 // GET /api/v1/requisitions/pending-assignments - Get all requisitions pending asset assignment
 router.get(
@@ -325,6 +326,15 @@ router.post(
       });
 
       await transaction.commit();
+
+      // Send notifications to Employee and Engineer
+      requisitionNotificationService.notifyAssetAssigned(requisition, {
+        asset_tag: asset.asset_tag,
+        engineer_id,
+        engineer_name: engineerName,
+        coordinator_name: userName,
+        installation_scheduled_date
+      });
 
       res.json({
         success: true,

@@ -71,7 +71,7 @@ class GatePassPDF {
 
       return {
         logo: settings.COMPANY_LOGO || null,
-        name: settings.COMPANY_NAME || 'Asset Management System',
+        name: settings.COMPANY_NAME || 'Unified ITSM Platform',
         address: settings.COMPANY_ADDRESS || '',
         phone: settings.COMPANY_PHONE || '',
         email: settings.COMPANY_EMAIL || '',
@@ -79,7 +79,7 @@ class GatePassPDF {
       };
     } catch (error) {
       console.error('Error fetching company settings:', error);
-      return { logo: null, name: 'Asset Management System', address: '', phone: '', email: '' };
+      return { logo: null, name: 'Unified ITSM Platform', address: '', phone: '', email: '' };
     }
   }
 

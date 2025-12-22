@@ -583,7 +583,7 @@ Request Details:
 - Priority: ${(priority || 'normal').toUpperCase()}
 ${purpose ? `- Purpose: ${purpose}` : ''}
 
-Please log in to the Asset Management System to review and approve/reject this request.
+Please log in to the Unified ITSM Platform to review and approve/reject this request.
 
 This is an automated notification. Please do not reply to this email.
             `;

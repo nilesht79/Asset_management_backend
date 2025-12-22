@@ -2,7 +2,7 @@ require('dotenv').config();
 
 module.exports = {
   app: {
-    name: 'Asset Management System',
+    name: 'Unified ITSM Platform',
     version: '1.0.0',
     port: process.env.PORT || 5000,
     env: process.env.NODE_ENV || 'development',

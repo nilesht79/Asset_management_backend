@@ -15,6 +15,7 @@ const {
   logApprovalHistory,
   REQUISITION_STATUS
 } = require('../../utils/requisition-helpers');
+const requisitionNotificationService = require('../../services/requisitionNotificationService');
 
 const router = express.Router();
 const approvalsRouter = require('./approvals');
@@ -144,7 +145,11 @@ router.post('/',
         SELECT * FROM ASSET_REQUISITIONS WHERE requisition_id = @requisitionId
       `);
 
-    sendCreated(res, result.recordset[0], 'Requisition created successfully');
+    // Send notification to department head
+    const createdRequisition = result.recordset[0];
+    requisitionNotificationService.notifyRequisitionCreated(createdRequisition);
+
+    sendCreated(res, createdRequisition, 'Requisition created successfully');
   })
 );
 
@@ -391,6 +396,13 @@ router.put('/:id/cancel',
       previous_status: requisition.status,
       new_status: 'cancelled'
     });
+
+    // Notify relevant approvers about cancellation
+    requisitionNotificationService.notifyRequisitionCancelled(
+      requisition,
+      `${user.first_name} ${user.last_name}`,
+      cancellation_reason
+    );
 
     sendSuccess(res, null, 'Requisition cancelled successfully');
   })
