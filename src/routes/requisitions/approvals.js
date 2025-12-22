@@ -182,8 +182,51 @@ router.put('/:id/dept-head-approve',
       new_status: 'pending_it_head'
     });
 
-    // Send notifications to IT Head and Employee
-    requisitionNotificationService.notifyDeptHeadApproved(requisition, user);
+    // Check if requester is IT Head - auto-approve at IT level
+    const requesterResult = await pool.request()
+      .input('requestedBy', sql.UniqueIdentifier, requisition.requested_by)
+      .query(`SELECT user_id, role, first_name, last_name FROM USER_MASTER WHERE user_id = @requestedBy`);
+
+    const requester = requesterResult.recordset[0];
+    const isRequesterITHead = requester && requester.role === 'it_head';
+
+    if (isRequesterITHead) {
+      // Auto-approve at IT level since requester is IT Head
+      await pool.request()
+        .input('id', sql.UniqueIdentifier, id)
+        .input('itHeadId', sql.UniqueIdentifier, requisition.requested_by)
+        .input('itHeadName', sql.NVarChar(200), `${requester.first_name} ${requester.last_name}`)
+        .query(`
+          UPDATE ASSET_REQUISITIONS
+          SET status = 'pending_assignment',
+              it_head_id = @itHeadId,
+              it_head_name = @itHeadName,
+              it_head_status = 'approved',
+              it_head_comments = 'Auto-approved (requester is IT Head)',
+              it_head_approved_at = GETUTCDATE(),
+              updated_at = GETUTCDATE()
+          WHERE requisition_id = @id
+        `);
+
+      // Log IT head auto-approval
+      await logApprovalHistory({
+        requisition_id: id,
+        approval_level: 'it_head',
+        approver_id: requisition.requested_by,
+        approver_name: `${requester.first_name} ${requester.last_name}`,
+        approver_role: 'it_head',
+        action: 'approved',
+        comments: 'Auto-approved (requester is IT Head)',
+        previous_status: 'pending_it_head',
+        new_status: 'pending_assignment'
+      });
+
+      // Notify coordinators for assignment instead of IT head
+      requisitionNotificationService.notifyITHeadApproved(requisition, requester);
+    } else {
+      // Send notifications to IT Head and Employee
+      requisitionNotificationService.notifyDeptHeadApproved(requisition, user);
+    }
 
     sendSuccess(res, null, 'Requisition approved successfully');
   })

@@ -15,6 +15,12 @@ const permissions = [
     action: 'read'
   },
   {
+    key: 'requisitions.update',
+    name: 'Update Requisitions',
+    description: 'Update requisition status (approve/reject)',
+    action: 'update'
+  },
+  {
     key: 'requisitions.cancel',
     name: 'Cancel Requisitions',
     description: 'Cancel own requisitions',
@@ -62,16 +68,31 @@ const rolePermissions = {
   department_head: [
     'requisitions.create',
     'requisitions.read',
-    'requisitions.approve.dept'
+    'requisitions.update',
+    'requisitions.cancel',
+    'requisitions.approve.dept',
+    'requisitions.delivery.confirm'
+  ],
+  department_coordinator: [
+    'requisitions.create',
+    'requisitions.read',
+    'requisitions.update',
+    'requisitions.cancel',
+    'requisitions.approve.dept',
+    'requisitions.delivery.confirm'
   ],
   it_head: [
     'requisitions.create',
     'requisitions.read',
-    'requisitions.approve.it'
+    'requisitions.update',
+    'requisitions.cancel',
+    'requisitions.approve.it',
+    'requisitions.delivery.confirm'
   ],
   coordinator: [
     'requisitions.create',
     'requisitions.read',
+    'requisitions.update',
     'requisitions.cancel',
     'requisitions.approve.dept',
     'requisitions.approve.it',
@@ -82,6 +103,7 @@ const rolePermissions = {
   admin: [
     'requisitions.create',
     'requisitions.read',
+    'requisitions.update',
     'requisitions.cancel',
     'requisitions.approve.dept',
     'requisitions.approve.it',
@@ -92,6 +114,7 @@ const rolePermissions = {
   superadmin: [
     'requisitions.create',
     'requisitions.read',
+    'requisitions.update',
     'requisitions.cancel',
     'requisitions.approve.dept',
     'requisitions.approve.it',

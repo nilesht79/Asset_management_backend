@@ -391,6 +391,343 @@ router.post('/approvals/:id/reject',
   })
 );
 
+// GET /dashboard/coordinator - Coordinator dashboard data (ITSM-level KPIs)
+router.get('/coordinator',
+  requireRole([USER_ROLES.COORDINATOR, USER_ROLES.SUPERADMIN, USER_ROLES.ADMIN]),
+  asyncHandler(async (req, res) => {
+    const pool = await connectDB();
+
+    try {
+      // 1. Asset Management KPIs
+      const assetStatsResult = await pool.request().query(`
+        SELECT
+          -- Overall Asset Stats
+          (SELECT COUNT(*) FROM assets WHERE is_active = 1) as total_assets,
+          (SELECT COUNT(*) FROM assets WHERE is_active = 1 AND status = 'assigned') as assigned_assets,
+          (SELECT COUNT(*) FROM assets WHERE is_active = 1 AND status = 'available') as available_assets,
+          (SELECT COUNT(*) FROM assets WHERE is_active = 1 AND status = 'under_repair') as under_repair_assets,
+          (SELECT COUNT(*) FROM assets WHERE is_active = 1 AND status = 'retired') as retired_assets,
+          (SELECT COUNT(*) FROM assets WHERE is_active = 1 AND warranty_end_date BETWEEN GETDATE() AND DATEADD(DAY, 30, GETDATE())) as warranty_expiring_soon,
+          (SELECT COUNT(*) FROM assets WHERE is_active = 1 AND created_at >= DATETRUNC(MONTH, GETDATE())) as added_this_month,
+
+          -- Asset by Condition
+          (SELECT COUNT(*) FROM assets WHERE is_active = 1 AND condition_status = 'good') as condition_good,
+          (SELECT COUNT(*) FROM assets WHERE is_active = 1 AND condition_status = 'fair') as condition_fair,
+          (SELECT COUNT(*) FROM assets WHERE is_active = 1 AND condition_status = 'poor') as condition_poor
+      `);
+
+      // 2. Ticket Management KPIs
+      const ticketStatsResult = await pool.request().query(`
+        SELECT
+          (SELECT COUNT(*) FROM TICKETS) as total_tickets,
+          (SELECT COUNT(*) FROM TICKETS WHERE status = 'open') as open_tickets,
+          (SELECT COUNT(*) FROM TICKETS WHERE status = 'assigned') as assigned_tickets,
+          (SELECT COUNT(*) FROM TICKETS WHERE status = 'in_progress') as in_progress_tickets,
+          (SELECT COUNT(*) FROM TICKETS WHERE status = 'pending') as pending_tickets,
+          (SELECT COUNT(*) FROM TICKETS WHERE status IN ('resolved', 'closed')) as resolved_tickets,
+
+          -- Today's Tickets
+          (SELECT COUNT(*) FROM TICKETS WHERE CAST(created_at AS DATE) = CAST(GETDATE() AS DATE)) as today_created,
+          (SELECT COUNT(*) FROM TICKETS WHERE CAST(resolved_at AS DATE) = CAST(GETDATE() AS DATE)) as today_resolved,
+
+          -- This Week
+          (SELECT COUNT(*) FROM TICKETS WHERE created_at >= DATETRUNC(WEEK, GETDATE())) as week_created,
+          (SELECT COUNT(*) FROM TICKETS WHERE resolved_at >= DATETRUNC(WEEK, GETDATE())) as week_resolved,
+
+          -- Unassigned Tickets
+          (SELECT COUNT(*) FROM TICKETS WHERE status = 'open' AND assigned_to_engineer_id IS NULL) as unassigned_tickets,
+
+          -- Tickets by Priority (Active)
+          (SELECT COUNT(*) FROM TICKETS WHERE priority = 'critical' AND status NOT IN ('resolved', 'closed', 'cancelled')) as critical_tickets,
+          (SELECT COUNT(*) FROM TICKETS WHERE priority = 'high' AND status NOT IN ('resolved', 'closed', 'cancelled')) as high_priority_tickets,
+          (SELECT COUNT(*) FROM TICKETS WHERE priority = 'medium' AND status NOT IN ('resolved', 'closed', 'cancelled')) as medium_priority_tickets,
+          (SELECT COUNT(*) FROM TICKETS WHERE priority = 'low' AND status NOT IN ('resolved', 'closed', 'cancelled')) as low_priority_tickets
+      `);
+
+      // 3. SLA KPIs
+      const slaStatsResult = await pool.request().query(`
+        SELECT
+          -- SLA Compliance (Last 30 days)
+          COUNT(CASE WHEN sla.final_status = 'on_track' THEN 1 END) as within_sla_count,
+          COUNT(CASE WHEN sla.final_status = 'breached' THEN 1 END) as breached_count,
+          COUNT(*) as total_resolved_with_sla,
+          CASE
+            WHEN COUNT(*) > 0 THEN
+              CAST(COUNT(CASE WHEN sla.final_status = 'on_track' THEN 1 END) AS FLOAT) / COUNT(*) * 100
+            ELSE 0
+          END as sla_compliance_rate,
+
+          -- Active SLA Status
+          (SELECT COUNT(*) FROM TICKET_SLA_TRACKING sla JOIN TICKETS t ON sla.ticket_id = t.ticket_id WHERE sla.sla_status = 'on_track' AND t.status NOT IN ('resolved', 'closed', 'cancelled')) as active_on_track,
+          (SELECT COUNT(*) FROM TICKET_SLA_TRACKING sla JOIN TICKETS t ON sla.ticket_id = t.ticket_id WHERE sla.sla_status = 'warning' AND t.status NOT IN ('resolved', 'closed', 'cancelled')) as active_warning,
+          (SELECT COUNT(*) FROM TICKET_SLA_TRACKING sla JOIN TICKETS t ON sla.ticket_id = t.ticket_id WHERE sla.sla_status = 'critical' AND t.status NOT IN ('resolved', 'closed', 'cancelled')) as active_critical,
+          (SELECT COUNT(*) FROM TICKET_SLA_TRACKING sla JOIN TICKETS t ON sla.ticket_id = t.ticket_id WHERE sla.breach_triggered_at IS NOT NULL AND t.status NOT IN ('resolved', 'closed', 'cancelled')) as active_breached
+        FROM TICKETS t
+        JOIN TICKET_SLA_TRACKING sla ON t.ticket_id = sla.ticket_id
+        WHERE t.status IN ('resolved', 'closed')
+        AND t.resolved_at >= DATEADD(DAY, -30, GETDATE())
+      `);
+
+      // 4. Requisition KPIs
+      const requisitionStatsResult = await pool.request().query(`
+        SELECT
+          (SELECT COUNT(*) FROM ASSET_REQUISITIONS) as total_requisitions,
+          (SELECT COUNT(*) FROM ASSET_REQUISITIONS WHERE status IN ('pending_dept_head', 'pending_it_head')) as pending_approval,
+          (SELECT COUNT(*) FROM ASSET_REQUISITIONS WHERE status = 'pending_assignment') as pending_assignment,
+          (SELECT COUNT(*) FROM ASSET_REQUISITIONS WHERE status = 'assigned') as assigned_pending_delivery,
+          (SELECT COUNT(*) FROM ASSET_REQUISITIONS WHERE status = 'delivered') as delivered,
+          (SELECT COUNT(*) FROM ASSET_REQUISITIONS WHERE status = 'completed') as completed,
+          (SELECT COUNT(*) FROM ASSET_REQUISITIONS WHERE status LIKE 'rejected%') as rejected,
+
+          -- This Month
+          (SELECT COUNT(*) FROM ASSET_REQUISITIONS WHERE created_at >= DATETRUNC(MONTH, GETDATE())) as month_total,
+          (SELECT COUNT(*) FROM ASSET_REQUISITIONS WHERE status = 'completed' AND updated_at >= DATETRUNC(MONTH, GETDATE())) as month_completed
+      `);
+
+      // 5. Consumable KPIs
+      const consumableStatsResult = await pool.request().query(`
+        SELECT
+          (SELECT COUNT(*) FROM consumable_requests) as total_requests,
+          (SELECT COUNT(*) FROM consumable_requests WHERE status = 'pending') as pending_requests,
+          (SELECT COUNT(*) FROM consumable_requests WHERE status = 'approved') as approved_requests,
+          (SELECT COUNT(*) FROM consumable_requests WHERE status = 'delivered') as delivered_requests,
+          (SELECT COUNT(*) FROM consumable_requests WHERE status = 'rejected') as rejected_requests,
+
+          -- This Month
+          (SELECT COUNT(*) FROM consumable_requests WHERE created_at >= DATETRUNC(MONTH, GETDATE())) as month_total,
+          (SELECT COUNT(*) FROM consumable_requests WHERE status = 'delivered' AND delivered_at >= DATETRUNC(MONTH, GETDATE())) as month_delivered,
+
+          -- Inventory Alerts (join consumables with consumable_inventory to get stock levels)
+          (SELECT COUNT(DISTINCT c.id) FROM consumables c
+           LEFT JOIN consumable_inventory ci ON c.id = ci.consumable_id
+           WHERE c.is_active = 1 AND ISNULL(ci.quantity_in_stock, 0) <= c.reorder_level AND ISNULL(ci.quantity_in_stock, 0) > 0) as low_stock_items,
+          (SELECT COUNT(DISTINCT c.id) FROM consumables c
+           LEFT JOIN consumable_inventory ci ON c.id = ci.consumable_id
+           WHERE c.is_active = 1 AND ISNULL(ci.quantity_in_stock, 0) = 0) as out_of_stock_items
+      `);
+
+      // 6. Delivery Management KPIs
+      const deliveryStatsResult = await pool.request().query(`
+        SELECT
+          (SELECT COUNT(*) FROM ASSET_DELIVERY_TICKETS WHERE status = 'pending') as pending_deliveries,
+          (SELECT COUNT(*) FROM ASSET_DELIVERY_TICKETS WHERE status = 'scheduled') as scheduled_deliveries,
+          (SELECT COUNT(*) FROM ASSET_DELIVERY_TICKETS WHERE status = 'in_transit') as in_transit_deliveries,
+          (SELECT COUNT(*) FROM ASSET_DELIVERY_TICKETS WHERE status = 'delivered') as completed_deliveries,
+
+          -- Today's Deliveries
+          (SELECT COUNT(*) FROM ASSET_DELIVERY_TICKETS WHERE CAST(scheduled_delivery_date AS DATE) = CAST(GETDATE() AS DATE)) as today_scheduled,
+          (SELECT COUNT(*) FROM ASSET_DELIVERY_TICKETS WHERE CAST(actual_delivery_date AS DATE) = CAST(GETDATE() AS DATE) AND status = 'delivered') as today_completed
+      `);
+
+      // 7. Ticket Distribution by Category
+      const ticketCategoryResult = await pool.request().query(`
+        SELECT TOP 10
+          category,
+          COUNT(*) as total_tickets,
+          COUNT(CASE WHEN status IN ('open', 'assigned', 'in_progress', 'pending') THEN 1 END) as active_tickets,
+          COUNT(CASE WHEN status IN ('resolved', 'closed') THEN 1 END) as resolved_tickets
+        FROM TICKETS
+        WHERE category IS NOT NULL
+        GROUP BY category
+        ORDER BY total_tickets DESC
+      `);
+
+      // 8. Asset Distribution by Location (through assigned user's location)
+      const locationDistResult = await pool.request().query(`
+        SELECT TOP 10
+          l.name as location_name,
+          COUNT(a.id) as asset_count
+        FROM locations l
+        LEFT JOIN USER_MASTER u ON l.id = u.location_id AND u.is_active = 1
+        LEFT JOIN assets a ON u.user_id = a.assigned_to AND a.is_active = 1 AND a.status = 'assigned'
+        WHERE l.is_active = 1
+        GROUP BY l.id, l.name
+        ORDER BY asset_count DESC
+      `);
+
+      // 9. Recent Pending Actions (Top 10)
+      const pendingActionsResult = await pool.request().query(`
+        SELECT TOP 10
+          'requisition' as type,
+          CAST(r.requisition_id AS VARCHAR(50)) as id,
+          r.requisition_number as reference,
+          CONCAT('Asset requisition from ', u.first_name, ' ', u.last_name) as description,
+          r.status,
+          r.urgency as priority,
+          r.created_at
+        FROM ASSET_REQUISITIONS r
+        JOIN USER_MASTER u ON r.requested_by = u.user_id
+        WHERE r.status = 'pending_assignment'
+
+        UNION ALL
+
+        SELECT TOP 10
+          'ticket' as type,
+          CAST(t.ticket_id AS VARCHAR(50)) as id,
+          t.ticket_number as reference,
+          t.title as description,
+          t.status,
+          t.priority,
+          t.created_at
+        FROM TICKETS t
+        WHERE t.status = 'open' AND t.assigned_to_engineer_id IS NULL
+
+        UNION ALL
+
+        SELECT TOP 10
+          'delivery' as type,
+          CAST(d.ticket_id AS VARCHAR(50)) as id,
+          d.ticket_number as reference,
+          CONCAT('Delivery for ', d.user_name, ' - ', d.asset_tag) as description,
+          d.status,
+          'normal' as priority,
+          d.created_at
+        FROM ASSET_DELIVERY_TICKETS d
+        WHERE d.status = 'pending'
+
+        ORDER BY created_at DESC
+      `);
+
+      // 10. Engineer Workload Summary (using subqueries to avoid Cartesian product)
+      const engineerWorkloadResult = await pool.request().query(`
+        SELECT TOP 10
+          u.user_id as engineer_id,
+          u.first_name + ' ' + u.last_name as engineer_name,
+          ISNULL((SELECT COUNT(*) FROM TICKETS t WHERE t.assigned_to_engineer_id = u.user_id AND t.status IN ('assigned', 'in_progress')), 0) as active_tickets,
+          ISNULL((SELECT COUNT(*) FROM ASSET_DELIVERY_TICKETS d WHERE d.delivered_by = u.user_id AND d.status IN ('pending', 'scheduled', 'in_transit')), 0) as pending_deliveries,
+          ISNULL((SELECT COUNT(*) FROM TICKETS t WHERE t.assigned_to_engineer_id = u.user_id AND t.status IN ('resolved', 'closed') AND t.resolved_at >= DATETRUNC(WEEK, GETDATE())), 0) as resolved_this_week
+        FROM USER_MASTER u
+        WHERE u.role = 'engineer' AND u.is_active = 1
+        ORDER BY active_tickets DESC
+      `);
+
+      // Build response
+      const assetStats = assetStatsResult.recordset[0];
+      const ticketStats = ticketStatsResult.recordset[0];
+      const slaStats = slaStatsResult.recordset[0];
+      const requisitionStats = requisitionStatsResult.recordset[0];
+      const consumableStats = consumableStatsResult.recordset[0];
+      const deliveryStats = deliveryStatsResult.recordset[0];
+
+      const dashboardData = {
+        // Asset KPIs
+        assets: {
+          total: assetStats.total_assets || 0,
+          assigned: assetStats.assigned_assets || 0,
+          available: assetStats.available_assets || 0,
+          underRepair: assetStats.under_repair_assets || 0,
+          retired: assetStats.retired_assets || 0,
+          warrantyExpiring: assetStats.warranty_expiring_soon || 0,
+          addedThisMonth: assetStats.added_this_month || 0,
+          utilizationRate: assetStats.total_assets > 0
+            ? ((assetStats.assigned_assets / assetStats.total_assets) * 100).toFixed(1)
+            : 0,
+          condition: {
+            good: assetStats.condition_good || 0,
+            fair: assetStats.condition_fair || 0,
+            poor: assetStats.condition_poor || 0
+          }
+        },
+
+        // Ticket KPIs
+        tickets: {
+          total: ticketStats.total_tickets || 0,
+          open: ticketStats.open_tickets || 0,
+          assigned: ticketStats.assigned_tickets || 0,
+          inProgress: ticketStats.in_progress_tickets || 0,
+          pending: ticketStats.pending_tickets || 0,
+          resolved: ticketStats.resolved_tickets || 0,
+          unassigned: ticketStats.unassigned_tickets || 0,
+          today: {
+            created: ticketStats.today_created || 0,
+            resolved: ticketStats.today_resolved || 0
+          },
+          thisWeek: {
+            created: ticketStats.week_created || 0,
+            resolved: ticketStats.week_resolved || 0
+          },
+          byPriority: {
+            critical: ticketStats.critical_tickets || 0,
+            high: ticketStats.high_priority_tickets || 0,
+            medium: ticketStats.medium_priority_tickets || 0,
+            low: ticketStats.low_priority_tickets || 0
+          },
+          byCategory: ticketCategoryResult.recordset
+        },
+
+        // SLA KPIs
+        sla: {
+          complianceRate: parseFloat(slaStats.sla_compliance_rate || 0).toFixed(1),
+          withinSla: slaStats.within_sla_count || 0,
+          breached: slaStats.breached_count || 0,
+          totalResolved: slaStats.total_resolved_with_sla || 0,
+          activeStatus: {
+            onTrack: slaStats.active_on_track || 0,
+            warning: slaStats.active_warning || 0,
+            critical: slaStats.active_critical || 0,
+            breached: slaStats.active_breached || 0
+          },
+          atRisk: (slaStats.active_warning || 0) + (slaStats.active_critical || 0) + (slaStats.active_breached || 0)
+        },
+
+        // Requisition KPIs
+        requisitions: {
+          total: requisitionStats.total_requisitions || 0,
+          pendingApproval: requisitionStats.pending_approval || 0,
+          pendingAssignment: requisitionStats.pending_assignment || 0,
+          assignedPendingDelivery: requisitionStats.assigned_pending_delivery || 0,
+          delivered: requisitionStats.delivered || 0,
+          completed: requisitionStats.completed || 0,
+          rejected: requisitionStats.rejected || 0,
+          thisMonth: {
+            total: requisitionStats.month_total || 0,
+            completed: requisitionStats.month_completed || 0
+          }
+        },
+
+        // Consumable KPIs
+        consumables: {
+          totalRequests: consumableStats.total_requests || 0,
+          pending: consumableStats.pending_requests || 0,
+          approved: consumableStats.approved_requests || 0,
+          delivered: consumableStats.delivered_requests || 0,
+          rejected: consumableStats.rejected_requests || 0,
+          thisMonth: {
+            total: consumableStats.month_total || 0,
+            delivered: consumableStats.month_delivered || 0
+          },
+          inventory: {
+            lowStock: consumableStats.low_stock_items || 0,
+            outOfStock: consumableStats.out_of_stock_items || 0
+          }
+        },
+
+        // Delivery KPIs
+        deliveries: {
+          pending: deliveryStats.pending_deliveries || 0,
+          scheduled: deliveryStats.scheduled_deliveries || 0,
+          inTransit: deliveryStats.in_transit_deliveries || 0,
+          completed: deliveryStats.completed_deliveries || 0,
+          today: {
+            scheduled: deliveryStats.today_scheduled || 0,
+            completed: deliveryStats.today_completed || 0
+          }
+        },
+
+        // Distribution Data
+        locationDistribution: locationDistResult.recordset,
+        engineerWorkload: engineerWorkloadResult.recordset,
+        pendingActions: pendingActionsResult.recordset
+      };
+
+      sendSuccess(res, dashboardData, 'Coordinator dashboard data retrieved successfully');
+    } catch (error) {
+      console.error('Coordinator dashboard error:', error);
+      sendError(res, 'Failed to load coordinator dashboard data', 500);
+    }
+  })
+);
+
 // GET /dashboard/employee - Employee dashboard data
 router.get('/employee',
   requireRole([USER_ROLES.EMPLOYEE, USER_ROLES.SUPERADMIN, USER_ROLES.ADMIN]),

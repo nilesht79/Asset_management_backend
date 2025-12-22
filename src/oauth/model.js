@@ -54,7 +54,7 @@ class OAuth2Model {
         .query(`
           SELECT u.user_id, u.email, u.password_hash, u.first_name, u.last_name, u.role,
                  u.is_active, u.failed_login_attempts, u.account_locked_until,
-                 u.employee_id,
+                 u.employee_id, u.must_change_password,
                  d.department_name, d.department_id,
                  l.name as location_name, l.id as location_id
           FROM USER_MASTER u
@@ -118,13 +118,14 @@ class OAuth2Model {
           WHERE user_id = @userId
         `);
 
-      return {
+      const userData = {
         id: user.user_id,
         email: user.email,
         firstName: user.first_name,
         lastName: user.last_name,
         role: user.role,
         employeeId: user.employee_id,
+        mustChangePassword: Boolean(user.must_change_password),
         department: {
           id: user.department_id,
           name: user.department_name
@@ -135,6 +136,8 @@ class OAuth2Model {
         },
         permissions: authConfig.ROLE_PERMISSIONS[user.role] || []
       };
+
+      return userData;
     } catch (error) {
       console.error('Error getting user:', error);
       throw error;

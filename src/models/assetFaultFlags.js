@@ -29,6 +29,7 @@ class AssetFaultFlagsModel {
       const query = `
         SELECT
           f.*,
+          f.flag_reason AS reason,
           -- Asset info
           a.asset_tag,
           a.serial_number,
@@ -432,23 +433,52 @@ class AssetFaultFlagsModel {
     try {
       const pool = await connectDB();
 
-      const query = `
+      // Get summary stats
+      const summaryQuery = `
         SELECT
           COUNT(*) AS total_flags,
           SUM(CASE WHEN is_active = 1 AND is_resolved = 0 THEN 1 ELSE 0 END) AS active_flags,
           SUM(CASE WHEN is_resolved = 1 THEN 1 ELSE 0 END) AS resolved_flags,
-          SUM(CASE WHEN flag_type = 'asset' AND is_active = 1 AND is_resolved = 0 THEN 1 ELSE 0 END) AS asset_flags,
-          SUM(CASE WHEN flag_type = 'product_model' AND is_active = 1 AND is_resolved = 0 THEN 1 ELSE 0 END) AS product_flags,
-          SUM(CASE WHEN flag_type = 'oem' AND is_active = 1 AND is_resolved = 0 THEN 1 ELSE 0 END) AS oem_flags,
-          SUM(CASE WHEN severity = 'severe' AND is_active = 1 AND is_resolved = 0 THEN 1 ELSE 0 END) AS severe_flags,
-          SUM(CASE WHEN severity = 'critical' AND is_active = 1 AND is_resolved = 0 THEN 1 ELSE 0 END) AS critical_flags,
-          SUM(CASE WHEN severity = 'warning' AND is_active = 1 AND is_resolved = 0 THEN 1 ELSE 0 END) AS warning_flags,
           SUM(CASE WHEN recurrence_count > 0 AND is_active = 1 AND is_resolved = 0 THEN 1 ELSE 0 END) AS recurring_flags
         FROM ASSET_FAULT_FLAGS
       `;
 
-      const result = await pool.request().query(query);
-      return result.recordset[0];
+      // Get flags by severity (active only)
+      const severityQuery = `
+        SELECT
+          severity,
+          COUNT(*) AS count
+        FROM ASSET_FAULT_FLAGS
+        WHERE is_active = 1 AND is_resolved = 0
+        GROUP BY severity
+      `;
+
+      // Get flags by type (active only)
+      const typeQuery = `
+        SELECT
+          flag_type,
+          COUNT(*) AS count
+        FROM ASSET_FAULT_FLAGS
+        WHERE is_active = 1 AND is_resolved = 0
+        GROUP BY flag_type
+      `;
+
+      const [summaryResult, severityResult, typeResult] = await Promise.all([
+        pool.request().query(summaryQuery),
+        pool.request().query(severityQuery),
+        pool.request().query(typeQuery)
+      ]);
+
+      const summary = summaryResult.recordset[0] || {};
+
+      return {
+        totalFlags: summary.total_flags || 0,
+        totalActive: summary.active_flags || 0,
+        totalResolved: summary.resolved_flags || 0,
+        recurringFlags: summary.recurring_flags || 0,
+        flagsBySeverity: severityResult.recordset || [],
+        flagsByType: typeResult.recordset || []
+      };
     } catch (error) {
       console.error('Error fetching flag stats:', error);
       throw error;

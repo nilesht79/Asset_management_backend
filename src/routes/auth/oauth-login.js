@@ -8,6 +8,7 @@ const OAuth2ClientManager = require('../../oauth/clients');
 const OAuth2Request = require('oauth2-server/lib/request');
 const OAuth2Response = require('oauth2-server/lib/response');
 const { getAccessTokenCookieOptions, getRefreshTokenCookieOptions, getClearCookieOptions } = require('../../config/cookies');
+const { connectDB, sql } = require('../../config/database');
 
 const router = express.Router();
 
@@ -87,6 +88,16 @@ router.post('/oauth-login',
       res.cookie('access_token', tokenResponse.access_token, accessCookieOptions);
       res.cookie('refresh_token', tokenResponse.refresh_token, refreshCookieOptions);
 
+      // Query database directly for must_change_password since oauth2-server strips custom user properties
+      const pool = await connectDB();
+      const userResult = await pool.request()
+        .input('userId', sql.UniqueIdentifier, tokenResponse.user.id)
+        .query('SELECT must_change_password FROM USER_MASTER WHERE user_id = @userId');
+
+      const mustChangePassword = userResult.recordset.length > 0
+        ? Boolean(userResult.recordset[0].must_change_password)
+        : false;
+
       return sendSuccess(res, {
         user: {
           id: tokenResponse.user.id,
@@ -95,6 +106,7 @@ router.post('/oauth-login',
           lastName: tokenResponse.user.lastName,
           role: tokenResponse.user.role,
           employeeId: tokenResponse.user.employeeId,
+          mustChangePassword: mustChangePassword,
           department: tokenResponse.user.department,
           location: tokenResponse.user.location,
           permissions: tokenResponse.user.permissions

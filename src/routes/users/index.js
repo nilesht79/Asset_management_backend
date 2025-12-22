@@ -580,12 +580,12 @@ router.post('/',
         INSERT INTO USER_MASTER (
           user_id, first_name, last_name, email, password_hash, role,
           department_id, location_id, employee_id, designation, room_no, is_active, is_vip, allow_multi_assets, registration_type, user_status,
-          created_at, updated_at
+          must_change_password, created_at, updated_at
         )
         VALUES (
           @id, @firstName, @lastName, @email, @passwordHash, @role,
           @departmentId, @locationId, @employeeId, @designation, @roomNo, @isActive, @isVip, @allowMultiAssets, @registrationType, @userStatus,
-          GETUTCDATE(), GETUTCDATE()
+          1, GETUTCDATE(), GETUTCDATE()
         );
 
         SELECT u.user_id, u.first_name, u.last_name, u.email, u.role,
@@ -1005,7 +1005,7 @@ router.post('/:id/reset-password',
     // Hash new password
     const passwordHash = await bcrypt.hash(new_password, authConfig.bcrypt.saltRounds);
 
-    // Update password and reset failed attempts
+    // Update password and reset failed attempts, require password change on next login
     await pool.request()
       .input('id', sql.UniqueIdentifier, id)
       .input('passwordHash', sql.VarChar(255), passwordHash)
@@ -1014,6 +1014,7 @@ router.post('/:id/reset-password',
         SET password_hash = @passwordHash,
             failed_login_attempts = 0,
             account_locked_until = NULL,
+            must_change_password = 1,
             updated_at = GETUTCDATE()
         WHERE user_id = @id
       `);

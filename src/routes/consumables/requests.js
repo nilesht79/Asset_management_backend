@@ -445,13 +445,13 @@ router.post('/',
 
     // Coordinators/Admins/Engineers can request on behalf of others
     if (requested_for && canRequestOnBehalf) {
-      // Verify the target user exists and is eligible (employee, dept_head, it_head, engineer)
+      // Verify the target user exists and is eligible (employee, department_head, department_coordinator, it_head, engineer)
       const targetUser = await pool.request()
         .input('user_id', sql.UniqueIdentifier, requested_for)
         .query(`
           SELECT user_id, role FROM USER_MASTER
           WHERE user_id = @user_id AND is_active = 1
-          AND role IN ('employee', 'dept_head', 'it_head', 'engineer')
+          AND role IN ('employee', 'department_head', 'department_coordinator', 'it_head', 'engineer')
         `);
 
       if (targetUser.recordset.length === 0) {
@@ -461,9 +461,9 @@ router.post('/',
       requestedById = requested_for;
     } else if (!canRequestOnBehalf) {
       // Regular users can only request for themselves
-      // Verify current user is eligible (employee, dept_head, it_head, engineer)
-      if (!['employee', 'dept_head', 'it_head', 'engineer'].includes(userRole)) {
-        return sendError(res, 'Only employees, department heads, IT heads, and engineers can request consumables', 403);
+      // Verify current user is eligible (employee, department_head, department_coordinator, it_head, engineer)
+      if (!['employee', 'department_head', 'department_coordinator', 'it_head', 'engineer'].includes(userRole)) {
+        return sendError(res, 'Only employees, department heads, department coordinators, IT heads, and engineers can request consumables', 403);
       }
     }
 

@@ -88,9 +88,25 @@ router.post('/',
     // Get department head
     const deptHead = await getDepartmentHead(user.department_id);
 
+    // Get IT head for auto-approval scenarios
+    const itHead = await getITHead();
+
     // Generate requisition number
     const requisitionNumber = await generateRequisitionNumber();
     const requisitionId = uuidv4();
+
+    // Determine initial status based on user role
+    // Department Head/Coordinator creating requisition: auto-approve dept level, go to IT Head
+    // IT Head creating requisition: auto-approve both levels, go directly to pending_assignment
+    const isDeptHeadOrCoordinator = ['department_head', 'department_coordinator'].includes(user.role);
+    const isITHead = user.role === 'it_head';
+
+    let initialStatus = 'pending_dept_head';
+    if (isITHead) {
+      initialStatus = 'pending_assignment'; // Skip both dept head and IT head approval
+    } else if (isDeptHeadOrCoordinator) {
+      initialStatus = 'pending_it_head'; // Skip dept head approval
+    }
 
     // Create requisition
     await pool.request()
@@ -111,17 +127,22 @@ router.post('/',
       .input('specifications', sql.Text, specifications || null)
       .input('deptHeadId', sql.UniqueIdentifier, deptHead ? deptHead.user_id : null)
       .input('deptHeadName', sql.NVarChar(200), deptHead ? `${deptHead.first_name} ${deptHead.last_name}` : null)
+      .input('itHeadId', sql.UniqueIdentifier, itHead ? itHead.user_id : null)
+      .input('itHeadName', sql.NVarChar(200), itHead ? `${itHead.first_name} ${itHead.last_name}` : null)
+      .input('initialStatus', sql.VarChar(50), initialStatus)
       .query(`
         INSERT INTO ASSET_REQUISITIONS (
           requisition_id, requisition_number, requested_by, requester_name,
           department_id, department_name, asset_category_id, product_type_id,
           requested_product_id, quantity, purpose, justification, urgency,
-          required_by_date, specifications, status, dept_head_id, dept_head_name
+          required_by_date, specifications, status, dept_head_id, dept_head_name,
+          it_head_id, it_head_name
         ) VALUES (
           @requisitionId, @requisitionNumber, @requestedBy, @requesterName,
           @departmentId, @departmentName, @assetCategoryId, @productTypeId,
           @requestedProductId, @quantity, @purpose, @justification, @urgency,
-          @requiredByDate, @specifications, 'pending_dept_head', @deptHeadId, @deptHeadName
+          @requiredByDate, @specifications, @initialStatus, @deptHeadId, @deptHeadName,
+          @itHeadId, @itHeadName
         )
       `);
 
@@ -135,8 +156,75 @@ router.post('/',
       action: 'created',
       comments: 'Requisition created',
       previous_status: null,
-      new_status: 'pending_dept_head'
+      new_status: initialStatus
     });
+
+    // If IT Head created, log auto-approval at both dept and IT levels
+    if (isITHead) {
+      // Log dept head auto-approval
+      await logApprovalHistory({
+        requisition_id: requisitionId,
+        approval_level: 'dept_head',
+        approver_id: userId,
+        approver_name: `${user.first_name} ${user.last_name}`,
+        approver_role: user.role,
+        action: 'approved',
+        comments: 'Auto-approved (requester is IT Head)',
+        previous_status: 'pending_dept_head',
+        new_status: 'pending_it_head'
+      });
+
+      // Log IT head auto-approval
+      await logApprovalHistory({
+        requisition_id: requisitionId,
+        approval_level: 'it_head',
+        approver_id: userId,
+        approver_name: `${user.first_name} ${user.last_name}`,
+        approver_role: user.role,
+        action: 'approved',
+        comments: 'Auto-approved (requester is IT Head)',
+        previous_status: 'pending_it_head',
+        new_status: 'pending_assignment'
+      });
+
+      // Update both approval fields
+      await pool.request()
+        .input('requisitionId', sql.UniqueIdentifier, requisitionId)
+        .query(`
+          UPDATE ASSET_REQUISITIONS
+          SET dept_head_approved_at = GETUTCDATE(),
+              dept_head_comments = 'Auto-approved (requester is IT Head)',
+              dept_head_status = 'approved',
+              it_head_approved_at = GETUTCDATE(),
+              it_head_comments = 'Auto-approved (requester is IT Head)',
+              it_head_status = 'approved'
+          WHERE requisition_id = @requisitionId
+        `);
+    } else if (isDeptHeadOrCoordinator) {
+      // If department head/coordinator created, log auto-approval at dept level
+      await logApprovalHistory({
+        requisition_id: requisitionId,
+        approval_level: 'dept_head',
+        approver_id: userId,
+        approver_name: `${user.first_name} ${user.last_name}`,
+        approver_role: user.role,
+        action: 'approved',
+        comments: 'Auto-approved (requester is Department Head/Coordinator)',
+        previous_status: 'pending_dept_head',
+        new_status: 'pending_it_head'
+      });
+
+      // Update dept approval fields
+      await pool.request()
+        .input('requisitionId', sql.UniqueIdentifier, requisitionId)
+        .query(`
+          UPDATE ASSET_REQUISITIONS
+          SET dept_head_approved_at = GETUTCDATE(),
+              dept_head_comments = 'Auto-approved (requester is Department Head/Coordinator)',
+              dept_head_status = 'approved'
+          WHERE requisition_id = @requisitionId
+        `);
+    }
 
     // Get created requisition
     const result = await pool.request()
@@ -145,9 +233,18 @@ router.post('/',
         SELECT * FROM ASSET_REQUISITIONS WHERE requisition_id = @requisitionId
       `);
 
-    // Send notification to department head
+    // Send notification
     const createdRequisition = result.recordset[0];
-    requisitionNotificationService.notifyRequisitionCreated(createdRequisition);
+    if (isITHead) {
+      // Notify coordinators directly since both approvals were auto-approved
+      requisitionNotificationService.notifyITHeadApproved(createdRequisition, user);
+    } else if (isDeptHeadOrCoordinator && itHead) {
+      // Notify IT head directly since dept approval was auto-approved
+      requisitionNotificationService.notifyDeptHeadApproved(createdRequisition);
+    } else {
+      // Normal flow - notify department head
+      requisitionNotificationService.notifyRequisitionCreated(createdRequisition);
+    }
 
     sendCreated(res, createdRequisition, 'Requisition created successfully');
   })
@@ -170,8 +267,8 @@ router.get('/all-requisitions',
     const params = [];
 
     // Role-based filtering
-    if (userRole === 'department_head') {
-      // Department heads see only their department's requisitions
+    if (userRole === 'department_head' || userRole === 'department_coordinator') {
+      // Department heads and coordinators see only their department's requisitions
       const userDept = await pool.request()
         .input('userId', sql.UniqueIdentifier, userId)
         .query('SELECT department_id FROM USER_MASTER WHERE user_id = @userId');

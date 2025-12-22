@@ -80,7 +80,7 @@ router.put('/change-password',
     // Hash new password
     const newPasswordHash = await bcrypt.hash(new_password, authConfig.bcrypt.saltRounds);
 
-    // Update password
+    // Update password and clear must_change_password flag
     await pool.request()
       .input('userId', sql.UniqueIdentifier, req.user.id)
       .input('passwordHash', sql.VarChar(255), newPasswordHash)
@@ -88,6 +88,7 @@ router.put('/change-password',
         UPDATE USER_MASTER
         SET password_hash = @passwordHash,
             password_changed_at = GETUTCDATE(),
+            must_change_password = 0,
             updated_at = GETUTCDATE()
         WHERE user_id = @userId
       `);
@@ -115,6 +116,7 @@ router.get('/profile',
       .query(`
         SELECT u.user_id, u.email, u.first_name, u.last_name, u.role,
                u.employee_id, u.is_active, u.last_login, u.created_at,
+               u.must_change_password,
                d.department_name, d.department_id,
                l.name as location_name, l.id as location_id
         FROM USER_MASTER u
@@ -137,6 +139,7 @@ router.get('/profile',
       role: user.role,
       employeeId: user.employee_id,
       isActive: user.is_active,
+      mustChangePassword: Boolean(user.must_change_password),
       lastLogin: user.last_login,
       createdAt: user.created_at,
       department: {

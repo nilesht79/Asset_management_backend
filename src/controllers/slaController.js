@@ -453,15 +453,24 @@ class SlaController {
     try {
       const { ticketId } = req.params;
 
-      // Update elapsed time first
-      const tracking = await SlaTrackingModel.updateElapsedTime(ticketId);
+      // First check if tracking exists
+      const existingTracking = await SlaTrackingModel.getTracking(ticketId);
 
-      if (!tracking) {
-        return res.status(404).json({
-          success: false,
-          message: 'SLA tracking not found for this ticket'
+      if (!existingTracking) {
+        // No SLA tracking for this ticket - this is valid for tickets without linked assets
+        return res.json({
+          success: true,
+          data: {
+            tracking: null,
+            pause_history: [],
+            escalation_history: [],
+            message: 'No SLA tracking available for this ticket (no asset linked or SLA rule not applicable)'
+          }
         });
       }
+
+      // Update elapsed time
+      const tracking = await SlaTrackingModel.updateElapsedTime(ticketId);
 
       // Get pause history
       const pauseHistory = await SlaTrackingModel.getPauseHistory(ticketId);
