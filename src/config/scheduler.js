@@ -7,6 +7,9 @@ const cron = require('node-cron');
 const { runStandbyJobs } = require('../jobs/standbyAutoConversion');
 const slaMonitoringJob = require('../jobs/slaMonitoringJob');
 const notificationCleanupJob = require('../jobs/notificationCleanupJob');
+const { runAuditRetentionJob } = require('../jobs/auditRetentionJob');
+const { runFullBackupJob, runDifferentialBackupJob, runBackupCleanupJob } = require('../jobs/backupJob');
+const { backupConfig } = require('./backup');
 
 // Track active jobs
 const activeJobs = new Map();
@@ -72,6 +75,86 @@ const initializeScheduler = () => {
 
   activeJobs.set('notificationCleanup', notificationCleanup);
 
+  // Audit Retention Job
+  // Runs daily at 4:00 AM IST to archive old logs and generate summaries
+  const auditRetention = cron.schedule('0 4 * * *', async () => {
+    console.log('⏰ Running audit retention job...');
+    try {
+      const result = await runAuditRetentionJob();
+      if (result.success) {
+        console.log(`✅ Audit retention completed: ${result.archived} archived, ${result.summaries} summaries`);
+      } else {
+        console.error(`❌ Audit retention failed: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('❌ Audit retention job failed:', error);
+    }
+  }, {
+    scheduled: true,
+    timezone: process.env.TZ || 'Asia/Kolkata'
+  });
+
+  activeJobs.set('auditRetention', auditRetention);
+
+  // Database Full Backup Job
+  // Runs daily at 2:00 AM IST (configurable via backupConfig)
+  const fullBackupJob = cron.schedule(backupConfig.schedule.full, async () => {
+    console.log('⏰ Running full database backup job...');
+    try {
+      const result = await runFullBackupJob();
+      if (result.success) {
+        console.log(`✅ Full backup completed: ${result.databases?.length || 0} databases backed up`);
+      } else {
+        console.error(`❌ Full backup failed: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('❌ Full backup job failed:', error);
+    }
+  }, {
+    scheduled: true,
+    timezone: process.env.TZ || 'Asia/Kolkata'
+  });
+
+  activeJobs.set('fullBackup', fullBackupJob);
+
+  // Database Differential Backup Job
+  // Runs every 6 hours (configurable via backupConfig)
+  const diffBackupJob = cron.schedule(backupConfig.schedule.differential, async () => {
+    console.log('⏰ Running differential database backup job...');
+    try {
+      const result = await runDifferentialBackupJob();
+      if (result.success) {
+        console.log(`✅ Differential backup completed: ${result.databases?.length || 0} databases backed up`);
+      } else {
+        console.error(`❌ Differential backup failed: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('❌ Differential backup job failed:', error);
+    }
+  }, {
+    scheduled: true,
+    timezone: process.env.TZ || 'Asia/Kolkata'
+  });
+
+  activeJobs.set('differentialBackup', diffBackupJob);
+
+  // Backup Cleanup Job
+  // Runs daily at 3:00 AM IST to remove old backups
+  const backupCleanup = cron.schedule(backupConfig.schedule.cleanup, async () => {
+    console.log('⏰ Running backup cleanup job...');
+    try {
+      const result = await runBackupCleanupJob();
+      console.log(`✅ Backup cleanup completed: ${result.deleted?.length || 0} files deleted`);
+    } catch (error) {
+      console.error('❌ Backup cleanup job failed:', error);
+    }
+  }, {
+    scheduled: true,
+    timezone: process.env.TZ || 'Asia/Kolkata'
+  });
+
+  activeJobs.set('backupCleanup', backupCleanup);
+
   // Optional: Run immediately on startup (for testing)
   if (process.env.RUN_JOBS_ON_STARTUP === 'true') {
     console.log('🔄 Running jobs on startup...');
@@ -136,6 +219,18 @@ const triggerJob = async (jobName) => {
       break;
     case 'notificationCleanup':
       await notificationCleanupJob.run();
+      break;
+    case 'auditRetention':
+      await runAuditRetentionJob();
+      break;
+    case 'fullBackup':
+      await runFullBackupJob();
+      break;
+    case 'differentialBackup':
+      await runDifferentialBackupJob();
+      break;
+    case 'backupCleanup':
+      await runBackupCleanupJob();
       break;
     default:
       throw new Error(`Unknown job: ${jobName}`);

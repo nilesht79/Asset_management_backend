@@ -34,7 +34,8 @@ class TicketController {
         service_type,
         assigned_to_engineer_id,
         due_date,
-        asset_ids // Optional array of asset IDs to link to ticket
+        asset_ids, // Optional array of asset IDs to link to ticket (for Hardware category)
+        software_installation_ids // Optional array of software installation IDs (for Software category)
       } = req.body;
 
       // Get creator ID from authenticated user
@@ -80,6 +81,16 @@ class TicketController {
       }
 
       // Prepare ticket data
+      // For employees (self-service), enforce ticket_type and service_type
+      let finalTicketType = ticket_type || 'internal';
+      let finalServiceType = service_type || 'general';
+
+      if (selfServiceRoles.includes(authUserRole)) {
+        // Employees can only create Service Request tickets with General Support
+        finalTicketType = 'service_request';
+        finalServiceType = 'general';
+      }
+
       const ticketData = {
         created_by_user_id: is_guest ? null : ticketCreatorId,
         created_by_coordinator_id: coordinatorId,
@@ -87,8 +98,8 @@ class TicketController {
         description,
         priority: priority || 'medium',
         category,
-        ticket_type: ticket_type || 'internal',
-        service_type: service_type || 'general',
+        ticket_type: finalTicketType,
+        service_type: finalServiceType,
         assigned_to_engineer_id,
         due_date
       };
@@ -118,18 +129,66 @@ class TicketController {
 
       // Link assets to ticket if provided (BEFORE SLA initialization)
       let linkedAssetIds = [];
+
+      // For Hardware category: use asset_ids directly
       if (asset_ids && Array.isArray(asset_ids) && asset_ids.length > 0) {
         try {
           await TicketAssetsModel.linkMultipleAssets(
             ticket.ticket_id,
             asset_ids,
-            created_by_coordinator_id
+            authUserId
           );
           linkedAssetIds = asset_ids;
           console.log(`Linked ${asset_ids.length} assets to ticket ${ticket.ticket_number}`);
         } catch (assetError) {
           console.error('Failed to link assets during ticket creation:', assetError.message);
           // Continue with ticket creation even if asset linking fails
+        }
+      }
+
+      // For Software category: extract asset_ids from software_installation_ids and link those
+      if (software_installation_ids && Array.isArray(software_installation_ids) && software_installation_ids.length > 0) {
+        try {
+          // Get asset IDs from software installations
+          const pool = await connectDB();
+          const placeholders = software_installation_ids.map((_, i) => `@id${i}`).join(', ');
+          const request = pool.request();
+          software_installation_ids.forEach((id, i) => {
+            request.input(`id${i}`, sql.UniqueIdentifier, id);
+          });
+
+          const result = await request.query(`
+            SELECT DISTINCT asset_id FROM asset_software_installations
+            WHERE id IN (${placeholders})
+          `);
+
+          const softwareAssetIds = result.recordset.map(r => r.asset_id);
+
+          if (softwareAssetIds.length > 0) {
+            // Filter out any already linked assets
+            const newAssetIds = softwareAssetIds.filter(id => !linkedAssetIds.includes(id));
+
+            if (newAssetIds.length > 0) {
+              await TicketAssetsModel.linkMultipleAssets(
+                ticket.ticket_id,
+                newAssetIds,
+                authUserId
+              );
+              linkedAssetIds = [...linkedAssetIds, ...newAssetIds];
+              console.log(`Linked ${newAssetIds.length} assets from software installations to ticket ${ticket.ticket_number}`);
+            }
+          }
+
+          // Also link the software installations directly to the ticket
+          await TicketAssetsModel.linkMultipleSoftware(
+            ticket.ticket_id,
+            software_installation_ids,
+            authUserId
+          );
+          console.log(`Linked ${software_installation_ids.length} software installations to ticket ${ticket.ticket_number}`);
+        } catch (softwareError) {
+          console.error('Failed to link software assets during ticket creation:', softwareError.message);
+          // Continue with ticket creation even if software asset linking fails
         }
       }
 
@@ -290,7 +349,8 @@ This is an automated notification. Please do not reply to this email.
   static async updateTicket(req, res) {
     try {
       const { id } = req.params;
-      const updateData = req.body;
+      const { asset_ids, software_installation_ids, ...updateData } = req.body;
+      const authUserId = req.oauth?.user?.id || req.user?.id;
 
       // Check if ticket exists
       const existingTicket = await TicketModel.getTicketById(id);
@@ -298,12 +358,109 @@ This is an automated notification. Please do not reply to this email.
         return sendNotFound(res, 'Ticket not found');
       }
 
+      // Prevent editing closed tickets (must reopen first)
+      if (existingTicket.status === 'closed' || existingTicket.status === 'cancelled') {
+        return sendError(res, 'Cannot edit a closed or cancelled ticket. Please reopen the ticket first.', 400);
+      }
+
       const previousStatus = existingTicket.status;
       const previousPriority = existingTicket.priority;
       const previousEngineerId = existingTicket.assigned_to_engineer_id;
+      const previousCategory = existingTicket.category;
+      const previousTicketType = existingTicket.ticket_type;
 
       // Update ticket
       const updatedTicket = await TicketModel.updateTicket(id, updateData);
+
+      // Handle category change - clear opposite type's links
+      const newCategory = updateData.category || previousCategory;
+      if (updateData.category && updateData.category !== previousCategory) {
+        try {
+          // If category changed FROM Hardware to something else, clear assets
+          if (previousCategory === 'Hardware' && newCategory !== 'Hardware') {
+            await TicketAssetsModel.clearTicketAssets(id);
+            console.log(`Cleared assets from ticket ${existingTicket.ticket_number} due to category change`);
+          }
+          // If category changed FROM Software to something else, clear software
+          if (previousCategory === 'Software' && newCategory !== 'Software') {
+            await TicketAssetsModel.clearTicketSoftware(id);
+            console.log(`Cleared software from ticket ${existingTicket.ticket_number} due to category change`);
+          }
+        } catch (clearError) {
+          console.error('Error clearing assets/software on category change:', clearError.message);
+        }
+      }
+
+      // Track if assets changed for SLA recalculation
+      let assetsChanged = false;
+      let previousAssetIds = [];
+
+      // Get previous asset IDs before sync for comparison
+      try {
+        previousAssetIds = await TicketAssetsModel.getTicketAssetIds(id);
+      } catch (err) {
+        console.error('Error getting previous asset IDs:', err.message);
+      }
+
+      // Sync assets if provided and category is Hardware
+      if (asset_ids !== undefined && newCategory === 'Hardware') {
+        try {
+          const syncResult = await TicketAssetsModel.syncTicketAssets(id, asset_ids, authUserId);
+          console.log(`Synced assets for ticket ${existingTicket.ticket_number}: added ${syncResult.added}, removed ${syncResult.removed}`);
+
+          // Check if assets actually changed
+          if (syncResult.added > 0 || syncResult.removed > 0) {
+            assetsChanged = true;
+          }
+        } catch (syncError) {
+          console.error('Error syncing ticket assets:', syncError.message);
+        }
+      }
+
+      // Sync software if provided and category is Software
+      if (software_installation_ids !== undefined && newCategory === 'Software') {
+        try {
+          const syncResult = await TicketAssetsModel.syncTicketSoftware(id, software_installation_ids, authUserId);
+          console.log(`Synced software for ticket ${existingTicket.ticket_number}: added ${syncResult.added}, removed ${syncResult.removed}`);
+
+          // Also sync the underlying assets from software installations
+          if (software_installation_ids.length > 0) {
+            const pool = await connectDB();
+            const placeholders = software_installation_ids.map((_, i) => `@id${i}`).join(', ');
+            const request = pool.request();
+            software_installation_ids.forEach((sid, i) => {
+              request.input(`id${i}`, sql.UniqueIdentifier, sid);
+            });
+            const result = await request.query(`
+              SELECT DISTINCT asset_id FROM asset_software_installations
+              WHERE id IN (${placeholders})
+            `);
+            const softwareAssetIds = result.recordset.map(r => r.asset_id);
+            if (softwareAssetIds.length > 0) {
+              const assetSyncResult = await TicketAssetsModel.syncTicketAssets(id, softwareAssetIds, authUserId);
+              if (assetSyncResult.added > 0 || assetSyncResult.removed > 0) {
+                assetsChanged = true;
+              }
+            }
+          } else {
+            // Clear assets if no software selected
+            await TicketAssetsModel.clearTicketAssets(id);
+            if (previousAssetIds.length > 0) {
+              assetsChanged = true;
+            }
+          }
+        } catch (syncError) {
+          console.error('Error syncing ticket software:', syncError.message);
+        }
+      }
+
+      // Check if category change cleared assets
+      if (updateData.category && updateData.category !== previousCategory) {
+        if ((previousCategory === 'Hardware' || previousCategory === 'Software') &&
+            previousAssetIds.length > 0) {
+          assetsChanged = true;
+        }
+      }
 
       // Fetch full details
       const fullTicket = await TicketModel.getTicketById(id);
@@ -332,6 +489,42 @@ This is an automated notification. Please do not reply to this email.
           }
         } catch (slaError) {
           console.error('Failed to update SLA on status change:', slaError.message);
+        }
+      }
+
+      // Handle SLA recalculation when priority, assets, or ticket_type change
+      // SLA matching considers: priority, asset importance, VIP status, ticket type
+      const priorityChanged = updateData.priority && updateData.priority !== previousPriority;
+      const ticketTypeChanged = updateData.ticket_type && updateData.ticket_type !== previousTicketType;
+
+      if (priorityChanged || assetsChanged || ticketTypeChanged) {
+        try {
+          // Build ticket context for SLA matching with current state
+          const ticketAssetIds = await TicketAssetsModel.getTicketAssetIds(id);
+          const newTicketContext = {
+            ticket_id: id,
+            ticket_type: fullTicket.ticket_type,
+            ticket_channel: fullTicket.ticket_channel || 'web',
+            priority: fullTicket.priority, // Use current priority from fullTicket
+            user_id: fullTicket.created_by_user_id,
+            asset_ids: ticketAssetIds
+          };
+
+          const slaResult = await SlaTrackingModel.recalculateSlaOnPriorityChange(
+            id,
+            newTicketContext,
+            authUserId
+          );
+
+          if (slaResult && slaResult.sla_recalculated) {
+            const changeReason = [];
+            if (priorityChanged) changeReason.push(`priority: ${previousPriority} → ${updateData.priority}`);
+            if (ticketTypeChanged) changeReason.push(`ticket_type: ${previousTicketType} → ${updateData.ticket_type}`);
+            if (assetsChanged) changeReason.push('assets modified');
+            console.log(`SLA recalculated for ticket ${fullTicket.ticket_number} due to: ${changeReason.join(', ')}`);
+          }
+        } catch (slaError) {
+          console.error('Failed to recalculate SLA:', slaError.message);
         }
       }
 

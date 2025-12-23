@@ -270,10 +270,9 @@ router.post('/bulk-upload',
           parent_location_input: row.getCell(13).value?.toString().trim() || null
         };
 
-        // Validate required fields
-        if (!locationData.name || !locationData.address || !locationData.client_input ||
-            !locationData.type_input || !locationData.contact_person || !locationData.contact_email) {
-          throw new Error('Missing required fields');
+        // Validate required fields (client and contact details are optional)
+        if (!locationData.name || !locationData.address || !locationData.type_input) {
+          throw new Error('Missing required fields: name, address, location type');
         }
 
         // Check for duplicates
@@ -281,15 +280,18 @@ router.post('/bulk-upload',
           throw new Error(`Location name already exists: ${locationData.name}`);
         }
 
-        if (existingEmails.has(locationData.contact_email.toLowerCase())) {
+        if (locationData.contact_email && existingEmails.has(locationData.contact_email.toLowerCase())) {
           throw new Error(`Contact email already exists: ${locationData.contact_email}`);
         }
 
-        // Match client
-        const client = clientsById.get(locationData.client_input.toLowerCase()) ||
-                      clientsByName.get(locationData.client_input.toLowerCase());
-        if (!client) {
-          throw new Error(`Client not found: ${locationData.client_input}`);
+        // Match client (if provided)
+        let client = null;
+        if (locationData.client_input) {
+          client = clientsById.get(locationData.client_input.toLowerCase()) ||
+                        clientsByName.get(locationData.client_input.toLowerCase());
+          if (!client) {
+            throw new Error(`Client not found: ${locationData.client_input}`);
+          }
         }
 
         // Match location type
@@ -317,11 +319,11 @@ router.post('/bulk-upload',
           .input('id', sql.UniqueIdentifier, uuidv4())
           .input('name', sql.VarChar(255), locationData.name)
           .input('address', sql.NVarChar(sql.MAX), locationData.address)
-          .input('clientId', sql.UniqueIdentifier, client.id)
+          .input('clientId', sql.UniqueIdentifier, client?.id || null)
           .input('locationTypeId', sql.UniqueIdentifier, locationType.id)
-          .input('contactPerson', sql.VarChar(255), locationData.contact_person)
-          .input('contactEmail', sql.VarChar(255), locationData.contact_email)
-          .input('contactPhone', sql.VarChar(50), locationData.contact_phone)
+          .input('contactPerson', sql.VarChar(255), locationData.contact_person || null)
+          .input('contactEmail', sql.VarChar(255), locationData.contact_email || null)
+          .input('contactPhone', sql.VarChar(50), locationData.contact_phone || null)
           .input('stateName', sql.VarChar(100), locationData.state_name)
           .input('cityName', sql.VarChar(100), locationData.city_name)
           .input('areaName', sql.VarChar(100), locationData.area_name)
@@ -344,7 +346,9 @@ router.post('/bulk-upload',
 
         // Add to existing sets to catch duplicates within file
         existingNames.add(locationData.name.toLowerCase());
-        existingEmails.add(locationData.contact_email.toLowerCase());
+        if (locationData.contact_email) {
+          existingEmails.add(locationData.contact_email.toLowerCase());
+        }
 
         results.successful++;
       } catch (error) {
@@ -538,9 +542,9 @@ router.post('/',
       is_active = true
     } = req.body;
 
-    // Validate required fields
-    if (!name || !address || !client_id || !location_type_id || !contact_person || !contact_email) {
-      return sendError(res, 'Missing required fields: name, address, client_id, location_type_id, contact_person, contact_email', 400);
+    // Validate required fields (client and contact details are optional)
+    if (!name || !address || !location_type_id) {
+      return sendError(res, 'Missing required fields: name, address, location_type_id', 400);
     }
 
     const pool = await connectDB();
@@ -556,13 +560,15 @@ router.post('/',
       }
     }
 
-    // Check if client exists
-    const clientResult = await pool.request()
-      .input('clientId', sql.UniqueIdentifier, client_id)
-      .query('SELECT id FROM clients WHERE id = @clientId AND is_active = 1');
+    // Check if client exists (if provided)
+    if (client_id) {
+      const clientResult = await pool.request()
+        .input('clientId', sql.UniqueIdentifier, client_id)
+        .query('SELECT id FROM clients WHERE id = @clientId AND is_active = 1');
 
-    if (clientResult.recordset.length === 0) {
-      return sendNotFound(res, 'Client not found or inactive');
+      if (clientResult.recordset.length === 0) {
+        return sendNotFound(res, 'Client not found or inactive');
+      }
     }
 
     // Check if location type exists
@@ -580,10 +586,10 @@ router.post('/',
       .input('id', sql.UniqueIdentifier, locationId)
       .input('name', sql.VarChar(100), name.trim())
       .input('address', sql.VarChar(500), address.trim())
-      .input('clientId', sql.UniqueIdentifier, client_id)
+      .input('clientId', sql.UniqueIdentifier, client_id || null)
       .input('locationTypeId', sql.UniqueIdentifier, location_type_id)
-      .input('contactPerson', sql.VarChar(100), contact_person.trim())
-      .input('contactEmail', sql.VarChar(255), contact_email.trim())
+      .input('contactPerson', sql.VarChar(100), contact_person?.trim() || null)
+      .input('contactEmail', sql.VarChar(255), contact_email?.trim() || null)
       .input('contactPhone', sql.VarChar(20), contact_phone?.trim() || null)
       .input('stateName', sql.VarChar(100), state_name?.trim() || null)
       .input('cityName', sql.VarChar(100), city_name?.trim() || null)

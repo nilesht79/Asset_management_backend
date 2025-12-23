@@ -274,18 +274,19 @@ class AssetJobReportPDF {
     }
 
     // Report title (right side) - with proper spacing to prevent overlap
-    const rightX = x + width - 140;
-    doc.font('Helvetica-Bold').fontSize(11).fillColor(config.color);
-    doc.text(config.title, rightX, y, { width: 140, align: 'right', lineBreak: false });
+    const rightWidth = 180;
+    const rightX = x + width - rightWidth;
+    doc.font('Helvetica-Bold').fontSize(10).fillColor(config.color);
+    doc.text(config.title, rightX, y, { width: rightWidth, align: 'right', lineBreak: false });
 
     doc.font('Helvetica').fontSize(8).fillColor(this.colors.gray);
-    doc.text(`Report #: JOB-${String(report.movement_id).substring(0, 8).toUpperCase()}`, rightX, y + 16, { width: 140, align: 'right', lineBreak: false });
+    doc.text(`Report #: JOB-${String(report.movement_id).substring(0, 8).toUpperCase()}`, rightX, y + 14, { width: rightWidth, align: 'right', lineBreak: false });
 
     doc.font('Helvetica').fontSize(7).fillColor(this.colors.gray);
-    doc.text(`Generated: ${this.formatDateTime(new Date())}`, rightX, y + 28, { width: 140, align: 'right', lineBreak: false });
+    doc.text(`Generated: ${this.formatDateTime(new Date())}`, rightX, y + 26, { width: rightWidth, align: 'right', lineBreak: false });
 
     // Horizontal line
-    y += 48;
+    y += 45;
     doc.moveTo(x, y).lineTo(x + width, y).strokeColor(this.colors.border).lineWidth(1).stroke();
 
     return y + 8;

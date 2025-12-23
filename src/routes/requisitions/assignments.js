@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const sql = require('mssql');
+const { v4: uuidv4 } = require('uuid');
 const { connectDB } = require('../../config/database');
 const { asyncHandler } = require('../../middleware/error-handler');
 const { requireDynamicPermission } = require('../../middleware/permissions');
@@ -309,6 +310,68 @@ router.post(
             status = @status,
             updated_at = GETUTCDATE()
           WHERE id = @asset_id
+        `);
+
+      // 7.5 Create asset movement record for tracking
+      // Get requester's location
+      const requesterResult = await transaction.request()
+        .input('user_id', sql.UniqueIdentifier, requisition.requested_by)
+        .query(`
+          SELECT location_id, first_name, last_name
+          FROM USER_MASTER
+          WHERE user_id = @user_id
+        `);
+
+      const requesterLocationId = requesterResult.recordset[0]?.location_id || null;
+
+      // Get location name if exists
+      let locationName = null;
+      if (requesterLocationId) {
+        const locResult = await transaction.request()
+          .input('location_id', sql.UniqueIdentifier, requesterLocationId)
+          .query('SELECT name FROM LOCATIONS WHERE id = @location_id');
+        locationName = locResult.recordset[0]?.name || null;
+      }
+
+      // Insert movement record
+      const movementId = uuidv4();
+      await transaction.request()
+        .input('id', sql.UniqueIdentifier, movementId)
+        .input('asset_id', sql.UniqueIdentifier, asset_id)
+        .input('asset_tag', sql.VarChar, asset.asset_tag)
+        .input('assigned_to', sql.UniqueIdentifier, requisition.requested_by)
+        .input('assigned_to_name', sql.NVarChar, requisition.requester_name)
+        .input('location_id', sql.UniqueIdentifier, requesterLocationId)
+        .input('location_name', sql.NVarChar, locationName)
+        .input('movement_type', sql.VarChar, 'assigned')
+        .input('status', sql.VarChar, 'assigned')
+        .input('reason', sql.NVarChar, `Asset assigned via requisition ${requisition.requisition_number}`)
+        .input('notes', sql.NVarChar, installation_notes || null)
+        .input('performed_by', sql.UniqueIdentifier, userId)
+        .input('performed_by_name', sql.NVarChar, userName)
+        .query(`
+          INSERT INTO ASSET_MOVEMENTS (
+            id, asset_id, asset_tag,
+            assigned_to, assigned_to_name,
+            location_id, location_name,
+            movement_type, status,
+            previous_user_id, previous_user_name,
+            previous_location_id, previous_location_name,
+            movement_date, reason, notes,
+            performed_by, performed_by_name,
+            created_at
+          )
+          VALUES (
+            @id, @asset_id, @asset_tag,
+            @assigned_to, @assigned_to_name,
+            @location_id, @location_name,
+            @movement_type, @status,
+            NULL, NULL,
+            NULL, NULL,
+            GETUTCDATE(), @reason, @notes,
+            @performed_by, @performed_by_name,
+            GETUTCDATE()
+          )
         `);
 
       // 8. Log in approval history

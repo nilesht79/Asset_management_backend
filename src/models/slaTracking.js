@@ -881,6 +881,136 @@ class SlaTrackingModel {
       throw error;
     }
   }
+
+  /**
+   * Recalculate SLA targets when ticket priority changes
+   * Keeps elapsed time, recalculates targets based on new priority
+   * @param {string} ticketId - Ticket ID
+   * @param {Object} newTicketContext - Updated ticket context with new priority
+   * @param {string} changedBy - User ID who made the change
+   * @returns {Object} Updated tracking info
+   */
+  static async recalculateSlaOnPriorityChange(ticketId, newTicketContext, changedBy) {
+    try {
+      const pool = await connectDB();
+
+      // Get existing tracking record
+      const tracking = await this.getTracking(ticketId);
+      if (!tracking) {
+        console.log(`No SLA tracking found for ticket ${ticketId}, skipping recalculation`);
+        return null;
+      }
+
+      // If ticket is resolved, don't recalculate
+      if (tracking.resolved_at) {
+        console.log(`Ticket ${ticketId} is already resolved, skipping SLA recalculation`);
+        return tracking;
+      }
+
+      // Store previous values for logging
+      const previousRuleId = tracking.sla_rule_id;
+      const previousRuleName = tracking.rule_name;
+      const previousMinTarget = tracking.min_target_time;
+      const previousAvgTarget = tracking.avg_target_time;
+      const previousMaxTarget = tracking.max_target_time;
+
+      // Find new matching SLA rule based on new priority
+      const matchResult = await slaMatchingEngine.findMatchingRule(newTicketContext);
+      const newRule = matchResult.rule;
+
+      // If the same rule matches, no recalculation needed
+      if (newRule.rule_id === previousRuleId) {
+        console.log(`Same SLA rule applies after priority change for ticket ${ticketId}`);
+        return tracking;
+      }
+
+      // Calculate new deadlines from the ORIGINAL sla_start_time (preserving elapsed time)
+      const originalStartTime = new Date(tracking.sla_start_time);
+
+      const newMinDeadline = await businessHoursCalculator.calculateDeadline(
+        originalStartTime,
+        newRule.min_tat_minutes,
+        newRule.business_hours_schedule_id,
+        newRule.holiday_calendar_id
+      );
+      const newAvgDeadline = await businessHoursCalculator.calculateDeadline(
+        originalStartTime,
+        newRule.avg_tat_minutes,
+        newRule.business_hours_schedule_id,
+        newRule.holiday_calendar_id
+      );
+      const newMaxDeadline = await businessHoursCalculator.calculateDeadline(
+        originalStartTime,
+        newRule.max_tat_minutes,
+        newRule.business_hours_schedule_id,
+        newRule.holiday_calendar_id
+      );
+
+      // Update tracking record with new rule and targets
+      const updateQuery = `
+        UPDATE TICKET_SLA_TRACKING SET
+          sla_rule_id = @newRuleId,
+          min_target_time = @minDeadline,
+          avg_target_time = @avgDeadline,
+          max_target_time = @maxDeadline,
+          updated_at = GETDATE()
+        OUTPUT INSERTED.*
+        WHERE tracking_id = @trackingId
+      `;
+
+      await pool.request()
+        .input('trackingId', sql.UniqueIdentifier, tracking.tracking_id)
+        .input('newRuleId', sql.UniqueIdentifier, newRule.rule_id)
+        .input('minDeadline', sql.DateTime, newMinDeadline)
+        .input('avgDeadline', sql.DateTime, newAvgDeadline)
+        .input('maxDeadline', sql.DateTime, newMaxDeadline)
+        .query(updateQuery);
+
+      // Log the SLA change in pause log (using 'recalculated' action)
+      const logQuery = `
+        INSERT INTO TICKET_SLA_PAUSE_LOG (
+          log_id, tracking_id, action, reason, action_at, created_by
+        )
+        VALUES (
+          NEWID(), @trackingId, 'recalculated',
+          @reason, GETDATE(), @changedBy
+        )
+      `;
+
+      const changeReason = `Priority changed. SLA rule changed from "${previousRuleName}" to "${newRule.rule_name}". New targets: Min=${newRule.min_tat_minutes}min, Avg=${newRule.avg_tat_minutes}min, Max=${newRule.max_tat_minutes}min`;
+
+      await pool.request()
+        .input('trackingId', sql.UniqueIdentifier, tracking.tracking_id)
+        .input('reason', sql.NVarChar(500), changeReason)
+        .input('changedBy', sql.UniqueIdentifier, changedBy)
+        .query(logQuery);
+
+      // Update elapsed time with new rule
+      const updatedTracking = await this.updateElapsedTime(ticketId);
+
+      console.log(`SLA recalculated for ticket ${ticketId}: Rule changed from "${previousRuleName}" to "${newRule.rule_name}"`);
+
+      return {
+        ...updatedTracking,
+        sla_recalculated: true,
+        previous_rule: previousRuleName,
+        new_rule: newRule.rule_name,
+        previous_targets: {
+          min: previousMinTarget,
+          avg: previousAvgTarget,
+          max: previousMaxTarget
+        },
+        new_targets: {
+          min: newMinDeadline,
+          avg: newAvgDeadline,
+          max: newMaxDeadline
+        }
+      };
+    } catch (error) {
+      console.error('Error recalculating SLA on priority change:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = SlaTrackingModel;

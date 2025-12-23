@@ -457,7 +457,8 @@ class TicketModel {
       const allowedFields = [
         'title', 'description', 'status', 'priority',
         'category', 'due_date', 'assigned_to_engineer_id',
-        'resolved_at', 'closed_at', 'resolution_notes'
+        'resolved_at', 'closed_at', 'resolution_notes',
+        'ticket_type', 'service_type'
       ];
 
       const updates = [];

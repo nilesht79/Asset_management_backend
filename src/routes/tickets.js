@@ -40,6 +40,30 @@ router.get(
 );
 
 /**
+ * @route   GET /api/tickets/my-software
+ * @desc    Get software installed on current user's assets for ticket creation
+ * @access  All authenticated users
+ */
+router.get(
+  '/my-software',
+  authenticateOAuth,
+  requireRole(ALL_AUTHENTICATED),
+  TicketAssetsController.getEmployeeSoftware
+);
+
+/**
+ * @route   GET /api/tickets/employee-software/:userId
+ * @desc    Get software installed on specific employee's assets for ticket creation
+ * @access  Coordinators, Admins
+ */
+router.get(
+  '/employee-software/:userId',
+  authenticateOAuth,
+  requireRole(COORDINATORS),
+  TicketAssetsController.getEmployeeSoftware
+);
+
+/**
  * @route   GET /api/tickets/filter-options
  * @desc    Get dynamic filter options based on existing data
  * @access  Coordinator, Superadmin, Admin, Engineer
@@ -252,6 +276,30 @@ router.get(
   authenticateOAuth,
   requireRole(ALL_AUTHENTICATED),
   TicketAssetsController.getAssetCount
+);
+
+/**
+ * @route   GET /api/tickets/:id/software
+ * @desc    Get all software linked to a ticket
+ * @access  All authenticated (employees can only view their own tickets)
+ */
+router.get(
+  '/:id/software',
+  authenticateOAuth,
+  requireRole(ALL_AUTHENTICATED),
+  TicketAssetsController.getTicketSoftware
+);
+
+/**
+ * @route   DELETE /api/tickets/:ticketId/software/:installationId
+ * @desc    Unlink software from a ticket
+ * @access  Coordinator, Admin, Engineer (assigned only)
+ */
+router.delete(
+  '/:ticketId/software/:installationId',
+  authenticateOAuth,
+  requireRole(TICKET_MANAGERS),
+  TicketAssetsController.unlinkSoftware
 );
 
 /**

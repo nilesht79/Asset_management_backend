@@ -11,12 +11,14 @@ const { securityLogger } = require('./middleware/logging');
 
 
 const { connectDB } = require('./config/database');
+const { connectAuditDB } = require('./config/auditDatabase');
 const { connectRedis } = require('./config/redis');
 const appConfig = require('./config/app');
 const { validateCookieSettings } = require('./config/cookies');
 const routes = require('./routes');
 const { errorHandler } = require('./middleware/error-handler');
 const { sendError } = require('./utils/response');
+const { auditMiddleware, auditErrorMiddleware, attachAuditContext } = require('./middleware/auditMiddleware');
 const { initializeScheduler, stopScheduler } = require('./config/scheduler');
 
 const app = express();
@@ -71,6 +73,10 @@ app.get('/health', (req, res) => {
 const path = require('path');
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
+// Audit middleware - attach context and log requests
+app.use(attachAuditContext);
+app.use(auditMiddleware);
+
 // API routes
 app.use(`/api/${appConfig.app.apiVersion}`, routes);
 
@@ -88,6 +94,9 @@ app.use('*', (req, res) => {
   });
 });
 
+// Audit error middleware - log errors before handling
+app.use(auditErrorMiddleware);
+
 // Global error handler
 app.use(errorHandler);
 
@@ -96,6 +105,11 @@ const startServer = async () => {
   try {
     // Initialize database connection
     await connectDB();
+
+    // Initialize audit database connection (non-blocking)
+    connectAuditDB().catch(err => {
+      console.warn('⚠️  Audit database connection failed (non-critical):', err.message);
+    });
 
     // Validate cookie security settings
     validateCookieSettings();

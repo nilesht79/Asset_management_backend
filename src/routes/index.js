@@ -33,6 +33,8 @@ const serviceReportRoutes = require('./serviceReport');
 const assetJobReportRoutes = require('./asset-job-reports');
 const gatePassRoutes = require('./gate-passes');
 const notificationRoutes = require('./notifications');
+const auditLogRoutes = require('./audit-logs');
+const backupRoutes = require('./backups');
 
 const router = express.Router();
 
@@ -93,7 +95,9 @@ router.get('/', (req, res) => {
       serviceReports: '/service-reports',
       assetReports: '/asset-reports',
       gatePasses: '/gate-passes',
-      notifications: '/notifications'
+      notifications: '/notifications',
+      auditLogs: '/audit-logs',
+      backups: '/backups'
     },
     documentation: '/docs',
     health: '/health',
@@ -132,6 +136,8 @@ router.use('/service-reports', serviceReportRoutes);
 router.use('/asset-reports/job-reports', assetJobReportRoutes);
 router.use('/gate-passes', gatePassRoutes);
 router.use('/notifications', notificationRoutes);
+router.use('/audit-logs', auditLogRoutes);
+router.use('/backups', backupRoutes);
 
 
 // API version info

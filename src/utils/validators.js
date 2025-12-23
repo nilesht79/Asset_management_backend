@@ -25,7 +25,7 @@ const validators = {
       first_name: Joi.string().min(2).max(50).required(),
       last_name: Joi.string().min(2).max(50).required(),
       email: Joi.string().email({ tlds: { allow: false } }).optional().allow('', null), // Optional - will auto-generate if not provided
-      password: Joi.string().min(8).pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]+$')).required(),
+      password: Joi.string().min(8).pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]+$')).optional().allow('', null), // Optional - will auto-generate if not provided
       role: Joi.string().valid(...Object.values(USER_ROLES)).required(),
       department_id: Joi.string().uuid().optional().allow(null),
       location_id: Joi.string().uuid().optional().allow(null),
@@ -245,13 +245,13 @@ const validators = {
   locationType: {
     create: Joi.object({
       location_type: Joi.string().min(2).max(100).required(),
-      description: Joi.string().max(500).optional(),
+      description: Joi.string().max(500).optional().allow(null, ''),
       is_active: Joi.boolean().default(true)
     }),
-    
+
     update: Joi.object({
       location_type: Joi.string().min(2).max(100).optional(),
-      description: Joi.string().max(500).optional(),
+      description: Joi.string().max(500).optional().allow(null, ''),
       is_active: Joi.boolean().optional()
     })
   },

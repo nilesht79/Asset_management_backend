@@ -32,7 +32,7 @@ const resolveDiscrepancySchema = Joi.object({
 // Access: Admin, SuperAdmin, Engineer
 // ============================================================================
 router.get('/',
-  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER]),
+  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER, USER_ROLES.COORDINATOR]),
   validatePagination,
   asyncHandler(async (req, res) => {
     const { id: reconciliationId } = req.params;
@@ -152,7 +152,7 @@ router.get('/',
 // Access: Admin, SuperAdmin, Engineer
 // ============================================================================
 router.get('/statistics',
-  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER]),
+  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER, USER_ROLES.COORDINATOR]),
   asyncHandler(async (req, res) => {
     const { id: reconciliationId } = req.params;
 
@@ -258,7 +258,7 @@ router.get('/statistics',
 // Access: Admin, SuperAdmin, Engineer
 // ============================================================================
 router.get('/assets/:assetId',
-  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER]),
+  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER, USER_ROLES.COORDINATOR]),
   validateUUID('assetId'),
   asyncHandler(async (req, res) => {
     const { id: reconciliationId, assetId } = req.params;
@@ -316,7 +316,7 @@ router.get('/assets/:assetId',
 // Access: Admin, SuperAdmin, Engineer
 // ============================================================================
 router.put('/:discrepancyId/resolve',
-  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER]),
+  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER, USER_ROLES.COORDINATOR]),
   validateUUID('discrepancyId'),
   validateBody(resolveDiscrepancySchema),
   asyncHandler(async (req, res) => {
@@ -383,7 +383,7 @@ router.put('/:discrepancyId/resolve',
 // Access: Admin, SuperAdmin, Engineer
 // ============================================================================
 router.get('/export',
-  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER]),
+  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER, USER_ROLES.COORDINATOR]),
   asyncHandler(async (req, res) => {
     const { id: reconciliationId } = req.params;
     const { format = 'csv' } = req.query;
@@ -504,7 +504,7 @@ router.get('/export',
 // Access: Admin, SuperAdmin, Engineer
 // ============================================================================
 router.get('/:discrepancyId',
-  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER]),
+  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER, USER_ROLES.COORDINATOR]),
   validateUUID('discrepancyId'),
   asyncHandler(async (req, res) => {
     const { discrepancyId } = req.params;

@@ -208,7 +208,7 @@ async function insertDiscrepancies(transaction, reconciliationRecordId, discrepa
 // Access: Admin, SuperAdmin, Engineer
 // ============================================================================
 router.get('/',
-  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER]),
+  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER, USER_ROLES.COORDINATOR]),
   validatePagination,
   asyncHandler(async (req, res) => {
     const { id: reconciliationId } = req.params;
@@ -359,7 +359,7 @@ router.get('/',
 // Access: Admin, SuperAdmin, Engineer
 // ============================================================================
 router.post('/bulk',
-  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER]),
+  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER, USER_ROLES.COORDINATOR]),
   validateBody(bulkAddAssetsSchema),
   asyncHandler(async (req, res) => {
     const { id: reconciliationId } = req.params;
@@ -491,7 +491,7 @@ router.post('/bulk',
 // Access: Admin, SuperAdmin, Engineer
 // ============================================================================
 router.put('/:assetId/reconcile',
-  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER]),
+  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER, USER_ROLES.COORDINATOR]),
   validateUUID('assetId'),
   validateBody(reconcileAssetSchema),
   asyncHandler(async (req, res) => {
@@ -740,7 +740,7 @@ router.put('/:assetId/reconcile',
 // Access: Admin, SuperAdmin, Engineer
 // ============================================================================
 router.post('/reconcile-bulk',
-  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER]),
+  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER, USER_ROLES.COORDINATOR]),
   validateBody(bulkReconcileSchema),
   asyncHandler(async (req, res) => {
     const { id: reconciliationId } = req.params;

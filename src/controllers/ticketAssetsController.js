@@ -219,6 +219,100 @@ class TicketAssetsController {
   }
 
   /**
+   * Get software installed on employee's assets for ticket creation
+   * GET /api/tickets/my-software or GET /api/tickets/employee-software/:userId
+   */
+  static async getEmployeeSoftware(req, res) {
+    try {
+      // Get user ID from params or from authenticated user
+      const userId = req.params.userId || req.oauth.user.id;
+
+      const software = await TicketAssetsModel.getEmployeeSoftware(userId);
+
+      // Group by software name for frontend convenience
+      const grouped = {};
+      software.forEach(item => {
+        const key = item.software_name;
+        if (!grouped[key]) {
+          grouped[key] = [];
+        }
+        grouped[key].push(item);
+      });
+
+      return sendSuccess(res, {
+        software,
+        grouped,
+        total: software.length
+      });
+    } catch (error) {
+      console.error('Error fetching employee software:', error);
+      return sendError(res, error.message || 'Failed to fetch employee software', 500);
+    }
+  }
+
+  /**
+   * Get all software linked to a ticket
+   * GET /api/tickets/:id/software
+   */
+  static async getTicketSoftware(req, res) {
+    try {
+      const ticketId = req.params.id || req.params.ticketId;
+      const userId = req.user?.id || req.oauth?.user?.id;
+      const userRole = req.user?.role || req.oauth?.user?.role;
+
+      if (!ticketId) {
+        return sendError(res, 'Ticket ID is required', 400);
+      }
+
+      // If user is an employee, verify they own the ticket
+      if (userRole === 'employee') {
+        const ticket = await TicketModel.getTicketById(ticketId);
+        if (!ticket || ticket.created_by_user_id !== userId) {
+          return sendError(res, 'Access denied. You can only view your own tickets.', 403);
+        }
+      }
+
+      const software = await TicketAssetsModel.getTicketSoftware(ticketId);
+
+      // Group by software name for convenience
+      const grouped = {};
+      software.forEach(item => {
+        const key = item.software_name || 'Unknown';
+        if (!grouped[key]) {
+          grouped[key] = [];
+        }
+        grouped[key].push(item);
+      });
+
+      return sendSuccess(res, { software, grouped, count: software.length });
+    } catch (error) {
+      console.error('Error fetching ticket software:', error);
+      return sendError(res, error.message || 'Failed to fetch ticket software', 500);
+    }
+  }
+
+  /**
+   * Unlink software from a ticket
+   * DELETE /api/tickets/:ticketId/software/:installationId
+   */
+  static async unlinkSoftware(req, res) {
+    try {
+      const { ticketId, installationId } = req.params;
+
+      const result = await TicketAssetsModel.unlinkSoftware(ticketId, installationId);
+
+      if (!result) {
+        return sendNotFound(res, 'Software link not found');
+      }
+
+      return sendSuccess(res, null, 'Software unlinked from ticket successfully');
+    } catch (error) {
+      console.error('Error unlinking software:', error);
+      return sendError(res, error.message || 'Failed to unlink software', 500);
+    }
+  }
+
+  /**
    * Check if asset is linked to ticket
    * GET /api/tickets/:id/assets/:assetId/check
    */

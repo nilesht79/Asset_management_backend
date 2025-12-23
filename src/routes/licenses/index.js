@@ -341,7 +341,7 @@ router.get('/expiration-alerts',
           JOIN products p ON a.product_id = p.id
           LEFT JOIN oems o ON p.oem_id = o.id
           LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
-          LEFT JOIN locations l ON a.location_id = l.id
+          LEFT JOIN locations l ON u.location_id = l.id
           WHERE a.is_active = 1
             AND a.warranty_end_date IS NOT NULL
             AND a.warranty_end_date <= DATEADD(day, @days, GETUTCDATE())
@@ -371,7 +371,7 @@ router.get('/expiration-alerts',
           JOIN products p ON a.product_id = p.id
           LEFT JOIN oems o ON p.oem_id = o.id
           LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
-          LEFT JOIN locations l ON a.location_id = l.id
+          LEFT JOIN locations l ON u.location_id = l.id
           WHERE a.is_active = 1
             AND a.eol_date IS NOT NULL
             AND a.eol_date <= DATEADD(day, @days, GETUTCDATE())
@@ -401,7 +401,7 @@ router.get('/expiration-alerts',
           JOIN products p ON a.product_id = p.id
           LEFT JOIN oems o ON p.oem_id = o.id
           LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
-          LEFT JOIN locations l ON a.location_id = l.id
+          LEFT JOIN locations l ON u.location_id = l.id
           WHERE a.is_active = 1
             AND a.eos_date IS NOT NULL
             AND a.eos_date <= DATEADD(day, @days, GETUTCDATE())
@@ -939,7 +939,7 @@ router.get('/:id',
         JOIN assets a ON asi.asset_id = a.id
         JOIN products p ON a.product_id = p.id
         LEFT JOIN USER_MASTER assigned_user ON a.assigned_to = assigned_user.user_id
-        LEFT JOIN locations l ON a.location_id = l.id
+        LEFT JOIN locations l ON assigned_user.location_id = l.id
         WHERE asi.license_id = @license_id AND asi.is_active = 1
         ORDER BY asi.installation_date DESC
       `);

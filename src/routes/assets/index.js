@@ -280,7 +280,15 @@ router.get('/statistics',
         SUM(CASE WHEN eos_date IS NOT NULL AND eos_date < CAST(GETUTCDATE() AS DATE) THEN 1 ELSE 0 END) as eos_reached,
         SUM(CASE WHEN created_at >= DATEADD(month, -1, GETUTCDATE()) THEN 1 ELSE 0 END) as added_this_month,
         AVG(CASE WHEN purchase_cost IS NOT NULL THEN purchase_cost ELSE 0 END) as average_cost,
-        SUM(CASE WHEN purchase_cost IS NOT NULL THEN purchase_cost ELSE 0 END) as total_value
+        SUM(CASE WHEN purchase_cost IS NOT NULL THEN purchase_cost ELSE 0 END) as total_value,
+        -- Count unique assets at risk (avoids double-counting assets with multiple risk factors)
+        SUM(CASE WHEN
+          status = 'under_repair' OR
+          (warranty_end_date IS NOT NULL AND warranty_end_date BETWEEN GETUTCDATE() AND DATEADD(day, 30, GETUTCDATE())) OR
+          (warranty_end_date IS NOT NULL AND warranty_end_date < GETUTCDATE()) OR
+          (eol_date IS NOT NULL AND eol_date BETWEEN CAST(GETUTCDATE() AS DATE) AND DATEADD(month, 6, CAST(GETUTCDATE() AS DATE))) OR
+          (eos_date IS NOT NULL AND eos_date < CAST(GETUTCDATE() AS DATE))
+        THEN 1 ELSE 0 END) as assets_at_risk
       FROM assets
       WHERE is_active = 1
     `);
@@ -329,7 +337,7 @@ router.get('/statistics',
       // Main statistics
       totalAssets: overview.total_assets,
       activeAssets: overview.available_assets + overview.assigned_assets + overview.in_use_assets,
-      assetsAtRisk: overview.under_repair_assets + overview.warranty_expiring_soon + overview.warranty_expired + overview.eol_approaching + overview.eos_reached,
+      assetsAtRisk: overview.assets_at_risk,
       addedThisMonth: overview.added_this_month,
 
       // Additional overview data
@@ -2854,18 +2862,21 @@ router.post('/:id/assign',
 
     const pool = await connectDB();
 
-    // Check if asset exists and is available, also get product category info
+    // Check if asset exists and is available, also get product category info and previous user's location
     const assetResult = await pool.request()
       .input('id', sql.UniqueIdentifier, id)
       .query(`
         SELECT a.id, a.asset_tag, a.status, a.assigned_to, a.asset_type, a.product_id,
                p.category_id, p.subcategory_id,
                c.name as category_name,
-               sc.name as subcategory_name
+               sc.name as subcategory_name,
+               prev_user.location_id as previous_location_id,
+               prev_user.first_name + ' ' + prev_user.last_name as previous_user_name
         FROM assets a
         INNER JOIN products p ON a.product_id = p.id
         LEFT JOIN categories c ON p.category_id = c.id
         LEFT JOIN categories sc ON p.subcategory_id = sc.id
+        LEFT JOIN USER_MASTER prev_user ON a.assigned_to = prev_user.user_id
         WHERE a.id = @id AND a.is_active = 1
       `);
 
@@ -2964,7 +2975,7 @@ router.post('/:id/assign',
 
     const previousData = {
       assigned_to: asset.assigned_to,
-      location_id: null  // Assets no longer have their own location_id
+      location_id: asset.previous_location_id || null  // Get location from previous user
     };
 
     await logAssetAssignmentChange(
@@ -2995,13 +3006,15 @@ router.post('/:id/unassign',
 
     const pool = await connectDB();
 
-    // Check if asset exists and is assigned
+    // Check if asset exists and is assigned, get previous user's location
     const assetResult = await pool.request()
       .input('id', sql.UniqueIdentifier, id)
       .query(`
-        SELECT id, asset_tag, status, assigned_to
-        FROM assets
-        WHERE id = @id AND is_active = 1
+        SELECT a.id, a.asset_tag, a.status, a.assigned_to,
+               prev_user.location_id as previous_location_id
+        FROM assets a
+        LEFT JOIN USER_MASTER prev_user ON a.assigned_to = prev_user.user_id
+        WHERE a.id = @id AND a.is_active = 1
       `);
 
     if (assetResult.recordset.length === 0) {
@@ -3034,7 +3047,7 @@ router.post('/:id/unassign',
 
     const previousData = {
       assigned_to: asset.assigned_to,
-      location_id: null
+      location_id: asset.previous_location_id || null
     };
 
     await logAssetAssignmentChange(

@@ -57,7 +57,7 @@ const resumeReconciliationSchema = Joi.object({
 // Access: Admin, SuperAdmin only
 // ============================================================================
 router.post('/',
-  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN]),
+  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.COORDINATOR]),
   validateBody(createReconciliationSchema),
   asyncHandler(async (req, res) => {
     const { reconciliation_name, description, notes } = req.body;
@@ -114,7 +114,7 @@ router.post('/',
 // Access: Admin, SuperAdmin, Engineer
 // ============================================================================
 router.get('/',
-  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER]),
+  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER, USER_ROLES.COORDINATOR]),
   validatePagination,
   asyncHandler(async (req, res) => {
     const { page, limit, offset, sortBy, sortOrder } = req.pagination;
@@ -199,7 +199,7 @@ router.get('/',
 // Access: Admin, SuperAdmin, Engineer
 // ============================================================================
 router.get('/:id/statistics',
-  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER]),
+  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER, USER_ROLES.COORDINATOR]),
   validateUUID('id'),
   asyncHandler(async (req, res) => {
     const { id: reconciliationId } = req.params;
@@ -269,7 +269,7 @@ router.get('/:id/statistics',
 // Access: Admin, SuperAdmin, Engineer
 // ============================================================================
 router.get('/:id',
-  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER]),
+  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER, USER_ROLES.COORDINATOR]),
   validateUUID('id'),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
@@ -304,7 +304,7 @@ router.get('/:id',
 // Access: Admin, SuperAdmin, Engineer
 // ============================================================================
 router.put('/:id/start',
-  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER]),
+  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER, USER_ROLES.COORDINATOR]),
   validateUUID('id'),
   validateBody(startReconciliationSchema),
   asyncHandler(async (req, res) => {
@@ -464,7 +464,7 @@ router.put('/:id/start',
 // Access: Admin, SuperAdmin, Engineer
 // ============================================================================
 router.put('/:id/complete',
-  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER]),
+  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER, USER_ROLES.COORDINATOR]),
   validateUUID('id'),
   validateBody(completeReconciliationSchema),
   asyncHandler(async (req, res) => {
@@ -567,7 +567,7 @@ router.put('/:id/complete',
 // Access: Admin, SuperAdmin, Engineer
 // ============================================================================
 router.put('/:id/pause',
-  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER]),
+  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER, USER_ROLES.COORDINATOR]),
   validateUUID('id'),
   validateBody(pauseReconciliationSchema),
   asyncHandler(async (req, res) => {
@@ -637,7 +637,7 @@ router.put('/:id/pause',
 // Access: Admin, SuperAdmin, Engineer
 // ============================================================================
 router.put('/:id/resume',
-  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER]),
+  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.ENGINEER, USER_ROLES.COORDINATOR]),
   validateUUID('id'),
   validateBody(resumeReconciliationSchema),
   asyncHandler(async (req, res) => {
@@ -705,7 +705,7 @@ router.put('/:id/resume',
 // Access: Admin, SuperAdmin only
 // ============================================================================
 router.delete('/:id',
-  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN]),
+  requireRole([USER_ROLES.ADMIN, USER_ROLES.SUPERADMIN, USER_ROLES.COORDINATOR]),
   validateUUID('id'),
   asyncHandler(async (req, res) => {
     const { id } = req.params;

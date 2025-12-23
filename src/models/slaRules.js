@@ -231,18 +231,53 @@ class SlaRulesModel {
 
   /**
    * Update an SLA rule
+   * Supports partial updates - only fields provided will be updated
    */
   static async updateRule(ruleId, ruleData) {
     try {
-      // Validate required fields
-      if (!ruleData.business_hours_schedule_id) {
-        throw new Error('Business hours schedule is required');
-      }
-      if (!ruleData.holiday_calendar_id) {
-        throw new Error('Holiday calendar is required');
+      const pool = await connectDB();
+
+      // Fetch existing rule to merge with update data
+      const existingResult = await pool.request()
+        .input('ruleId', sql.UniqueIdentifier, ruleId)
+        .query('SELECT * FROM SLA_RULES WHERE rule_id = @ruleId');
+
+      if (existingResult.recordset.length === 0) {
+        return null;
       }
 
-      const pool = await connectDB();
+      const existing = existingResult.recordset[0];
+
+      // Merge existing values with update data (update data takes precedence)
+      // Use nullish coalescing to allow explicit null/false values
+      const merged = {
+        rule_name: ruleData.rule_name !== undefined ? ruleData.rule_name : existing.rule_name,
+        description: ruleData.description !== undefined ? ruleData.description : existing.description,
+        priority_order: ruleData.priority_order !== undefined ? ruleData.priority_order : existing.priority_order,
+        applicable_asset_categories: ruleData.applicable_asset_categories !== undefined ? ruleData.applicable_asset_categories : existing.applicable_asset_categories,
+        applicable_asset_importance: ruleData.applicable_asset_importance !== undefined ? ruleData.applicable_asset_importance : existing.applicable_asset_importance,
+        applicable_user_category: ruleData.applicable_user_category !== undefined ? ruleData.applicable_user_category : existing.applicable_user_category,
+        applicable_ticket_type: ruleData.applicable_ticket_type !== undefined ? ruleData.applicable_ticket_type : existing.applicable_ticket_type,
+        applicable_ticket_channels: ruleData.applicable_ticket_channels !== undefined ? ruleData.applicable_ticket_channels : existing.applicable_ticket_channels,
+        applicable_priority: ruleData.applicable_priority !== undefined ? ruleData.applicable_priority : existing.applicable_priority,
+        min_tat_minutes: ruleData.min_tat_minutes !== undefined ? ruleData.min_tat_minutes : existing.min_tat_minutes,
+        avg_tat_minutes: ruleData.avg_tat_minutes !== undefined ? ruleData.avg_tat_minutes : existing.avg_tat_minutes,
+        max_tat_minutes: ruleData.max_tat_minutes !== undefined ? ruleData.max_tat_minutes : existing.max_tat_minutes,
+        is_vip_override: ruleData.is_vip_override !== undefined ? ruleData.is_vip_override : existing.is_vip_override,
+        business_hours_schedule_id: ruleData.business_hours_schedule_id !== undefined ? ruleData.business_hours_schedule_id : existing.business_hours_schedule_id,
+        holiday_calendar_id: ruleData.holiday_calendar_id !== undefined ? ruleData.holiday_calendar_id : existing.holiday_calendar_id,
+        allow_pause_resume: ruleData.allow_pause_resume !== undefined ? ruleData.allow_pause_resume : existing.allow_pause_resume,
+        pause_conditions: ruleData.pause_conditions !== undefined ? ruleData.pause_conditions : existing.pause_conditions,
+        is_active: ruleData.is_active !== undefined ? ruleData.is_active : existing.is_active
+      };
+
+      // Validate required fields after merge
+      if (!merged.business_hours_schedule_id) {
+        throw new Error('Business hours schedule is required');
+      }
+      if (!merged.holiday_calendar_id) {
+        throw new Error('Holiday calendar is required');
+      }
 
       const query = `
         UPDATE SLA_RULES SET
@@ -291,26 +326,32 @@ class SlaRulesModel {
         WHERE rule_id = @ruleId
       `;
 
+      // Handle pause_conditions - parse if it's a string, stringify if it's an object
+      let pauseConditionsValue = merged.pause_conditions;
+      if (typeof pauseConditionsValue === 'object' && pauseConditionsValue !== null) {
+        pauseConditionsValue = JSON.stringify(pauseConditionsValue);
+      }
+
       const result = await pool.request()
         .input('ruleId', sql.UniqueIdentifier, ruleId)
-        .input('ruleName', sql.NVarChar(255), ruleData.rule_name)
-        .input('description', sql.NVarChar(500), ruleData.description)
-        .input('priorityOrder', sql.Int, ruleData.priority_order)
-        .input('applicableAssetCategories', sql.NVarChar(500), ruleData.applicable_asset_categories)
-        .input('applicableAssetImportance', sql.NVarChar(100), ruleData.applicable_asset_importance)
-        .input('applicableUserCategory', sql.NVarChar(100), ruleData.applicable_user_category)
-        .input('applicableTicketType', sql.NVarChar(100), ruleData.applicable_ticket_type)
-        .input('applicableTicketChannels', sql.NVarChar(200), ruleData.applicable_ticket_channels)
-        .input('applicablePriority', sql.NVarChar(100), ruleData.applicable_priority)
-        .input('minTatMinutes', sql.Int, ruleData.min_tat_minutes)
-        .input('avgTatMinutes', sql.Int, ruleData.avg_tat_minutes)
-        .input('maxTatMinutes', sql.Int, ruleData.max_tat_minutes)
-        .input('isVipOverride', sql.Bit, ruleData.is_vip_override || false)
-        .input('businessHoursScheduleId', sql.UniqueIdentifier, ruleData.business_hours_schedule_id)
-        .input('holidayCalendarId', sql.UniqueIdentifier, ruleData.holiday_calendar_id)
-        .input('allowPauseResume', sql.Bit, ruleData.allow_pause_resume !== false)
-        .input('pauseConditions', sql.NVarChar(500), JSON.stringify(ruleData.pause_conditions || {}))
-        .input('isActive', sql.Bit, ruleData.is_active !== false)
+        .input('ruleName', sql.NVarChar(255), merged.rule_name)
+        .input('description', sql.NVarChar(500), merged.description)
+        .input('priorityOrder', sql.Int, merged.priority_order)
+        .input('applicableAssetCategories', sql.NVarChar(500), merged.applicable_asset_categories)
+        .input('applicableAssetImportance', sql.NVarChar(100), merged.applicable_asset_importance)
+        .input('applicableUserCategory', sql.NVarChar(100), merged.applicable_user_category)
+        .input('applicableTicketType', sql.NVarChar(100), merged.applicable_ticket_type)
+        .input('applicableTicketChannels', sql.NVarChar(200), merged.applicable_ticket_channels)
+        .input('applicablePriority', sql.NVarChar(100), merged.applicable_priority)
+        .input('minTatMinutes', sql.Int, merged.min_tat_minutes)
+        .input('avgTatMinutes', sql.Int, merged.avg_tat_minutes)
+        .input('maxTatMinutes', sql.Int, merged.max_tat_minutes)
+        .input('isVipOverride', sql.Bit, merged.is_vip_override || false)
+        .input('businessHoursScheduleId', sql.UniqueIdentifier, merged.business_hours_schedule_id)
+        .input('holidayCalendarId', sql.UniqueIdentifier, merged.holiday_calendar_id)
+        .input('allowPauseResume', sql.Bit, merged.allow_pause_resume !== false)
+        .input('pauseConditions', sql.NVarChar(500), pauseConditionsValue || '{}')
+        .input('isActive', sql.Bit, merged.is_active !== false)
         .query(query);
 
       return result.recordset[0];

@@ -9,6 +9,7 @@ const OAuth2Request = require('oauth2-server/lib/request');
 const OAuth2Response = require('oauth2-server/lib/response');
 const { getAccessTokenCookieOptions, getRefreshTokenCookieOptions, getClearCookieOptions } = require('../../config/cookies');
 const { connectDB, sql } = require('../../config/database');
+const { auditService } = require('../../services/auditService');
 
 const router = express.Router();
 
@@ -98,6 +99,9 @@ router.post('/oauth-login',
         ? Boolean(userResult.recordset[0].must_change_password)
         : false;
 
+      // Audit: Log successful login
+      await auditService.logLoginSuccess(req, tokenResponse.user, 'password');
+
       return sendSuccess(res, {
         user: {
           id: tokenResponse.user.id,
@@ -119,14 +123,21 @@ router.post('/oauth-login',
     } catch (error) {
       console.error('OAuth login error:', error);
 
+      // Audit: Log failed login attempt
+      let failureReason = 'Unknown error';
       if (error.name === 'invalid_grant') {
-        return sendUnauthorized(res, 'Invalid username or password');
+        failureReason = 'Invalid username or password';
+        await auditService.logLoginFailure(req, email, failureReason);
+        return sendUnauthorized(res, failureReason);
       } else if (error.name === 'invalid_client') {
-        return sendUnauthorized(res, 'Invalid client credentials');
+        failureReason = 'Invalid client credentials';
+        await auditService.logLoginFailure(req, email, failureReason);
+        return sendUnauthorized(res, failureReason);
       } else if (error.name === 'unsupported_grant_type') {
         return sendError(res, 'Unsupported grant type', 400);
       }
 
+      await auditService.logLoginFailure(req, email, 'Login failed - server error');
       return sendError(res, 'Login failed', 500);
     }
   })
@@ -251,8 +262,11 @@ router.post('/oauth-superadmin-login',
 
 // OAuth 2.0 Logout endpoint - clears HttpOnly cookies
 router.post('/oauth-logout',
-  asyncHandler(async (_, res) => {
+  asyncHandler(async (req, res) => {
     try {
+      // Audit: Log logout
+      await auditService.logLogout(req);
+
       // Clear the HttpOnly cookies using centralized config
       const clearCookieOptions = getClearCookieOptions();
 

@@ -555,8 +555,16 @@ router.post('/',
       finalEmployeeId = `T-${nextNumber}`;
     }
 
+    // Auto-generate password if not provided
+    let finalPassword = password;
+    let passwordGenerated = false;
+    if (!finalPassword || finalPassword.trim() === '') {
+      finalPassword = generateSecurePassword(12);
+      passwordGenerated = true;
+    }
+
     // Hash password
-    const passwordHash = await bcrypt.hash(password, authConfig.bcrypt.saltRounds);
+    const passwordHash = await bcrypt.hash(finalPassword, authConfig.bcrypt.saltRounds);
 
     const userId = uuidv4();
     const result = await pool.request()
@@ -625,7 +633,18 @@ router.post('/',
       manager: null
     };
 
-    sendCreated(res, userData, 'User created successfully');
+    // Include generated password in response if auto-generated
+    if (passwordGenerated) {
+      userData.generatedPassword = finalPassword;
+    }
+
+    sendCreated(
+      res,
+      userData,
+      passwordGenerated
+        ? 'User created successfully with auto-generated password. Please share the password with the user securely.'
+        : 'User created successfully'
+    );
   })
 );
 

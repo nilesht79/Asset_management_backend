@@ -160,6 +160,7 @@ router.get('/',
         COALESCE(loc.name, am.location_name, user_loc.name) as location_name,
         COALESCE(loc.building, user_loc.building) as location_building,
         COALESCE(loc.floor, user_loc.floor) as location_floor,
+        assigned_user.room_no as location_room_no,
 
         -- Previous user (for transfers)
         am.previous_user_id,
@@ -173,6 +174,7 @@ router.get('/',
         COALESCE(prev_loc.name, am.previous_location_name) as previous_location_name,
         prev_loc.building as previous_location_building,
         prev_loc.floor as previous_location_floor,
+        prev_user.room_no as previous_location_room_no,
 
         -- Performed by
         am.performed_by,
@@ -537,7 +539,7 @@ router.get('/:id',
           COALESCE(loc.name, am.location_name, user_loc.name) as location_name,
           COALESCE(loc.building, user_loc.building) as location_building,
           COALESCE(loc.floor, user_loc.floor) as location_floor,
-          COALESCE(loc.room_no, user_loc.room_no) as location_room_no,
+          assigned_user.room_no as location_room_no,
 
           -- Previous user (for transfers)
           am.previous_user_id,
@@ -552,7 +554,7 @@ router.get('/:id',
           COALESCE(prev_loc.name, am.previous_location_name, prev_user_loc.name) as previous_location_name,
           COALESCE(prev_loc.building, prev_user_loc.building) as previous_location_building,
           COALESCE(prev_loc.floor, prev_user_loc.floor) as previous_location_floor,
-          COALESCE(prev_loc.room_no, prev_user_loc.room_no) as previous_location_room_no,
+          prev_user.room_no as previous_location_room_no,
 
           -- Performed by
           am.performed_by,
