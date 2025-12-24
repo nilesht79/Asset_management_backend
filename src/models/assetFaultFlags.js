@@ -470,14 +470,33 @@ class AssetFaultFlagsModel {
       ]);
 
       const summary = summaryResult.recordset[0] || {};
+      const severityData = severityResult.recordset || [];
+      const typeData = typeResult.recordset || [];
+
+      // Extract severity counts
+      const warningCount = severityData.find(s => s.severity === 'warning')?.count || 0;
+      const criticalCount = severityData.find(s => s.severity === 'critical')?.count || 0;
+      const severeCount = severityData.find(s => s.severity === 'severe')?.count || 0;
 
       return {
-        totalFlags: summary.total_flags || 0,
+        // Summary stats
+        total_flags: summary.total_flags || 0,
+        active_flags: summary.active_flags || 0,
+        resolved_flags: summary.resolved_flags || 0,
+        recurring_flags: summary.recurring_flags || 0,
+
+        // Alias fields for FaultTrendsWidget compatibility
         totalActive: summary.active_flags || 0,
         totalResolved: summary.resolved_flags || 0,
-        recurringFlags: summary.recurring_flags || 0,
-        flagsBySeverity: severityResult.recordset || [],
-        flagsByType: typeResult.recordset || []
+
+        // Severity breakdown
+        warning_flags: warningCount,
+        critical_flags: criticalCount,
+        severe_flags: severeCount,
+
+        // Raw data for charts
+        flagsBySeverity: severityData,
+        flagsByType: typeData
       };
     } catch (error) {
       console.error('Error fetching flag stats:', error);

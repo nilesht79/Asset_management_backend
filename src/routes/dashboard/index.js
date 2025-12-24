@@ -524,8 +524,22 @@ router.get('/coordinator',
         SELECT TOP 10
           category,
           COUNT(*) as total_tickets,
-          COUNT(CASE WHEN status IN ('open', 'assigned', 'in_progress', 'pending') THEN 1 END) as active_tickets,
-          COUNT(CASE WHEN status IN ('resolved', 'closed') THEN 1 END) as resolved_tickets
+
+          -- Individual status counts
+          COUNT(CASE WHEN status = 'open' THEN 1 END) as open_tickets,
+          COUNT(CASE WHEN status = 'assigned' THEN 1 END) as assigned_tickets,
+          COUNT(CASE WHEN status = 'in_progress' THEN 1 END) as in_progress_tickets,
+          COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_tickets,
+          COUNT(CASE WHEN status = 'resolved' THEN 1 END) as resolved_tickets,
+          COUNT(CASE WHEN status = 'closed' THEN 1 END) as closed_tickets,
+
+          -- Today's counts
+          COUNT(CASE WHEN CAST(created_at AS DATE) = CAST(GETDATE() AS DATE) THEN 1 END) as today_total,
+          COUNT(CASE WHEN status = 'open' AND CAST(created_at AS DATE) = CAST(GETDATE() AS DATE) THEN 1 END) as today_open,
+          COUNT(CASE WHEN status = 'assigned' AND CAST(created_at AS DATE) = CAST(GETDATE() AS DATE) THEN 1 END) as today_assigned,
+          COUNT(CASE WHEN status = 'in_progress' AND CAST(created_at AS DATE) = CAST(GETDATE() AS DATE) THEN 1 END) as today_in_progress,
+          COUNT(CASE WHEN status = 'resolved' AND CAST(created_at AS DATE) = CAST(GETDATE() AS DATE) THEN 1 END) as today_resolved,
+          COUNT(CASE WHEN status = 'closed' AND CAST(created_at AS DATE) = CAST(GETDATE() AS DATE) THEN 1 END) as today_closed
         FROM TICKETS
         WHERE category IS NOT NULL
         GROUP BY category

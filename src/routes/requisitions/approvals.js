@@ -351,7 +351,7 @@ router.get('/pending-it-approvals',
     `);
     const total = countResult.recordset[0].total;
 
-    // Get paginated results
+    // Get paginated results with asset availability
     const dataRequest = pool.request();
     params.forEach(p => dataRequest.input(p.name, p.type, p.value));
     dataRequest.input('offset', sql.Int, offset);
@@ -360,7 +360,30 @@ router.get('/pending-it-approvals',
     const result = await dataRequest.query(`
       SELECT r.*,
              cat.name as category_name,
-             pt.name as product_type_name
+             pt.name as product_type_name,
+             -- Count available assets for the requested category and product type
+             (SELECT COUNT(*)
+              FROM ASSETS a
+              INNER JOIN products prod ON a.product_id = prod.id
+              WHERE prod.category_id = r.asset_category_id
+              AND prod.type_id = r.product_type_id
+              AND a.status = 'available'
+              AND a.is_active = 1) as available_assets_count,
+             -- Count total assets for the requested category and product type
+             (SELECT COUNT(*)
+              FROM ASSETS a
+              INNER JOIN products prod ON a.product_id = prod.id
+              WHERE prod.category_id = r.asset_category_id
+              AND prod.type_id = r.product_type_id
+              AND a.is_active = 1) as total_assets_count,
+             -- Count in-use assets for the requested category and product type
+             (SELECT COUNT(*)
+              FROM ASSETS a
+              INNER JOIN products prod ON a.product_id = prod.id
+              WHERE prod.category_id = r.asset_category_id
+              AND prod.type_id = r.product_type_id
+              AND a.status IN ('assigned', 'in_use')
+              AND a.is_active = 1) as in_use_assets_count
       FROM ASSET_REQUISITIONS r
       LEFT JOIN categories cat ON r.asset_category_id = cat.id
       LEFT JOIN product_types pt ON r.product_type_id = pt.id
