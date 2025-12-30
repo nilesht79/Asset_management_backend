@@ -30,12 +30,12 @@ router.get(
 /**
  * @route   GET /api/tickets/employee-assets/:userId
  * @desc    Get specific employee's assigned assets for ticket creation
- * @access  Coordinators, Admins
+ * @access  Coordinators, Admins, Engineers
  */
 router.get(
   '/employee-assets/:userId',
   authenticateOAuth,
-  requireRole(COORDINATORS),
+  requireRole(TICKET_MANAGERS),
   TicketAssetsController.getEmployeeAssets
 );
 
@@ -54,12 +54,12 @@ router.get(
 /**
  * @route   GET /api/tickets/employee-software/:userId
  * @desc    Get software installed on specific employee's assets for ticket creation
- * @access  Coordinators, Admins
+ * @access  Coordinators, Admins, Engineers
  */
 router.get(
   '/employee-software/:userId',
   authenticateOAuth,
-  requireRole(COORDINATORS),
+  requireRole(TICKET_MANAGERS),
   TicketAssetsController.getEmployeeSoftware
 );
 
