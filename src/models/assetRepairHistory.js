@@ -66,8 +66,8 @@ class AssetRepairHistoryModel {
           @warrantyClaim,
           @warrantyClaimReference,
           @createdBy,
-          GETDATE(),
-          GETDATE()
+          GETUTCDATE(),
+          GETUTCDATE()
         );
 
         SELECT * FROM ASSET_REPAIR_HISTORY WHERE repair_id = @NewRepairId;
@@ -291,7 +291,7 @@ class AssetRepairHistoryModel {
 
       const query = `
         UPDATE ASSET_REPAIR_HISTORY
-        SET ${updates.join(', ')}, updated_at = GETDATE()
+        SET ${updates.join(', ')}, updated_at = GETUTCDATE()
         WHERE repair_id = @repairId
       `;
 
@@ -619,7 +619,7 @@ class AssetRepairHistoryModel {
           repair_status = @repairStatus,
           notes = @notes,
           updated_by = @updatedBy,
-          updated_at = GETDATE()
+          updated_at = GETUTCDATE()
         WHERE ticket_id = @ticketId;
 
         SELECT * FROM ASSET_REPAIR_HISTORY WHERE ticket_id = @ticketId;

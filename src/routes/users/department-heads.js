@@ -295,16 +295,16 @@ router.get('/:id/team-performance',
       let dateFilter = ''
       switch (period) {
         case 'week':
-          dateFilter = 'AND t.createdAt >= DATEADD(week, -1, GETDATE())'
+          dateFilter = 'AND t.createdAt >= DATEADD(week, -1, GETUTCDATE())'
           break
         case 'month':
-          dateFilter = 'AND t.createdAt >= DATEADD(month, -1, GETDATE())'
+          dateFilter = 'AND t.createdAt >= DATEADD(month, -1, GETUTCDATE())'
           break
         case 'quarter':
-          dateFilter = 'AND t.createdAt >= DATEADD(quarter, -1, GETDATE())'
+          dateFilter = 'AND t.createdAt >= DATEADD(quarter, -1, GETUTCDATE())'
           break
         case 'year':
-          dateFilter = 'AND t.createdAt >= DATEADD(year, -1, GETDATE())'
+          dateFilter = 'AND t.createdAt >= DATEADD(year, -1, GETUTCDATE())'
           break
       }
       

@@ -74,7 +74,7 @@ class SlaTrackingModel {
           @minDeadline, @avgDeadline, @maxDeadline,
           0, 0,
           0, NULL, 'on_track',
-          GETDATE()
+          GETUTCDATE()
         )
       `;
 
@@ -216,11 +216,11 @@ class SlaTrackingModel {
           business_elapsed_minutes = @elapsedMinutes,
           sla_status = @slaStatus,
           breach_triggered_at = CASE
-            WHEN @isNewBreach = 1 AND breach_triggered_at IS NULL THEN GETDATE()
+            WHEN @isNewBreach = 1 AND breach_triggered_at IS NULL THEN GETUTCDATE()
             ELSE breach_triggered_at
           END,
-          last_calculated_at = GETDATE(),
-          updated_at = GETDATE()
+          last_calculated_at = GETUTCDATE(),
+          updated_at = GETUTCDATE()
         OUTPUT INSERTED.*
         WHERE tracking_id = @trackingId
       `;
@@ -277,7 +277,7 @@ class SlaTrackingModel {
             is_paused = 1,
             pause_started_at = @currentPauseStart,
             current_pause_reason = @pauseReason,
-            updated_at = GETDATE()
+            updated_at = GETUTCDATE()
           WHERE tracking_id = @trackingId
         `);
 
@@ -288,7 +288,7 @@ class SlaTrackingModel {
         )
         OUTPUT INSERTED.*
         VALUES (
-          NEWID(), @trackingId, 'paused', @pauseReason, GETDATE(), @pausedBy
+          NEWID(), @trackingId, 'paused', @pauseReason, GETUTCDATE(), @pausedBy
         )
       `;
 
@@ -338,7 +338,7 @@ class SlaTrackingModel {
             total_paused_minutes = @totalPausedMinutes,
             resolved_at = NULL,
             final_status = NULL,
-            updated_at = GETDATE()
+            updated_at = GETUTCDATE()
           WHERE tracking_id = @trackingId
         `);
 
@@ -349,7 +349,7 @@ class SlaTrackingModel {
         )
         OUTPUT INSERTED.*
         VALUES (
-          NEWID(), @trackingId, 'resumed', 'Timer resumed', GETDATE(), @pausedMinutes, @resumedBy
+          NEWID(), @trackingId, 'resumed', 'Timer resumed', GETUTCDATE(), @pausedMinutes, @resumedBy
         )
       `;
 
@@ -390,9 +390,9 @@ class SlaTrackingModel {
       // Stop tracking
       const query = `
         UPDATE TICKET_SLA_TRACKING SET
-          resolved_at = GETDATE(),
+          resolved_at = GETUTCDATE(),
           final_status = @finalStatus,
-          updated_at = GETDATE()
+          updated_at = GETUTCDATE()
         OUTPUT INSERTED.*
         WHERE tracking_id = @trackingId
       `;
@@ -953,7 +953,7 @@ class SlaTrackingModel {
           min_target_time = @minDeadline,
           avg_target_time = @avgDeadline,
           max_target_time = @maxDeadline,
-          updated_at = GETDATE()
+          updated_at = GETUTCDATE()
         OUTPUT INSERTED.*
         WHERE tracking_id = @trackingId
       `;
@@ -973,7 +973,7 @@ class SlaTrackingModel {
         )
         VALUES (
           NEWID(), @trackingId, 'recalculated',
-          @reason, GETDATE(), @changedBy
+          @reason, GETUTCDATE(), @changedBy
         )
       `;
 

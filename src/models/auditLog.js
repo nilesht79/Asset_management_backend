@@ -449,7 +449,7 @@ class AuditLogModel {
    */
   static async getStatistics(filters = {}) {
     return executeAuditQuery(async (pool) => {
-      const dateFilter = filters.days ? `WHERE created_at >= DATEADD(DAY, -${parseInt(filters.days)}, GETDATE())` : '';
+      const dateFilter = filters.days ? `WHERE created_at >= DATEADD(DAY, -${parseInt(filters.days)}, GETUTCDATE())` : '';
 
       const queries = {
         // Overall counts
@@ -528,7 +528,7 @@ class AuditLogModel {
             DATEPART(HOUR, created_at) AS hour,
             COUNT(*) AS count
           FROM AUDIT_LOGS
-          WHERE created_at >= DATEADD(HOUR, -24, GETDATE())
+          WHERE created_at >= DATEADD(HOUR, -24, GETUTCDATE())
           GROUP BY DATEPART(HOUR, created_at)
           ORDER BY hour
         `
@@ -855,7 +855,7 @@ class AuditLogModel {
           SET retention_days = @retention_days,
               archive_days = @archive_days,
               updated_by = @updated_by,
-              updated_at = GETDATE()
+              updated_at = GETUTCDATE()
           WHERE action_category = @action_category;
 
           SELECT * FROM AUDIT_RETENTION_CONFIG WHERE action_category = @action_category;
@@ -884,7 +884,7 @@ class AuditLogModel {
             SUM(unique_users) AS unique_users,
             AVG(avg_duration_ms) AS avg_duration_ms
           FROM AUDIT_SUMMARY_DAILY
-          WHERE summary_date >= DATEADD(DAY, -@days, GETDATE())
+          WHERE summary_date >= DATEADD(DAY, -@days, GETUTCDATE())
           GROUP BY summary_date
           ORDER BY summary_date DESC
         `);

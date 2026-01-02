@@ -77,8 +77,8 @@ class ServiceReportModel {
           @laborCost,
           @engineerNotes,
           @createdBy,
-          GETDATE(),
-          GETDATE()
+          GETUTCDATE(),
+          GETUTCDATE()
         )
       `;
 
@@ -113,7 +113,7 @@ class ServiceReportModel {
               INSERT INTO SERVICE_REPORT_PARTS (
                 part_id, report_id, asset_id, quantity, unit_cost, notes, created_at
               ) VALUES (
-                NEWID(), @reportId, @assetId, @quantity, @unitCost, @notes, GETDATE()
+                NEWID(), @reportId, @assetId, @quantity, @unitCost, @notes, GETUTCDATE()
               )
             `);
 
@@ -127,8 +127,8 @@ class ServiceReportModel {
                 SET
                   parent_asset_id = @parentAssetId,
                   status = 'in_use',
-                  installation_date = GETDATE(),
-                  updated_at = GETDATE()
+                  installation_date = GETUTCDATE(),
+                  updated_at = GETUTCDATE()
                 WHERE id = @componentAssetId AND asset_type = 'component'
               `);
           }
@@ -144,7 +144,7 @@ class ServiceReportModel {
             UPDATE assets
             SET
               condition_status = @conditionAfter,
-              updated_at = GETDATE()
+              updated_at = GETUTCDATE()
             WHERE id = @assetId
           `);
       }
@@ -170,7 +170,7 @@ class ServiceReportModel {
             SET
               status = 'retired',
               replacement_asset_id = @replacementAssetId,
-              updated_at = GETDATE()
+              updated_at = GETUTCDATE()
             WHERE id = @oldAssetId
           `);
 
@@ -188,7 +188,7 @@ class ServiceReportModel {
                   WHEN asset_type = 'component' THEN 'in_use'
                   ELSE 'assigned'
                 END,
-                updated_at = GETDATE()
+                updated_at = GETUTCDATE()
               WHERE id = @newAssetId
             `);
         }
@@ -234,9 +234,9 @@ class ServiceReportModel {
               NEWID(), @assetId, @assetTag,
               @assignedTo, @assignedToName,
               @movementType, @status,
-              GETDATE(), @notes,
+              GETUTCDATE(), @notes,
               @performedBy, @performedByName,
-              GETDATE()
+              GETUTCDATE()
             )
           `);
       }
@@ -1058,8 +1058,8 @@ class ServiceReportModel {
           @engineerNotes,
           'draft',
           @createdBy,
-          GETDATE(),
-          GETDATE()
+          GETUTCDATE(),
+          GETUTCDATE()
         )
       `;
 
@@ -1095,7 +1095,7 @@ class ServiceReportModel {
               INSERT INTO SERVICE_REPORT_PARTS (
                 part_id, report_id, asset_id, quantity, unit_cost, notes, created_at
               ) VALUES (
-                NEWID(), @reportId, @assetId, @quantity, @unitCost, @notes, GETDATE()
+                NEWID(), @reportId, @assetId, @quantity, @unitCost, @notes, GETUTCDATE()
               )
             `);
         }
@@ -1140,7 +1140,7 @@ class ServiceReportModel {
         .input('approvedBy', sql.UniqueIdentifier, approvedBy)
         .query(`
           UPDATE SERVICE_REPORTS
-          SET status = 'finalized', updated_at = GETDATE()
+          SET status = 'finalized', updated_at = GETUTCDATE()
           WHERE report_id = @reportId
         `);
 
@@ -1164,8 +1164,8 @@ class ServiceReportModel {
               SET
                 parent_asset_id = @parentAssetId,
                 status = 'in_use',
-                installation_date = GETDATE(),
-                updated_at = GETDATE()
+                installation_date = GETUTCDATE(),
+                updated_at = GETUTCDATE()
               WHERE id = @componentAssetId AND asset_type = 'component'
             `);
         }
@@ -1180,7 +1180,7 @@ class ServiceReportModel {
             UPDATE assets
             SET
               condition_status = @conditionAfter,
-              updated_at = GETDATE()
+              updated_at = GETUTCDATE()
             WHERE id = @assetId
           `);
       }
@@ -1206,7 +1206,7 @@ class ServiceReportModel {
             SET
               status = 'retired',
               replacement_asset_id = @replacementAssetId,
-              updated_at = GETDATE()
+              updated_at = GETUTCDATE()
             WHERE id = @oldAssetId
           `);
 
@@ -1223,7 +1223,7 @@ class ServiceReportModel {
                   WHEN asset_type = 'component' THEN 'in_use'
                   ELSE 'assigned'
                 END,
-                updated_at = GETDATE()
+                updated_at = GETUTCDATE()
               WHERE id = @newAssetId
             `);
         }
@@ -1268,9 +1268,9 @@ class ServiceReportModel {
               NEWID(), @assetId, @assetTag,
               @assignedTo, @assignedToName,
               @movementType, @status,
-              GETDATE(), @notes,
+              GETUTCDATE(), @notes,
               @performedBy, @performedByName,
-              GETDATE()
+              GETUTCDATE()
             )
           `);
       }

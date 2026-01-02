@@ -196,7 +196,7 @@ class SlaRulesModel {
           @applicableTicketChannels, @applicablePriority,
           @minTatMinutes, @avgTatMinutes, @maxTatMinutes,
           @isVipOverride, @businessHoursScheduleId, @holidayCalendarId,
-          @allowPauseResume, @pauseConditions, @isActive, @createdBy, GETDATE()
+          @allowPauseResume, @pauseConditions, @isActive, @createdBy, GETUTCDATE()
         )
       `;
 
@@ -299,7 +299,7 @@ class SlaRulesModel {
           allow_pause_resume = @allowPauseResume,
           pause_conditions = @pauseConditions,
           is_active = @isActive,
-          updated_at = GETDATE()
+          updated_at = GETUTCDATE()
         OUTPUT
           INSERTED.rule_id AS sla_rule_id,
           INSERTED.rule_name,
@@ -372,7 +372,7 @@ class SlaRulesModel {
         .input('ruleId', sql.UniqueIdentifier, ruleId)
         .query(`
           UPDATE SLA_RULES
-          SET is_active = 0, updated_at = GETDATE()
+          SET is_active = 0, updated_at = GETUTCDATE()
           WHERE rule_id = @ruleId
         `);
 
@@ -539,7 +539,7 @@ class SlaRulesModel {
                 is_24x7 = @is24x7,
                 is_default = @isDefault,
                 timezone = @timezone,
-                updated_at = GETDATE()
+                updated_at = GETUTCDATE()
               WHERE schedule_id = @scheduleId
             `);
         } else {
@@ -556,7 +556,7 @@ class SlaRulesModel {
                 schedule_id, schedule_name, description, is_24x7, is_default, timezone, is_active, created_by, created_at
               )
               OUTPUT INSERTED.schedule_id
-              VALUES (NEWID(), @scheduleName, @description, @is24x7, @isDefault, @timezone, 1, @createdBy, GETDATE())
+              VALUES (NEWID(), @scheduleName, @description, @is24x7, @isDefault, @timezone, 1, @createdBy, GETUTCDATE())
             `);
           scheduleId = insertResult.recordset[0].schedule_id;
         }
@@ -580,7 +580,7 @@ class SlaRulesModel {
                 INSERT INTO BUSINESS_HOURS_DETAILS (
                   detail_id, schedule_id, day_of_week, is_working_day, start_time, end_time, created_at
                 )
-                VALUES (NEWID(), @scheduleId, @dayOfWeek, @isWorkingDay, @startTime, @endTime, GETDATE())
+                VALUES (NEWID(), @scheduleId, @dayOfWeek, @isWorkingDay, @startTime, @endTime, GETUTCDATE())
               `);
           }
         }
@@ -608,7 +608,7 @@ class SlaRulesModel {
         .input('scheduleId', sql.UniqueIdentifier, scheduleId)
         .query(`
           UPDATE BUSINESS_HOURS_SCHEDULES
-          SET is_active = 0, updated_at = GETDATE()
+          SET is_active = 0, updated_at = GETUTCDATE()
           WHERE schedule_id = @scheduleId
         `);
 
@@ -643,7 +643,7 @@ class SlaRulesModel {
                 calendar_name = @calendarName,
                 description = @description,
                 calendar_year = @calendarYear,
-                updated_at = GETDATE()
+                updated_at = GETUTCDATE()
               WHERE calendar_id = @calendarId
             `);
         } else {
@@ -658,7 +658,7 @@ class SlaRulesModel {
                 calendar_id, calendar_name, description, calendar_year, is_active, created_by, created_at
               )
               OUTPUT INSERTED.calendar_id
-              VALUES (NEWID(), @calendarName, @description, @calendarYear, 1, @createdBy, GETDATE())
+              VALUES (NEWID(), @calendarName, @description, @calendarYear, 1, @createdBy, GETUTCDATE())
             `);
           calendarId = insertResult.recordset[0].calendar_id;
         }
@@ -684,7 +684,7 @@ class SlaRulesModel {
                 INSERT INTO HOLIDAY_DATES (
                   holiday_id, calendar_id, holiday_date, holiday_name, is_full_day, is_recurring, start_time, end_time, created_at
                 )
-                VALUES (NEWID(), @calendarId, @holidayDate, @holidayName, @isFullDay, @isRecurring, @startTime, @endTime, GETDATE())
+                VALUES (NEWID(), @calendarId, @holidayDate, @holidayName, @isFullDay, @isRecurring, @startTime, @endTime, GETUTCDATE())
               `);
           }
         }
@@ -712,7 +712,7 @@ class SlaRulesModel {
         .input('calendarId', sql.UniqueIdentifier, calendarId)
         .query(`
           UPDATE HOLIDAY_CALENDARS
-          SET is_active = 0, updated_at = GETDATE()
+          SET is_active = 0, updated_at = GETUTCDATE()
           WHERE calendar_id = @calendarId
         `);
 
@@ -771,7 +771,7 @@ class SlaRulesModel {
             include_ticket_details = @includeTicketDetails,
             custom_emails = @customEmails,
             is_active = @isActive,
-            updated_at = GETDATE()
+            updated_at = GETUTCDATE()
           OUTPUT INSERTED.*
           WHERE escalation_rule_id = @escalationRuleId
         `;
@@ -814,7 +814,7 @@ class SlaRulesModel {
             NEWID(), @slaRuleId, @escalationLevel, @triggerType,
             @referenceThreshold, @triggerOffsetMinutes, @repeatIntervalMinutes, @maxRepeatCount,
             @recipientType, @recipientGroupId, @recipientRole, @numberOfRecipients,
-            @escalationType, @notificationTemplate, @includeTicketDetails, @customEmails, @isActive, GETDATE()
+            @escalationType, @notificationTemplate, @includeTicketDetails, @customEmails, @isActive, GETUTCDATE()
           )
         `;
 

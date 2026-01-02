@@ -37,7 +37,7 @@ class NotificationModel {
         VALUES (
           NEWID(), @userId, @ticketId, @notificationType,
           @title, @message, @priority, @relatedData,
-          0, GETDATE()
+          0, GETUTCDATE()
         )
       `;
 
@@ -103,7 +103,7 @@ class NotificationModel {
               VALUES (
                 NEWID(), @userId, @ticketId, @notificationType,
                 @title, @message, @priority, @relatedData,
-                0, GETDATE()
+                0, GETUTCDATE()
               )
             `);
 
@@ -252,7 +252,7 @@ class NotificationModel {
         .input('userId', sql.UniqueIdentifier, userId)
         .query(`
           UPDATE USER_NOTIFICATIONS
-          SET is_read = 1, read_at = GETDATE()
+          SET is_read = 1, read_at = GETUTCDATE()
           WHERE notification_id = @notificationId AND user_id = @userId
         `);
 
@@ -276,7 +276,7 @@ class NotificationModel {
         .input('userId', sql.UniqueIdentifier, userId)
         .query(`
           UPDATE USER_NOTIFICATIONS
-          SET is_read = 1, read_at = GETDATE()
+          SET is_read = 1, read_at = GETUTCDATE()
           WHERE user_id = @userId AND is_read = 0
         `);
 
@@ -326,7 +326,7 @@ class NotificationModel {
         .query(`
           DELETE FROM USER_NOTIFICATIONS
           WHERE is_read = 1
-            AND read_at < DATEADD(DAY, -@daysOld, GETDATE())
+            AND read_at < DATEADD(DAY, -@daysOld, GETUTCDATE())
         `);
 
       return result.rowsAffected[0];

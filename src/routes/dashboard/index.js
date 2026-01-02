@@ -407,8 +407,8 @@ router.get('/coordinator',
           (SELECT COUNT(*) FROM assets WHERE is_active = 1 AND status = 'available') as available_assets,
           (SELECT COUNT(*) FROM assets WHERE is_active = 1 AND status = 'under_repair') as under_repair_assets,
           (SELECT COUNT(*) FROM assets WHERE is_active = 1 AND status = 'retired') as retired_assets,
-          (SELECT COUNT(*) FROM assets WHERE is_active = 1 AND warranty_end_date BETWEEN GETDATE() AND DATEADD(DAY, 30, GETDATE())) as warranty_expiring_soon,
-          (SELECT COUNT(*) FROM assets WHERE is_active = 1 AND created_at >= DATETRUNC(MONTH, GETDATE())) as added_this_month,
+          (SELECT COUNT(*) FROM assets WHERE is_active = 1 AND warranty_end_date BETWEEN GETUTCDATE() AND DATEADD(DAY, 30, GETUTCDATE())) as warranty_expiring_soon,
+          (SELECT COUNT(*) FROM assets WHERE is_active = 1 AND created_at >= DATETRUNC(MONTH, GETUTCDATE())) as added_this_month,
 
           -- Asset by Condition
           (SELECT COUNT(*) FROM assets WHERE is_active = 1 AND condition_status = 'good') as condition_good,
@@ -427,12 +427,12 @@ router.get('/coordinator',
           (SELECT COUNT(*) FROM TICKETS WHERE status IN ('resolved', 'closed')) as resolved_tickets,
 
           -- Today's Tickets
-          (SELECT COUNT(*) FROM TICKETS WHERE CAST(created_at AS DATE) = CAST(GETDATE() AS DATE)) as today_created,
-          (SELECT COUNT(*) FROM TICKETS WHERE CAST(resolved_at AS DATE) = CAST(GETDATE() AS DATE)) as today_resolved,
+          (SELECT COUNT(*) FROM TICKETS WHERE CAST(created_at AS DATE) = CAST(GETUTCDATE() AS DATE)) as today_created,
+          (SELECT COUNT(*) FROM TICKETS WHERE CAST(resolved_at AS DATE) = CAST(GETUTCDATE() AS DATE)) as today_resolved,
 
           -- This Week
-          (SELECT COUNT(*) FROM TICKETS WHERE created_at >= DATETRUNC(WEEK, GETDATE())) as week_created,
-          (SELECT COUNT(*) FROM TICKETS WHERE resolved_at >= DATETRUNC(WEEK, GETDATE())) as week_resolved,
+          (SELECT COUNT(*) FROM TICKETS WHERE created_at >= DATETRUNC(WEEK, GETUTCDATE())) as week_created,
+          (SELECT COUNT(*) FROM TICKETS WHERE resolved_at >= DATETRUNC(WEEK, GETUTCDATE())) as week_resolved,
 
           -- Unassigned Tickets
           (SELECT COUNT(*) FROM TICKETS WHERE status = 'open' AND assigned_to_engineer_id IS NULL) as unassigned_tickets,
@@ -465,7 +465,7 @@ router.get('/coordinator',
         FROM TICKETS t
         JOIN TICKET_SLA_TRACKING sla ON t.ticket_id = sla.ticket_id
         WHERE t.status IN ('resolved', 'closed')
-        AND t.resolved_at >= DATEADD(DAY, -30, GETDATE())
+        AND t.resolved_at >= DATEADD(DAY, -30, GETUTCDATE())
       `);
 
       // 4. Requisition KPIs
@@ -480,8 +480,8 @@ router.get('/coordinator',
           (SELECT COUNT(*) FROM ASSET_REQUISITIONS WHERE status LIKE 'rejected%') as rejected,
 
           -- This Month
-          (SELECT COUNT(*) FROM ASSET_REQUISITIONS WHERE created_at >= DATETRUNC(MONTH, GETDATE())) as month_total,
-          (SELECT COUNT(*) FROM ASSET_REQUISITIONS WHERE status = 'completed' AND updated_at >= DATETRUNC(MONTH, GETDATE())) as month_completed
+          (SELECT COUNT(*) FROM ASSET_REQUISITIONS WHERE created_at >= DATETRUNC(MONTH, GETUTCDATE())) as month_total,
+          (SELECT COUNT(*) FROM ASSET_REQUISITIONS WHERE status = 'completed' AND updated_at >= DATETRUNC(MONTH, GETUTCDATE())) as month_completed
       `);
 
       // 5. Consumable KPIs
@@ -494,8 +494,8 @@ router.get('/coordinator',
           (SELECT COUNT(*) FROM consumable_requests WHERE status = 'rejected') as rejected_requests,
 
           -- This Month
-          (SELECT COUNT(*) FROM consumable_requests WHERE created_at >= DATETRUNC(MONTH, GETDATE())) as month_total,
-          (SELECT COUNT(*) FROM consumable_requests WHERE status = 'delivered' AND delivered_at >= DATETRUNC(MONTH, GETDATE())) as month_delivered,
+          (SELECT COUNT(*) FROM consumable_requests WHERE created_at >= DATETRUNC(MONTH, GETUTCDATE())) as month_total,
+          (SELECT COUNT(*) FROM consumable_requests WHERE status = 'delivered' AND delivered_at >= DATETRUNC(MONTH, GETUTCDATE())) as month_delivered,
 
           -- Inventory Alerts (join consumables with consumable_inventory to get stock levels)
           (SELECT COUNT(DISTINCT c.id) FROM consumables c
@@ -515,8 +515,8 @@ router.get('/coordinator',
           (SELECT COUNT(*) FROM ASSET_DELIVERY_TICKETS WHERE status = 'delivered') as completed_deliveries,
 
           -- Today's Deliveries
-          (SELECT COUNT(*) FROM ASSET_DELIVERY_TICKETS WHERE CAST(scheduled_delivery_date AS DATE) = CAST(GETDATE() AS DATE)) as today_scheduled,
-          (SELECT COUNT(*) FROM ASSET_DELIVERY_TICKETS WHERE CAST(actual_delivery_date AS DATE) = CAST(GETDATE() AS DATE) AND status = 'delivered') as today_completed
+          (SELECT COUNT(*) FROM ASSET_DELIVERY_TICKETS WHERE CAST(scheduled_delivery_date AS DATE) = CAST(GETUTCDATE() AS DATE)) as today_scheduled,
+          (SELECT COUNT(*) FROM ASSET_DELIVERY_TICKETS WHERE CAST(actual_delivery_date AS DATE) = CAST(GETUTCDATE() AS DATE) AND status = 'delivered') as today_completed
       `);
 
       // 7. Ticket Distribution by Category
@@ -534,12 +534,12 @@ router.get('/coordinator',
           COUNT(CASE WHEN status = 'closed' THEN 1 END) as closed_tickets,
 
           -- Today's counts
-          COUNT(CASE WHEN CAST(created_at AS DATE) = CAST(GETDATE() AS DATE) THEN 1 END) as today_total,
-          COUNT(CASE WHEN status = 'open' AND CAST(created_at AS DATE) = CAST(GETDATE() AS DATE) THEN 1 END) as today_open,
-          COUNT(CASE WHEN status = 'assigned' AND CAST(created_at AS DATE) = CAST(GETDATE() AS DATE) THEN 1 END) as today_assigned,
-          COUNT(CASE WHEN status = 'in_progress' AND CAST(created_at AS DATE) = CAST(GETDATE() AS DATE) THEN 1 END) as today_in_progress,
-          COUNT(CASE WHEN status = 'resolved' AND CAST(created_at AS DATE) = CAST(GETDATE() AS DATE) THEN 1 END) as today_resolved,
-          COUNT(CASE WHEN status = 'closed' AND CAST(created_at AS DATE) = CAST(GETDATE() AS DATE) THEN 1 END) as today_closed
+          COUNT(CASE WHEN CAST(created_at AS DATE) = CAST(GETUTCDATE() AS DATE) THEN 1 END) as today_total,
+          COUNT(CASE WHEN status = 'open' AND CAST(created_at AS DATE) = CAST(GETUTCDATE() AS DATE) THEN 1 END) as today_open,
+          COUNT(CASE WHEN status = 'assigned' AND CAST(created_at AS DATE) = CAST(GETUTCDATE() AS DATE) THEN 1 END) as today_assigned,
+          COUNT(CASE WHEN status = 'in_progress' AND CAST(created_at AS DATE) = CAST(GETUTCDATE() AS DATE) THEN 1 END) as today_in_progress,
+          COUNT(CASE WHEN status = 'resolved' AND CAST(created_at AS DATE) = CAST(GETUTCDATE() AS DATE) THEN 1 END) as today_resolved,
+          COUNT(CASE WHEN status = 'closed' AND CAST(created_at AS DATE) = CAST(GETUTCDATE() AS DATE) THEN 1 END) as today_closed
         FROM TICKETS
         WHERE category IS NOT NULL
         GROUP BY category
@@ -609,7 +609,7 @@ router.get('/coordinator',
           u.first_name + ' ' + u.last_name as engineer_name,
           ISNULL((SELECT COUNT(*) FROM TICKETS t WHERE t.assigned_to_engineer_id = u.user_id AND t.status IN ('assigned', 'in_progress')), 0) as active_tickets,
           ISNULL((SELECT COUNT(*) FROM ASSET_DELIVERY_TICKETS d WHERE d.delivered_by = u.user_id AND d.status IN ('pending', 'scheduled', 'in_transit')), 0) as pending_deliveries,
-          ISNULL((SELECT COUNT(*) FROM TICKETS t WHERE t.assigned_to_engineer_id = u.user_id AND t.status IN ('resolved', 'closed') AND t.resolved_at >= DATETRUNC(WEEK, GETDATE())), 0) as resolved_this_week
+          ISNULL((SELECT COUNT(*) FROM TICKETS t WHERE t.assigned_to_engineer_id = u.user_id AND t.status IN ('resolved', 'closed') AND t.resolved_at >= DATETRUNC(WEEK, GETUTCDATE())), 0) as resolved_this_week
         FROM USER_MASTER u
         WHERE u.role = 'engineer' AND u.is_active = 1
         ORDER BY active_tickets DESC
@@ -934,7 +934,7 @@ router.get('/engineer',
               SELECT COUNT(*)
               FROM TICKETS
               WHERE assigned_to_engineer_id = @engineerId
-              AND CAST(resolved_at AS DATE) = CAST(GETDATE() AS DATE)
+              AND CAST(resolved_at AS DATE) = CAST(GETUTCDATE() AS DATE)
             ) as today_completed,
 
             -- Overdue Tickets (breached SLA - exceeded max TAT)
@@ -976,9 +976,9 @@ router.get('/engineer',
             sla.breach_triggered_at,
             CASE
               WHEN sla.breach_triggered_at IS NOT NULL THEN
-                DATEDIFF(MINUTE, sla.breach_triggered_at, GETDATE())
+                DATEDIFF(MINUTE, sla.breach_triggered_at, GETUTCDATE())
               WHEN sla.warning_triggered_at IS NOT NULL THEN
-                DATEDIFF(MINUTE, GETDATE(), sla.max_target_time)
+                DATEDIFF(MINUTE, GETUTCDATE(), sla.max_target_time)
               ELSE NULL
             END as time_remaining_minutes
           FROM TICKETS t
@@ -1061,7 +1061,7 @@ router.get('/engineer',
             COUNT(*) as resolved_count
           FROM TICKETS
           WHERE assigned_to_engineer_id = @engineerId
-          AND resolved_at >= DATEADD(DAY, -7, GETDATE())
+          AND resolved_at >= DATEADD(DAY, -7, GETUTCDATE())
           GROUP BY CAST(resolved_at AS DATE)
           ORDER BY date
         `);
@@ -1095,7 +1095,7 @@ router.get('/engineer',
           JOIN TICKET_SLA_TRACKING sla ON t.ticket_id = sla.ticket_id
           WHERE t.assigned_to_engineer_id = @engineerId
           AND t.status IN ('resolved', 'closed')
-          AND t.resolved_at >= DATEADD(DAY, -30, GETDATE())
+          AND t.resolved_at >= DATEADD(DAY, -30, GETUTCDATE())
         `);
 
       // 8. Get Average Resolution Time
@@ -1109,7 +1109,7 @@ router.get('/engineer',
           JOIN TICKET_SLA_TRACKING sla ON t.ticket_id = sla.ticket_id
           WHERE t.assigned_to_engineer_id = @engineerId
           AND t.status IN ('resolved', 'closed')
-          AND t.resolved_at >= DATEADD(DAY, -30, GETDATE())
+          AND t.resolved_at >= DATEADD(DAY, -30, GETUTCDATE())
           AND sla.sla_start_time IS NOT NULL
           AND sla.max_target_time IS NOT NULL
         `);
@@ -1146,7 +1146,7 @@ router.get('/engineer',
               FROM TICKETS
               WHERE assigned_to_engineer_id = @engineerId
               AND status IN ('resolved', 'closed')
-              AND resolved_at >= DATETRUNC(WEEK, GETDATE())
+              AND resolved_at >= DATETRUNC(WEEK, GETUTCDATE())
             ) as week_tickets_resolved,
 
             (
@@ -1154,7 +1154,7 @@ router.get('/engineer',
               FROM ASSET_DELIVERY_TICKETS
               WHERE delivered_by = @engineerId
               AND status = 'delivered'
-              AND actual_delivery_date >= DATETRUNC(WEEK, GETDATE())
+              AND actual_delivery_date >= DATETRUNC(WEEK, GETUTCDATE())
             ) as week_asset_deliveries_completed,
 
             (
@@ -1162,7 +1162,7 @@ router.get('/engineer',
               FROM consumable_requests
               WHERE assigned_engineer = @engineerId
               AND status = 'delivered'
-              AND delivered_at >= DATETRUNC(WEEK, GETDATE())
+              AND delivered_at >= DATETRUNC(WEEK, GETUTCDATE())
             ) as week_consumable_deliveries_completed,
 
             (
@@ -1170,7 +1170,7 @@ router.get('/engineer',
               FROM RECONCILIATION_RECORDS
               WHERE reconciled_by = @engineerId
               AND reconciliation_status IN ('verified', 'discrepancy', 'damaged')
-              AND reconciled_at >= DATETRUNC(WEEK, GETDATE())
+              AND reconciled_at >= DATETRUNC(WEEK, GETUTCDATE())
             ) as week_assets_reconciled,
 
             -- This Month (current calendar month)
@@ -1179,7 +1179,7 @@ router.get('/engineer',
               FROM TICKETS
               WHERE assigned_to_engineer_id = @engineerId
               AND status IN ('resolved', 'closed')
-              AND resolved_at >= DATETRUNC(MONTH, GETDATE())
+              AND resolved_at >= DATETRUNC(MONTH, GETUTCDATE())
             ) as month_tickets_resolved,
 
             (
@@ -1187,7 +1187,7 @@ router.get('/engineer',
               FROM ASSET_DELIVERY_TICKETS
               WHERE delivered_by = @engineerId
               AND status = 'delivered'
-              AND actual_delivery_date >= DATETRUNC(MONTH, GETDATE())
+              AND actual_delivery_date >= DATETRUNC(MONTH, GETUTCDATE())
             ) as month_asset_deliveries_completed,
 
             (
@@ -1195,7 +1195,7 @@ router.get('/engineer',
               FROM consumable_requests
               WHERE assigned_engineer = @engineerId
               AND status = 'delivered'
-              AND delivered_at >= DATETRUNC(MONTH, GETDATE())
+              AND delivered_at >= DATETRUNC(MONTH, GETUTCDATE())
             ) as month_consumable_deliveries_completed,
 
             (
@@ -1203,7 +1203,7 @@ router.get('/engineer',
               FROM RECONCILIATION_RECORDS
               WHERE reconciled_by = @engineerId
               AND reconciliation_status IN ('verified', 'discrepancy', 'damaged')
-              AND reconciled_at >= DATETRUNC(MONTH, GETDATE())
+              AND reconciled_at >= DATETRUNC(MONTH, GETUTCDATE())
             ) as month_assets_reconciled
         `);
 

@@ -338,7 +338,7 @@ router.put('/:id', authenticateToken, requirePermission('manage_field_templates'
       });
     }
 
-    updates.push('updated_at = GETDATE()');
+    updates.push('updated_at = GETUTCDATE()');
 
     const result = await request.query(`
       UPDATE component_field_templates
@@ -383,7 +383,7 @@ router.delete('/:id', authenticateToken, requirePermission('manage_field_templat
       .input('id', sql.UniqueIdentifier, id)
       .query(`
         UPDATE component_field_templates
-        SET is_active = 0, updated_at = GETDATE()
+        SET is_active = 0, updated_at = GETUTCDATE()
         OUTPUT INSERTED.*
         WHERE id = @id
       `);
@@ -518,7 +518,7 @@ router.put('/options/:optionId', authenticateToken, requirePermission('manage_fi
       });
     }
 
-    updates.push('updated_at = GETDATE()');
+    updates.push('updated_at = GETUTCDATE()');
 
     const result = await request.query(`
       UPDATE component_field_options

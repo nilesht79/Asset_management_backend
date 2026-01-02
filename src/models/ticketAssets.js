@@ -19,7 +19,7 @@ class TicketAssetsModel {
         )
         OUTPUT INSERTED.*
         VALUES (
-          NEWID(), @ticketId, @assetId, @addedBy, GETDATE(), @notes
+          NEWID(), @ticketId, @assetId, @addedBy, GETUTCDATE(), @notes
         )
       `;
 
@@ -243,7 +243,7 @@ class TicketAssetsModel {
               BEGIN
                 INSERT INTO TICKET_ASSETS (id, ticket_id, asset_id, added_by, added_at)
                 OUTPUT INSERTED.*
-                VALUES (NEWID(), @ticketId, @assetId, @addedBy, GETDATE())
+                VALUES (NEWID(), @ticketId, @assetId, @addedBy, GETUTCDATE())
               END
             `);
 
@@ -446,7 +446,7 @@ class TicketAssetsModel {
               BEGIN
                 INSERT INTO TICKET_SOFTWARE (id, ticket_id, software_installation_id, added_by, added_at)
                 OUTPUT INSERTED.*
-                VALUES (NEWID(), @ticketId, @installationId, @addedBy, GETDATE())
+                VALUES (NEWID(), @ticketId, @installationId, @addedBy, GETUTCDATE())
               END
             `);
 

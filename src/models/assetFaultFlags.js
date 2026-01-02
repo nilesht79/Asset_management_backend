@@ -190,8 +190,8 @@ class AssetFaultFlagsModel {
           @severity,
           1,
           0,
-          GETDATE(),
-          GETDATE()
+          GETUTCDATE(),
+          GETUTCDATE()
         )
       `;
 
@@ -229,10 +229,10 @@ class AssetFaultFlagsModel {
         SET
           is_resolved = 1,
           resolved_by = @resolvedBy,
-          resolved_at = GETDATE(),
+          resolved_at = GETUTCDATE(),
           resolution_notes = @resolutionNotes,
           resolution_action = @resolutionAction,
-          updated_at = GETDATE()
+          updated_at = GETUTCDATE()
         OUTPUT INSERTED.*
         WHERE flag_id = @flagId
       `;
@@ -262,7 +262,7 @@ class AssetFaultFlagsModel {
         .input('flagId', sql.UniqueIdentifier, flagId)
         .query(`
           UPDATE ASSET_FAULT_FLAGS
-          SET is_active = 0, updated_at = GETDATE()
+          SET is_active = 0, updated_at = GETUTCDATE()
           WHERE flag_id = @flagId
         `);
 

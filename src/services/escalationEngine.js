@@ -181,7 +181,7 @@ class EscalationEngine {
         VALUES (
           NEWID(), @trackingId, @escalationRuleId,
           @escalationLevel, @triggerType,
-          @recipients, @notificationCount, 'pending', GETDATE()
+          @recipients, @notificationCount, 'pending', GETUTCDATE()
         )
       `;
 

@@ -72,7 +72,7 @@ class EmailService {
               gmail_user = @gmailUser,
               gmail_app_password = CASE WHEN @gmailAppPassword IS NOT NULL AND @gmailAppPassword != '' THEN @gmailAppPassword ELSE gmail_app_password END,
               is_enabled = @isEnabled,
-              updated_at = GETDATE(),
+              updated_at = GETUTCDATE(),
               updated_by = @updatedBy
             WHERE config_id = @configId
           `);
@@ -275,7 +275,7 @@ This is an automated message. Please do not reply.
         .input('testStatus', sql.VarChar(50), result.success ? 'success' : 'failed')
         .query(`
           UPDATE EMAIL_CONFIGURATION SET
-            test_email_sent_at = GETDATE(),
+            test_email_sent_at = GETUTCDATE(),
             test_email_status = @testStatus
         `);
 

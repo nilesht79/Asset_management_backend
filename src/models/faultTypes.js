@@ -108,7 +108,7 @@ class FaultTypesModel {
         )
         OUTPUT INSERTED.*
         VALUES (
-          NEWID(), @name, @category, @description, 1, GETDATE(), GETDATE()
+          NEWID(), @name, @category, @description, 1, GETUTCDATE(), GETUTCDATE()
         )
       `;
 
@@ -142,7 +142,7 @@ class FaultTypesModel {
           category = COALESCE(@category, category),
           description = COALESCE(@description, description),
           is_active = COALESCE(@isActive, is_active),
-          updated_at = GETDATE()
+          updated_at = GETUTCDATE()
         OUTPUT INSERTED.*
         WHERE fault_type_id = @faultTypeId
       `;
@@ -173,7 +173,7 @@ class FaultTypesModel {
         .input('faultTypeId', sql.UniqueIdentifier, faultTypeId)
         .query(`
           UPDATE FAULT_TYPES
-          SET is_active = 0, updated_at = GETDATE()
+          SET is_active = 0, updated_at = GETUTCDATE()
           WHERE fault_type_id = @faultTypeId
         `);
 

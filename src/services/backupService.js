@@ -398,7 +398,7 @@ class BackupService {
           bmf.physical_device_name
         FROM msdb.dbo.backupset bs
         INNER JOIN msdb.dbo.backupmediafamily bmf ON bs.media_set_id = bmf.media_set_id
-        WHERE bs.backup_start_date < DATEADD(DAY, -${backupConfig.retention.local.full}, GETDATE())
+        WHERE bs.backup_start_date < DATEADD(DAY, -${backupConfig.retention.local.full}, GETUTCDATE())
         AND bs.database_name IN (${backupConfig.databases.map(d => `'${d.name}'`).join(',')})
         ORDER BY bs.backup_start_date
       `);
@@ -517,7 +517,7 @@ class BackupService {
             SUM(backup_size) AS total_size
           FROM msdb.dbo.backupset
           WHERE database_name = '${db.name}'
-          AND backup_start_date > DATEADD(DAY, -30, GETDATE())
+          AND backup_start_date > DATEADD(DAY, -30, GETUTCDATE())
           GROUP BY database_name
         `);
 

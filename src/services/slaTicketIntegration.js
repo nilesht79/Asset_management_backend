@@ -185,7 +185,7 @@ class SlaTicketIntegration {
               is_paused = 0,
               pause_started_at = NULL,
               current_pause_reason = NULL,
-              updated_at = GETDATE()
+              updated_at = GETUTCDATE()
             WHERE ticket_id = @ticketId
           `);
 

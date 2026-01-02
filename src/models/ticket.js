@@ -101,8 +101,8 @@ class TicketModel {
           @ticketType,
           @serviceType,
           @dueDate,
-          GETDATE(),
-          GETDATE()
+          GETUTCDATE(),
+          GETUTCDATE()
         )
       `;
 
@@ -189,8 +189,8 @@ class TicketModel {
             @serviceType,
             @dueDate,
             1,
-            GETDATE(),
-            GETDATE()
+            GETUTCDATE(),
+            GETUTCDATE()
           )
         `;
 
@@ -227,8 +227,8 @@ class TicketModel {
             @guestName,
             @guestEmail,
             @guestPhone,
-            GETDATE(),
-            GETDATE()
+            GETUTCDATE(),
+            GETUTCDATE()
           )
         `;
 
@@ -477,7 +477,7 @@ class TicketModel {
 
       const query = `
         UPDATE TICKETS
-        SET ${updates.join(', ')}, updated_at = GETDATE()
+        SET ${updates.join(', ')}, updated_at = GETUTCDATE()
         WHERE ticket_id = @ticketId
       `;
 
@@ -537,7 +537,7 @@ class TicketModel {
           SET
             assigned_to_engineer_id = @engineerId,
             status = 'in_progress',
-            updated_at = GETDATE()
+            updated_at = GETUTCDATE()
           WHERE ticket_id = @ticketId
         `);
 
@@ -564,10 +564,10 @@ class TicketModel {
           UPDATE TICKETS
           SET
             status = 'closed',
-            resolved_at = CASE WHEN resolved_at IS NULL THEN GETDATE() ELSE resolved_at END,
-            closed_at = GETDATE(),
+            resolved_at = CASE WHEN resolved_at IS NULL THEN GETUTCDATE() ELSE resolved_at END,
+            closed_at = GETUTCDATE(),
             resolution_notes = @resolutionNotes,
-            updated_at = GETDATE()
+            updated_at = GETUTCDATE()
           WHERE ticket_id = @ticketId
         `);
 
@@ -660,8 +660,8 @@ class TicketModel {
           SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) AS resolved_tickets,
           SUM(CASE WHEN status = 'closed' THEN 1 ELSE 0 END) AS closed_tickets,
           SUM(CASE WHEN priority = 'critical' OR priority = 'emergency' THEN 1 ELSE 0 END) AS critical_tickets,
-          SUM(CASE WHEN due_date < GETDATE() AND status NOT IN ('closed', 'resolved') THEN 1 ELSE 0 END) AS overdue_tickets,
-          SUM(CASE WHEN CAST(closed_at AS DATE) = CAST(GETDATE() AS DATE) THEN 1 ELSE 0 END) AS closed_today
+          SUM(CASE WHEN due_date < GETUTCDATE() AND status NOT IN ('closed', 'resolved') THEN 1 ELSE 0 END) AS overdue_tickets,
+          SUM(CASE WHEN CAST(closed_at AS DATE) = CAST(GETUTCDATE() AS DATE) THEN 1 ELSE 0 END) AS closed_today
         FROM TICKETS
         ${whereClause}
       `;
@@ -702,7 +702,7 @@ class TicketModel {
           @userId,
           @commentText,
           @isInternal,
-          GETDATE()
+          GETUTCDATE()
         )
       `;
 
@@ -1037,8 +1037,8 @@ class TicketModel {
           @requestNotes,
           'pending',
           @serviceReportId,
-          GETDATE(),
-          GETDATE()
+          GETUTCDATE(),
+          GETUTCDATE()
         )
       `;
 
@@ -1054,7 +1054,7 @@ class TicketModel {
         .input('ticketId', sql.UniqueIdentifier, ticketId)
         .query(`
           UPDATE TICKETS
-          SET status = 'pending_closure', updated_at = GETDATE()
+          SET status = 'pending_closure', updated_at = GETUTCDATE()
           WHERE ticket_id = @ticketId
         `);
 
@@ -1249,8 +1249,8 @@ class TicketModel {
             request_status = @action,
             reviewed_by_coordinator_id = @coordinatorId,
             review_notes = @reviewNotes,
-            reviewed_at = GETDATE(),
-            updated_at = GETDATE()
+            reviewed_at = GETUTCDATE(),
+            updated_at = GETUTCDATE()
           WHERE close_request_id = @closeRequestId
         `);
 
@@ -1264,10 +1264,10 @@ class TicketModel {
             UPDATE TICKETS
             SET
               status = 'closed',
-              resolved_at = CASE WHEN resolved_at IS NULL THEN GETDATE() ELSE resolved_at END,
-              closed_at = GETDATE(),
+              resolved_at = CASE WHEN resolved_at IS NULL THEN GETUTCDATE() ELSE resolved_at END,
+              closed_at = GETUTCDATE(),
               resolution_notes = @resolutionNotes,
-              updated_at = GETDATE()
+              updated_at = GETUTCDATE()
             WHERE ticket_id = @ticketId
           `);
 
@@ -1344,7 +1344,7 @@ class TicketModel {
             UPDATE TICKETS
             SET
               status = 'in_progress',
-              updated_at = GETDATE()
+              updated_at = GETUTCDATE()
             WHERE ticket_id = @ticketId
           `);
 
@@ -1414,7 +1414,7 @@ class TicketModel {
       const monthsBack = filters.months_back || 6;
 
       // Build WHERE clause for filters
-      let whereClause = `WHERE t.created_at >= DATEADD(MONTH, -@monthsBack, GETDATE())`;
+      let whereClause = `WHERE t.created_at >= DATEADD(MONTH, -@monthsBack, GETUTCDATE())`;
       const params = { monthsBack };
 
       if (filters.location_id) {
@@ -1717,7 +1717,7 @@ class TicketModel {
             notify_assignee = @notifyAssignee,
             notify_manager = @notifyManager,
             updated_by = @updatedBy,
-            updated_at = GETDATE()
+            updated_at = GETUTCDATE()
           WHERE is_active = 1;
 
           SELECT TOP 1 * FROM TICKET_REOPEN_CONFIG WHERE is_active = 1;
@@ -1751,7 +1751,7 @@ class TicketModel {
             c.reopen_window_days,
             c.max_reopen_count,
             c.require_reopen_reason,
-            DATEDIFF(DAY, t.closed_at, GETDATE()) AS days_since_closed
+            DATEDIFF(DAY, t.closed_at, GETUTCDATE()) AS days_since_closed
           FROM TICKETS t
           CROSS JOIN (SELECT TOP 1 * FROM TICKET_REOPEN_CONFIG WHERE is_active = 1) c
           WHERE t.ticket_id = @ticketId
@@ -1829,7 +1829,7 @@ class TicketModel {
               previous_closed_at, reopened_at, created_at
             ) VALUES (
               @ticketId, @reopenNumber, @reopenReason, @reopenedBy,
-              @previousClosedAt, GETDATE(), GETDATE()
+              @previousClosedAt, GETUTCDATE(), GETUTCDATE()
             )
           `);
 
@@ -1842,7 +1842,7 @@ class TicketModel {
             SET
               status = 'in_progress',
               reopen_count = reopen_count + 1,
-              last_reopened_at = GETDATE(),
+              last_reopened_at = GETUTCDATE(),
               last_reopened_by = @reopenedBy,
               original_closed_at = CASE
                 WHEN original_closed_at IS NULL THEN closed_at
@@ -1850,7 +1850,7 @@ class TicketModel {
               END,
               closed_at = NULL,
               resolved_at = NULL,
-              updated_at = GETDATE()
+              updated_at = GETUTCDATE()
             WHERE ticket_id = @ticketId
           `);
 
@@ -1870,7 +1870,7 @@ class TicketModel {
             .input('reportId', sql.UniqueIdentifier, reportId)
             .query(`
               UPDATE SERVICE_REPORTS
-              SET status = 'draft', updated_at = GETDATE()
+              SET status = 'draft', updated_at = GETUTCDATE()
               WHERE report_id = @reportId
             `);
 
@@ -1879,7 +1879,7 @@ class TicketModel {
             .input('ticketId', sql.UniqueIdentifier, ticketId)
             .query(`
               UPDATE ASSET_REPAIR_HISTORY
-              SET repair_status = 'in_progress', updated_at = GETDATE()
+              SET repair_status = 'in_progress', updated_at = GETUTCDATE()
               WHERE ticket_id = @ticketId
             `);
         }
@@ -1938,7 +1938,7 @@ class TicketModel {
                   END,
                   resolved_at = NULL,
                   final_status = NULL,
-                  updated_at = GETDATE()
+                  updated_at = GETUTCDATE()
                   WHERE ticket_id = @ticketId
                 `);
               console.log(`SLA continued for ticket ${ticketId}`);
@@ -1969,7 +1969,7 @@ class TicketModel {
                   .query(`
                     UPDATE TICKET_SLA_TRACKING
                     SET
-                      sla_start_time = GETDATE(),
+                      sla_start_time = GETUTCDATE(),
                       min_target_time = @minTarget,
                       avg_target_time = @avgTarget,
                       max_target_time = @maxTarget,
@@ -1983,7 +1983,7 @@ class TicketModel {
                       final_status = NULL,
                       warning_triggered_at = NULL,
                       breach_triggered_at = NULL,
-                      updated_at = GETDATE()
+                      updated_at = GETUTCDATE()
                     WHERE ticket_id = @ticketId
                   `);
                 console.log(`New SLA targets set for ticket ${ticketId}`);
