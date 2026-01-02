@@ -349,7 +349,7 @@ router.post('/',
 
       // Get creator info
       const creatorResult = await transaction.request()
-        .input('user_id', sql.UniqueIdentifier, req.user.user_id)
+        .input('user_id', sql.UniqueIdentifier, req.user.id)
         .query('SELECT first_name, last_name FROM USER_MASTER WHERE user_id = @user_id');
 
       const creatorName = creatorResult.recordset[0]
@@ -435,7 +435,7 @@ router.post('/',
         .input('issue_date', sql.Date, issue_date || null)
         .input('valid_until', sql.Date, valid_until || null)
         .input('remarks', sql.NVarChar(sql.MAX), remarks || null)
-        .input('created_by', sql.UniqueIdentifier, req.user.user_id)
+        .input('created_by', sql.UniqueIdentifier, req.user.id)
         .input('created_by_name', sql.NVarChar(200), creatorName)
         .input('carrier_name', sql.NVarChar(200), carrier_name || null)
         .query(`
