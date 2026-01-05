@@ -80,12 +80,12 @@ router.get('/',
     const request = pool.request();
 
     if (date_from) {
-      filterConditions += ' AND am.movement_date >= @date_from';
+      filterConditions += ' AND CAST(am.movement_date AS DATE) >= @date_from';
       request.input('date_from', sql.Date, date_from);
     }
 
     if (date_to) {
-      filterConditions += ' AND am.movement_date <= @date_to';
+      filterConditions += ' AND CAST(am.movement_date AS DATE) <= @date_to';
       request.input('date_to', sql.Date, date_to);
     }
 
@@ -96,7 +96,7 @@ router.get('/',
 
     if (department_id) {
       filterConditions += ' AND (assigned_user.department_id = @department_id OR prev_user.department_id = @department_id)';
-      request.input('department_id', sql.Int, department_id);
+      request.input('department_id', sql.UniqueIdentifier, department_id);
     }
 
     if (user_id) {
@@ -106,17 +106,17 @@ router.get('/',
 
     if (category_id) {
       filterConditions += ' AND p.category_id = @category_id';
-      request.input('category_id', sql.Int, category_id);
+      request.input('category_id', sql.UniqueIdentifier, category_id);
     }
 
     if (oem_id) {
       filterConditions += ' AND p.oem_id = @oem_id';
-      request.input('oem_id', sql.Int, oem_id);
+      request.input('oem_id', sql.UniqueIdentifier, oem_id);
     }
 
     if (product_id) {
       filterConditions += ' AND a.product_id = @product_id';
-      request.input('product_id', sql.Int, product_id);
+      request.input('product_id', sql.UniqueIdentifier, product_id);
     }
 
     if (search) {
@@ -237,11 +237,11 @@ router.get('/',
         .input('date_from', sql.Date, date_from || null)
         .input('date_to', sql.Date, date_to || null)
         .input('location_id', sql.UniqueIdentifier, location_id || null)
-        .input('department_id', sql.Int, department_id || null)
+        .input('department_id', sql.UniqueIdentifier, department_id || null)
         .input('user_id', sql.UniqueIdentifier, user_id || null)
-        .input('category_id', sql.Int, category_id || null)
-        .input('oem_id', sql.Int, oem_id || null)
-        .input('product_id', sql.Int, product_id || null)
+        .input('category_id', sql.UniqueIdentifier, category_id || null)
+        .input('oem_id', sql.UniqueIdentifier, oem_id || null)
+        .input('product_id', sql.UniqueIdentifier, product_id || null)
         .input('search', sql.VarChar(100), search ? `%${search}%` : null)
         .query(countQuery)
     ]);
@@ -266,11 +266,11 @@ router.get('/',
       .input('stats_date_from', sql.Date, date_from || null)
       .input('stats_date_to', sql.Date, date_to || null)
       .input('stats_location_id', sql.UniqueIdentifier, location_id || null)
-      .input('stats_department_id', sql.Int, department_id || null)
+      .input('stats_department_id', sql.UniqueIdentifier, department_id || null)
       .input('stats_user_id', sql.UniqueIdentifier, user_id || null)
-      .input('stats_category_id', sql.Int, category_id || null)
-      .input('stats_oem_id', sql.Int, oem_id || null)
-      .input('stats_product_id', sql.Int, product_id || null)
+      .input('stats_category_id', sql.UniqueIdentifier, category_id || null)
+      .input('stats_oem_id', sql.UniqueIdentifier, oem_id || null)
+      .input('stats_product_id', sql.UniqueIdentifier, product_id || null)
       .input('stats_search', sql.VarChar(100), search ? `%${search}%` : null)
       .query(statsQuery);
 
@@ -330,11 +330,11 @@ router.get('/export/excel',
     const request = pool.request();
 
     if (date_from) {
-      filterConditions += ' AND am.movement_date >= @date_from';
+      filterConditions += ' AND CAST(am.movement_date AS DATE) >= @date_from';
       request.input('date_from', sql.Date, date_from);
     }
     if (date_to) {
-      filterConditions += ' AND am.movement_date <= @date_to';
+      filterConditions += ' AND CAST(am.movement_date AS DATE) <= @date_to';
       request.input('date_to', sql.Date, date_to);
     }
     if (location_id) {
@@ -343,7 +343,7 @@ router.get('/export/excel',
     }
     if (department_id) {
       filterConditions += ' AND (assigned_user.department_id = @department_id OR prev_user.department_id = @department_id)';
-      request.input('department_id', sql.Int, department_id);
+      request.input('department_id', sql.UniqueIdentifier, department_id);
     }
     if (user_id) {
       filterConditions += ' AND (am.assigned_to = @user_id OR am.previous_user_id = @user_id)';
@@ -351,15 +351,15 @@ router.get('/export/excel',
     }
     if (category_id) {
       filterConditions += ' AND p.category_id = @category_id';
-      request.input('category_id', sql.Int, category_id);
+      request.input('category_id', sql.UniqueIdentifier, category_id);
     }
     if (oem_id) {
       filterConditions += ' AND p.oem_id = @oem_id';
-      request.input('oem_id', sql.Int, oem_id);
+      request.input('oem_id', sql.UniqueIdentifier, oem_id);
     }
     if (product_id) {
       filterConditions += ' AND a.product_id = @product_id';
-      request.input('product_id', sql.Int, product_id);
+      request.input('product_id', sql.UniqueIdentifier, product_id);
     }
     if (search) {
       filterConditions += ` AND (

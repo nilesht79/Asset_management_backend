@@ -61,13 +61,14 @@ router.get(
     const query = `
       SELECT
         r.*,
+        r.requester_name as employee_name,
         c.name as category_name,
-        pt.name as product_type_name,
+        subcat.name as subcategory_name,
         p.name as product_name,
         p.model as product_model
       FROM ASSET_REQUISITIONS r
       LEFT JOIN categories c ON r.asset_category_id = c.id
-      LEFT JOIN product_types pt ON r.product_type_id = pt.id
+      LEFT JOIN categories subcat ON r.product_type_id = subcat.id
       LEFT JOIN products p ON r.requested_product_id = p.id
       ${whereClause}
       ORDER BY

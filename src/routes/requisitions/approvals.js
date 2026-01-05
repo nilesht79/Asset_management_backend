@@ -70,20 +70,21 @@ router.get('/pending-dept-approvals',
 
     const result = await dataRequest.query(`
       SELECT r.*,
+             r.requester_name as employee_name,
              cat.name as category_name,
-             pt.name as product_type_name
+             subcat.name as subcategory_name
       FROM ASSET_REQUISITIONS r
       LEFT JOIN categories cat ON r.asset_category_id = cat.id
-      LEFT JOIN product_types pt ON r.product_type_id = pt.id
-      WHERE ${whereClause}
+      LEFT JOIN categories subcat ON r.product_type_id = subcat.id
+      WHERE ${whereClause.replace(/\b(department_id|status|urgency|requisition_number|purpose|requester_name)\b/g, 'r.$1')}
       ORDER BY
-        CASE urgency
+        CASE r.urgency
           WHEN 'critical' THEN 1
           WHEN 'high' THEN 2
           WHEN 'medium' THEN 3
           WHEN 'low' THEN 4
         END,
-        created_at ASC
+        r.created_at ASC
       OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
     `);
 
@@ -359,43 +360,44 @@ router.get('/pending-it-approvals',
 
     const result = await dataRequest.query(`
       SELECT r.*,
+             r.requester_name as employee_name,
              cat.name as category_name,
-             pt.name as product_type_name,
-             -- Count available assets for the requested category and product type
+             subcat.name as subcategory_name,
+             -- Count available assets for the requested category and subcategory
              (SELECT COUNT(*)
               FROM ASSETS a
               INNER JOIN products prod ON a.product_id = prod.id
               WHERE prod.category_id = r.asset_category_id
-              AND prod.type_id = r.product_type_id
+              AND prod.subcategory_id = r.product_type_id
               AND a.status = 'available'
               AND a.is_active = 1) as available_assets_count,
-             -- Count total assets for the requested category and product type
+             -- Count total assets for the requested category and subcategory
              (SELECT COUNT(*)
               FROM ASSETS a
               INNER JOIN products prod ON a.product_id = prod.id
               WHERE prod.category_id = r.asset_category_id
-              AND prod.type_id = r.product_type_id
+              AND prod.subcategory_id = r.product_type_id
               AND a.is_active = 1) as total_assets_count,
-             -- Count in-use assets for the requested category and product type
+             -- Count in-use assets for the requested category and subcategory
              (SELECT COUNT(*)
               FROM ASSETS a
               INNER JOIN products prod ON a.product_id = prod.id
               WHERE prod.category_id = r.asset_category_id
-              AND prod.type_id = r.product_type_id
+              AND prod.subcategory_id = r.product_type_id
               AND a.status IN ('assigned', 'in_use')
               AND a.is_active = 1) as in_use_assets_count
       FROM ASSET_REQUISITIONS r
       LEFT JOIN categories cat ON r.asset_category_id = cat.id
-      LEFT JOIN product_types pt ON r.product_type_id = pt.id
-      WHERE ${whereClause}
+      LEFT JOIN categories subcat ON r.product_type_id = subcat.id
+      WHERE ${whereClause.replace(/\b(status|urgency|department_id|requisition_number|purpose|requester_name)\b/g, 'r.$1')}
       ORDER BY
-        CASE urgency
+        CASE r.urgency
           WHEN 'critical' THEN 1
           WHEN 'high' THEN 2
           WHEN 'medium' THEN 3
           WHEN 'low' THEN 4
         END,
-        created_at ASC
+        r.created_at ASC
       OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
     `);
 

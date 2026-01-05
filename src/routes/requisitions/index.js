@@ -321,9 +321,14 @@ router.get('/all-requisitions',
     dataRequest.input('limit', sql.Int, limit);
 
     const result = await dataRequest.query(`
-      SELECT * FROM ASSET_REQUISITIONS
-      WHERE ${whereClause}
-      ORDER BY created_at DESC
+      SELECT r.*,
+             cat.name as category_name,
+             subcat.name as subcategory_name
+      FROM ASSET_REQUISITIONS r
+      LEFT JOIN categories cat ON r.asset_category_id = cat.id
+      LEFT JOIN categories subcat ON r.product_type_id = subcat.id
+      WHERE ${whereClause.replace(/\b(status|urgency|department_id|requested_by|requisition_number|purpose|requester_name)\b/g, 'r.$1')}
+      ORDER BY r.created_at DESC
       OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
     `);
 
@@ -381,9 +386,14 @@ router.get('/my-requisitions',
     dataRequest.input('limit', sql.Int, limit);
 
     const result = await dataRequest.query(`
-      SELECT * FROM ASSET_REQUISITIONS
-      WHERE ${whereClause}
-      ORDER BY created_at DESC
+      SELECT r.*,
+             cat.name as category_name,
+             subcat.name as subcategory_name
+      FROM ASSET_REQUISITIONS r
+      LEFT JOIN categories cat ON r.asset_category_id = cat.id
+      LEFT JOIN categories subcat ON r.product_type_id = subcat.id
+      WHERE ${whereClause.replace(/\b(requested_by|status|urgency|requisition_number|purpose)\b/g, 'r.$1')}
+      ORDER BY r.created_at DESC
       OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
     `);
 
@@ -408,11 +418,11 @@ router.get('/:id',
       .query(`
         SELECT r.*,
                cat.name as category_name,
-               pt.name as product_type_name,
+               subcat.name as subcategory_name,
                p.name as product_name, p.model as product_model
         FROM ASSET_REQUISITIONS r
         LEFT JOIN categories cat ON r.asset_category_id = cat.id
-        LEFT JOIN product_types pt ON r.product_type_id = pt.id
+        LEFT JOIN categories subcat ON r.product_type_id = subcat.id
         LEFT JOIN products p ON r.requested_product_id = p.id
         WHERE r.requisition_id = @id
       `);

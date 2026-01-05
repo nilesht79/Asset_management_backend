@@ -102,6 +102,7 @@ router.get('/',
       product_id,
       category_id,
       product_type_id,
+      subcategory_id,
       oem_id,
       warranty_expiring,
       board_id,
@@ -153,6 +154,11 @@ router.get('/',
     if (product_type_id) {
       whereClause += ' AND p.type_id = @productTypeId';
       params.push({ name: 'productTypeId', type: sql.UniqueIdentifier, value: product_type_id });
+    }
+
+    if (subcategory_id) {
+      whereClause += ' AND p.subcategory_id = @subcategoryId';
+      params.push({ name: 'subcategoryId', type: sql.UniqueIdentifier, value: subcategory_id });
     }
 
     if (oem_id) {
@@ -217,6 +223,7 @@ router.get('/',
         p.name as product_name, p.model as product_model,
         c.id as category_id, c.name as category_name,
         pt.id as product_type_id, pt.name as product_type_name,
+        subcat.id as subcategory_id, subcat.name as subcategory_name,
         o.id as oem_id, o.name as oem_name,
         v.id as vendor_id, v.name as vendor_name, v.code as vendor_code,
         u.location_id,
@@ -238,6 +245,7 @@ router.get('/',
       INNER JOIN products p ON a.product_id = p.id
       LEFT JOIN categories c ON p.category_id = c.id
       LEFT JOIN product_types pt ON p.type_id = pt.id
+      LEFT JOIN categories subcat ON p.subcategory_id = subcat.id
       LEFT JOIN oems o ON p.oem_id = o.id
       LEFT JOIN vendors v ON a.vendor_id = v.id
       LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
@@ -458,12 +466,15 @@ router.get('/my-assets',
           c.name as category_name,
           pt.id as product_type_id,
           pt.name as product_type_name,
+          subcat.id as subcategory_id,
+          subcat.name as subcategory_name,
           0 as is_component
         FROM assets a
         LEFT JOIN products p ON a.product_id = p.id
         LEFT JOIN oems o ON p.oem_id = o.id
         LEFT JOIN categories c ON p.category_id = c.id
         LEFT JOIN product_types pt ON p.type_id = pt.id
+        LEFT JOIN categories subcat ON p.subcategory_id = subcat.id
         WHERE a.assigned_to = @userId
           AND a.is_active = 1
           AND a.status IN ('assigned', 'in_use')
@@ -491,6 +502,8 @@ router.get('/my-assets',
           c.name as category_name,
           pt.id as product_type_id,
           pt.name as product_type_name,
+          subcat.id as subcategory_id,
+          subcat.name as subcategory_name,
           1 as is_component
         FROM assets comp
         INNER JOIN assets parent ON comp.parent_asset_id = parent.id
@@ -498,6 +511,7 @@ router.get('/my-assets',
         LEFT JOIN oems o ON p.oem_id = o.id
         LEFT JOIN categories c ON p.category_id = c.id
         LEFT JOIN product_types pt ON p.type_id = pt.id
+        LEFT JOIN categories subcat ON p.subcategory_id = subcat.id
         WHERE parent.assigned_to = @userId
           AND comp.is_active = 1
           AND comp.status <> 'retired'
@@ -543,12 +557,15 @@ router.get('/user/:userId/assets',
           c.name as category_name,
           pt.id as product_type_id,
           pt.name as product_type_name,
+          subcat.id as subcategory_id,
+          subcat.name as subcategory_name,
           0 as is_component
         FROM assets a
         LEFT JOIN products p ON a.product_id = p.id
         LEFT JOIN oems o ON p.oem_id = o.id
         LEFT JOIN categories c ON p.category_id = c.id
         LEFT JOIN product_types pt ON p.type_id = pt.id
+        LEFT JOIN categories subcat ON p.subcategory_id = subcat.id
         WHERE a.assigned_to = @userId
           AND a.is_active = 1
           AND a.status IN ('assigned', 'in_use')
@@ -576,6 +593,8 @@ router.get('/user/:userId/assets',
           c.name as category_name,
           pt.id as product_type_id,
           pt.name as product_type_name,
+          subcat.id as subcategory_id,
+          subcat.name as subcategory_name,
           1 as is_component
         FROM assets comp
         INNER JOIN assets parent ON comp.parent_asset_id = parent.id
@@ -583,6 +602,7 @@ router.get('/user/:userId/assets',
         LEFT JOIN oems o ON p.oem_id = o.id
         LEFT JOIN categories c ON p.category_id = c.id
         LEFT JOIN product_types pt ON p.type_id = pt.id
+        LEFT JOIN categories subcat ON p.subcategory_id = subcat.id
         WHERE parent.assigned_to = @userId
           AND comp.is_active = 1
           AND comp.status <> 'retired'
@@ -612,6 +632,7 @@ router.get('/export',
       product_id,
       category_id,
       product_type_id,
+      subcategory_id,
       oem_id,
       warranty_expiring
     } = req.query;
@@ -660,6 +681,11 @@ router.get('/export',
     if (product_type_id) {
       whereClause += ' AND p.type_id = @productTypeId';
       params.push({ name: 'productTypeId', type: sql.UniqueIdentifier, value: product_type_id });
+    }
+
+    if (subcategory_id) {
+      whereClause += ' AND p.subcategory_id = @subcategoryId';
+      params.push({ name: 'subcategoryId', type: sql.UniqueIdentifier, value: subcategory_id });
     }
 
     if (oem_id) {
