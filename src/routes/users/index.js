@@ -161,7 +161,7 @@ router.get('/',
              u.employee_id, u.designation, u.is_active, u.is_vip, u.allow_multi_assets, u.last_login, u.created_at, u.updated_at,
              u.room_no,
              d.department_name, d.department_id,
-             l.name as location_name, l.id as location_id
+             l.name as location_name, l.id as location_id, l.building as location_building, l.floor as location_floor
       FROM USER_MASTER u
       LEFT JOIN DEPARTMENT_MASTER d ON u.department_id = d.department_id
       LEFT JOIN locations l ON u.location_id = l.id
@@ -195,7 +195,9 @@ router.get('/',
       },
       location: {
         id: user.location_id,
-        name: user.location_name
+        name: user.location_name,
+        building: user.location_building || null,
+        floor: user.location_floor || null
       },
       manager: null
     }));
@@ -413,7 +415,7 @@ router.get('/:id',
                u.password_changed_at, u.failed_login_attempts, u.locked_until,
                u.room_no,
                d.department_name, d.department_id,
-               l.name as location_name, l.id as location_id
+               l.name as location_name, l.id as location_id, l.building as location_building, l.floor as location_floor
         FROM USER_MASTER u
         LEFT JOIN DEPARTMENT_MASTER d ON u.department_id = d.department_id
         LEFT JOIN locations l ON u.location_id = l.id
@@ -450,7 +452,9 @@ router.get('/:id',
       },
       location: {
         id: user.location_id,
-        name: user.location_name
+        name: user.location_name,
+        building: user.location_building || null,
+        floor: user.location_floor || null
       },
       manager: null,
       permissions: authConfig.ROLE_PERMISSIONS[user.role] || []

@@ -123,13 +123,12 @@ router.post('/',
             // Add email to batch set to avoid duplicates
             batchEmails.add(userData.email.toLowerCase());
 
-            // Insert user into database
+            // Insert user into database (no password - users must use reset password flow)
             await transaction.request()
               .input('user_id', sql.UniqueIdentifier, userData.user_id)
               .input('first_name', sql.VarChar(50), userData.first_name)
               .input('last_name', sql.VarChar(50), userData.last_name)
               .input('email', sql.VarChar(255), userData.email)
-              .input('password_hash', sql.VarChar(255), userData.password_hash)
               .input('role', sql.VarChar(50), userData.role)
               .input('employee_id', sql.VarChar(20), userData.employee_id)
               .input('designation', sql.VarChar(100), userData.designation)
@@ -140,16 +139,17 @@ router.post('/',
               .input('email_verified', sql.Bit, userData.email_verified)
               .input('registration_type', sql.VarChar(20), userData.registration_type)
               .input('user_status', sql.VarChar(20), userData.user_status)
+              .input('must_change_password', sql.Bit, userData.must_change_password)
               .query(`
                 INSERT INTO USER_MASTER (
-                  user_id, first_name, last_name, email, password_hash, role,
+                  user_id, first_name, last_name, email, role,
                   employee_id, designation, department_id, location_id, is_active, is_vip, email_verified,
-                  registration_type, user_status, created_at, updated_at
+                  registration_type, user_status, must_change_password, created_at, updated_at
                 )
                 VALUES (
-                  @user_id, @first_name, @last_name, @email, @password_hash, @role,
+                  @user_id, @first_name, @last_name, @email, @role,
                   @employee_id, @designation, @department_id, @location_id, @is_active, @is_vip, @email_verified,
-                  @registration_type, @user_status, GETUTCDATE(), GETUTCDATE()
+                  @registration_type, @user_status, @must_change_password, GETUTCDATE(), GETUTCDATE()
                 )
               `);
 
@@ -158,8 +158,7 @@ router.post('/',
               email: userData.email,
               name: `${userData.first_name} ${userData.last_name}`,
               employeeId: userData.employee_id,
-              password: userData.plain_password, // Include generated password for admin reference
-              passwordGenerated: !result.user.password || result.user.password.trim() === ''
+              role: userData.role
             });
 
           } catch (insertError) {

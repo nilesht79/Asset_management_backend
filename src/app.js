@@ -128,6 +128,10 @@ const startServer = async () => {
       console.log(`📚 API Base URL: ${appConfig.app.url}/api/${appConfig.app.apiVersion}`);
     });
 
+    // Set server timeout for long-running requests (10 minutes)
+    server.timeout = 600000;
+    server.keepAliveTimeout = 620000; // Slightly higher than timeout
+
     // Graceful shutdown
     const gracefulShutdown = (signal) => {
       console.log(`\n${signal} received. Starting graceful shutdown...`);

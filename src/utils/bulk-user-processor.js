@@ -1,11 +1,9 @@
 const ExcelJS = require('exceljs');
-const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const authConfig = require('../config/auth');
 const { generateUniqueEmailWithBatch } = require('./email-generator');
-const { getOrCreateDepartment } = require('./department-helper');
-const { validateLocationName } = require('./location-helper');
-const { generatePasswordFromName } = require('./password-generator');
+const { findDepartmentByName } = require('./department-helper');
+const { findLocationByName } = require('./location-helper');
 
 /**
  * Parse Excel file and extract user data
@@ -94,12 +92,12 @@ function validateUserRecord(user, context = {}) {
   const { existingEmails = [], existingEmployeeIds = [], departments = [] } = context;
 
   // Required fields
-  if (!user.first_name || user.first_name.length < 2 || user.first_name.length > 50) {
-    errors.push('First name is required (2-50 characters)');
+  if (!user.first_name || user.first_name.length < 1 || user.first_name.length > 50) {
+    errors.push('First name is required (1-50 characters)');
   }
 
-  if (!user.last_name || user.last_name.length < 2 || user.last_name.length > 50) {
-    errors.push('Last name is required (2-50 characters)');
+  if (!user.last_name || user.last_name.length < 1 || user.last_name.length > 50) {
+    errors.push('Last name is required (1-50 characters)');
   }
 
   // Email validation (optional - will auto-generate if not provided)
@@ -113,19 +111,7 @@ function validateUserRecord(user, context = {}) {
     }
   }
   // Email is optional - will be auto-generated during processing if not provided
-
-  // Password validation (optional - will auto-generate if not provided)
-  if (user.password) {
-    if (user.password.length < 8) {
-      errors.push('Password must be at least 8 characters');
-    } else {
-      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]+$/;
-      if (!passwordRegex.test(user.password)) {
-        errors.push('Password must contain uppercase, lowercase, number, and special character (@$!%*?&)');
-      }
-    }
-  }
-  // Password is optional - will be auto-generated during processing if not provided
+  // Password is not handled in bulk upload - users must use reset password flow
 
   // Role validation
   const validRoles = Object.values(authConfig.roles);
@@ -142,15 +128,6 @@ function validateUserRecord(user, context = {}) {
     }
     if (existingEmployeeIds.includes(user.employee_id)) {
       errors.push('Employee ID already exists in system');
-    }
-  }
-
-  // Department validation (if provided)
-  // Note: Departments will be auto-created if they don't exist, so no validation error needed
-  if (user.department_name) {
-    // Just validate the length
-    if (user.department_name.length > 100) {
-      errors.push('Department name must be 100 characters or less');
     }
   }
 
@@ -188,29 +165,22 @@ async function processUserForInsertion(user, departments = [], batchEmails = new
     finalEmail = await generateUniqueEmailWithBatch(user.first_name, user.last_name, batchEmails);
   }
 
-  // Auto-generate password if not provided
-  let finalPassword = user.password;
-  if (!finalPassword || finalPassword.trim() === '') {
-    finalPassword = generatePasswordFromName(user.first_name, user.last_name);
-  }
+  // No password handling - users will use reset password flow
+  // Superadmin can also reset passwords manually
 
-  // Hash password
-  const passwordHash = await bcrypt.hash(finalPassword, authConfig.bcrypt.saltRounds);
-
-  // Get or create department if department name provided
+  // Get department from pre-loaded array (in-memory lookup only)
   let departmentId = null;
   if (user.department_name) {
-    const department = await getOrCreateDepartment(user.department_name, departments);
+    const department = findDepartmentByName(user.department_name, departments);
     if (department) {
       departmentId = department.department_id;
     }
   }
 
-  // Get location if location name provided (locations are NOT auto-created)
+  // Get location from pre-loaded array (in-memory lookup only)
   let locationId = null;
   if (user.location_name) {
-    const { getLocationByName } = require('./location-helper');
-    const location = await getLocationByName(user.location_name, locations, pool);
+    const location = findLocationByName(user.location_name, locations);
     if (location) {
       locationId = location.id;
     }
@@ -263,8 +233,6 @@ async function processUserForInsertion(user, departments = [], batchEmails = new
     first_name: user.first_name.trim(),
     last_name: user.last_name.trim(),
     email: finalEmail.toLowerCase().trim(),
-    password_hash: passwordHash,
-    plain_password: finalPassword, // Store plain password for admin reference (will not be saved to DB)
     role: user.role,
     employee_id: employeeId,
     designation: user.designation ? user.designation.trim() : null,
@@ -274,7 +242,8 @@ async function processUserForInsertion(user, departments = [], batchEmails = new
     is_vip: isVip,
     email_verified: false,
     registration_type: 'bulk-upload',
-    user_status: isActive ? 'active' : 'pending'
+    user_status: isActive ? 'active' : 'pending',
+    must_change_password: true // Users must reset password on first login
   };
 }
 
@@ -330,14 +299,6 @@ async function validateBulkUsers(users, pool) {
 
     const validation = validateUserRecord(user, batchContext);
 
-    // Validate location if provided (async validation)
-    if (user.location_name) {
-      const locationValidation = await validateLocationName(user.location_name, locations, pool);
-      if (!locationValidation.valid) {
-        validation.errors.push(locationValidation.error);
-        validation.valid = false;
-      }
-    }
     validationResults.push({
       rowNumber: user.rowNumber,
       user: user,
