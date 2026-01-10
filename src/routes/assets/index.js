@@ -1825,13 +1825,7 @@ router.post('/bulk',
           asset_type = 'standalone',
           parent_serial_number, // CHANGED: from parent_asset_tag to parent_serial_number
           installation_notes,
-          // Software fields
-          os_name,
-          os_license_key,
-          os_license_type,
-          office_name,
-          office_license_key,
-          office_license_type,
+          // Software fields (from Additional Software sheet)
           additional_software = []
         } = asset;
 
@@ -1965,23 +1959,7 @@ router.post('/bulk',
           )
         `);
 
-        // Install OS software if provided
-        if (os_name) {
-          const osProductId = await findSoftwareProductByName(pool, os_name);
-          if (osProductId) {
-            await installSoftware(pool, assetId, osProductId, 'operating_system', os_license_key, os_license_type || 'oem', null, null, null);
-          }
-        }
-
-        // Install Office software if provided
-        if (office_name) {
-          const officeProductId = await findSoftwareProductByName(pool, office_name);
-          if (officeProductId) {
-            await installSoftware(pool, assetId, officeProductId, 'application', office_license_key, office_license_type || 'retail', null, null, null);
-          }
-        }
-
-        // Install additional software
+        // Install additional software (from Additional Software sheet)
         for (const software of additional_software) {
           if (software.software_name) {
             const softwareProductId = await findSoftwareProductByName(pool, software.software_name);

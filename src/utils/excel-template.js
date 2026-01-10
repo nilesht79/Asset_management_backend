@@ -235,12 +235,6 @@ async function generateAssetBulkTemplate({ quantity, product }) {
     { header: 'Warranty End', key: 'warranty_end_date', width: 18 },
     { header: 'Expected EOL', key: 'eol_date', width: 18 },
     { header: 'Expected EOS', key: 'eos_date', width: 18 },
-    { header: 'OS Name', key: 'os_name', width: 25 },
-    { header: 'OS License Key', key: 'os_license_key', width: 30 },
-    { header: 'OS License Type', key: 'os_license_type', width: 18 },
-    { header: 'Office Name', key: 'office_name', width: 25 },
-    { header: 'Office License Key', key: 'office_license_key', width: 30 },
-    { header: 'Office License Type', key: 'office_license_type', width: 18 },
     { header: 'Installation Notes', key: 'installation_notes', width: 35 },
     { header: 'Notes', key: 'notes', width: 35 }
   ];
@@ -280,12 +274,6 @@ async function generateAssetBulkTemplate({ quantity, product }) {
       warranty_end_date: '',
       eol_date: '',
       eos_date: '',
-      os_name: '',
-      os_license_key: '',
-      os_license_type: 'oem',
-      office_name: '',
-      office_license_key: '',
-      office_license_type: 'retail',
       installation_notes: '',
       notes: ''
     });
@@ -314,12 +302,6 @@ async function generateAssetBulkTemplate({ quantity, product }) {
       warranty_end_date: '',
       eol_date: '',
       eos_date: '',
-      os_name: '',
-      os_license_key: '',
-      os_license_type: 'oem',
-      office_name: '',
-      office_license_key: '',
-      office_license_type: 'retail',
       installation_notes: '',
       notes: ''
     });
@@ -593,7 +575,7 @@ async function parseAssetBulkFile(fileBuffer, productId) {
       status: row.getCell(11).value?.toString().trim() || 'available',
       condition_status: row.getCell(12).value?.toString().trim() || 'new',
       importance: row.getCell(13).value?.toString().trim() || 'medium',
-      vendor_name: row.getCell(14).value?.toString().trim() || 'PoleStar',
+      vendor_name: row.getCell(14).value?.toString().trim() || null,
       invoice_number: row.getCell(15).value?.toString().trim() || null,
       purchase_date: row.getCell(16).value || null,
       purchase_cost: row.getCell(17).value || null,
@@ -601,14 +583,8 @@ async function parseAssetBulkFile(fileBuffer, productId) {
       warranty_end_date: row.getCell(19).value || null,
       eol_date: row.getCell(20).value || null,
       eos_date: row.getCell(21).value || null,
-      os_name: row.getCell(22).value?.toString().trim() || null,
-      os_license_key: row.getCell(23).value?.toString().trim() || null,
-      os_license_type: row.getCell(24).value?.toString().trim() || 'oem',
-      office_name: row.getCell(25).value?.toString().trim() || null,
-      office_license_key: row.getCell(26).value?.toString().trim() || null,
-      office_license_type: row.getCell(27).value?.toString().trim() || 'retail',
-      installation_notes: row.getCell(28).value?.toString().trim() || null,
-      notes: row.getCell(29).value?.toString().trim() || null,
+      installation_notes: row.getCell(22).value?.toString().trim() || null,
+      notes: row.getCell(23).value?.toString().trim() || null,
       product_id: productId,
       additional_software: [] // Will be populated from Additional Software sheet
     };
