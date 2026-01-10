@@ -49,8 +49,9 @@ class OAuth2Model {
     const pool = await connectDB();
 
     try {
+      // Query by employee_id (case-insensitive)
       const result = await pool.request()
-        .input('email', sql.VarChar(255), username.toLowerCase())
+        .input('employeeId', sql.VarChar(20), username.toUpperCase())
         .query(`
           SELECT u.user_id, u.email, u.password_hash, u.first_name, u.last_name, u.role,
                  u.is_active, u.failed_login_attempts, u.account_locked_until,
@@ -60,7 +61,7 @@ class OAuth2Model {
           FROM USER_MASTER u
           LEFT JOIN DEPARTMENT_MASTER d ON u.department_id = d.department_id
           LEFT JOIN locations l ON u.location_id = l.id
-          WHERE u.email = @email
+          WHERE UPPER(u.employee_id) = @employeeId
         `);
 
       if (result.recordset.length === 0) {

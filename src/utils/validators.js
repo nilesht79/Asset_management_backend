@@ -378,7 +378,7 @@ const validators = {
 
     // OAuth 2.0 validations
     oauthLogin: Joi.object({
-      email: Joi.string().email({ tlds: { allow: false } }).required(),
+      employeeId: Joi.string().min(1).max(20).required(),
       password: Joi.string().required(),
       client_id: Joi.string().required(),
       client_secret: Joi.string().optional(),

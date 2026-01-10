@@ -183,6 +183,12 @@ router.get('/',
       params.push({ name: 'serialNumber', type: sql.VarChar(255), value: serial_number });
     }
 
+    // Employee code filter
+    if (req.query.employee_code) {
+      whereClause += ' AND u.employee_id LIKE @employeeCode';
+      params.push({ name: 'employeeCode', type: sql.VarChar(20), value: `%${req.query.employee_code}%` });
+    }
+
     // Get total count
     const countRequest = pool.request();
     params.forEach(param => countRequest.input(param.name, param.type, param.value));
@@ -229,6 +235,7 @@ router.get('/',
         u.location_id,
         u.first_name + ' ' + u.last_name as assigned_user_name,
         u.email as assigned_user_email,
+        u.employee_id as assigned_employee_code,
         d.department_name as department,
         l.name as location_name,
         l.address as location_address,
@@ -986,34 +993,36 @@ router.get('/legacy-template',
   asyncHandler(async (req, res) => {
     const pool = await connectDB();
 
-    // Fetch all products with category and OEM
-    const productsResult = await pool.request().query(`
-      SELECT
-        p.id, p.name, p.model,
-        c.name as category_name,
-        o.name as oem_name
-      FROM products p
-      LEFT JOIN categories c ON p.category_id = c.id
-      LEFT JOIN oems o ON p.oem_id = o.id
-      WHERE p.is_active = 1
-      ORDER BY p.name
-    `);
-
-    // Fetch all active users
-    const usersResult = await pool.request().query(`
-      SELECT
-        user_id, first_name, last_name, email, employee_id,
-        d.department_name
-      FROM USER_MASTER u
-      LEFT JOIN DEPARTMENT_MASTER d ON u.department_id = d.department_id
-      WHERE u.is_active = 1
-      ORDER BY u.first_name, u.last_name
-    `);
+    // Fetch all reference data in parallel
+    const [productsResult, usersResult, vendorsResult] = await Promise.all([
+      pool.request().query(`
+        SELECT
+          p.id, p.name, p.model,
+          c.name as category_name,
+          o.name as oem_name
+        FROM products p
+        LEFT JOIN categories c ON p.category_id = c.id
+        LEFT JOIN oems o ON p.oem_id = o.id
+        WHERE p.is_active = 1
+        ORDER BY p.name
+      `),
+      pool.request().query(`
+        SELECT
+          user_id, first_name, last_name, email, employee_id,
+          d.department_name
+        FROM USER_MASTER u
+        LEFT JOIN DEPARTMENT_MASTER d ON u.department_id = d.department_id
+        WHERE u.is_active = 1
+        ORDER BY u.first_name, u.last_name
+      `),
+      pool.request().query('SELECT id, name FROM vendors WHERE is_active = 1 ORDER BY name')
+    ]);
 
     // Generate template
     const buffer = await generateLegacyAssetTemplate({
       products: productsResult.recordset,
-      users: usersResult.recordset
+      users: usersResult.recordset,
+      vendors: vendorsResult.recordset
     });
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -1034,7 +1043,7 @@ router.post('/legacy-validate',
     const pool = await connectDB();
 
     // Fetch reference data for validation
-    const [productsResult, usersResult, serialNumbersResult] = await Promise.all([
+    const [productsResult, usersResult, vendorsResult, serialNumbersResult] = await Promise.all([
       pool.request().query(`
         SELECT
           p.id, p.name, p.model,
@@ -1053,6 +1062,7 @@ router.post('/legacy-validate',
         LEFT JOIN DEPARTMENT_MASTER d ON u.department_id = d.department_id
         WHERE u.is_active = 1
       `),
+      pool.request().query('SELECT id, name FROM vendors WHERE is_active = 1'),
       pool.request().query('SELECT LOWER(serial_number) as serial_number FROM assets WHERE serial_number IS NOT NULL')
     ]);
 
@@ -1062,6 +1072,7 @@ router.post('/legacy-validate',
       const validationResult = await parseLegacyAssetFile(req.file.buffer, {
         products: productsResult.recordset,
         users: usersResult.recordset,
+        vendors: vendorsResult.recordset,
         existingSerialNumbers
       });
 
@@ -1188,6 +1199,10 @@ router.post('/legacy-import',
             .input('parentAssetId', sql.UniqueIdentifier, parentAssetId)
             .input('installationDate', sql.DateTime, asset_type === 'component' ? new Date() : null)
             .input('installationNotes', sql.Text, installation_notes)
+            .input('vendorId', sql.UniqueIdentifier, asset.vendor_id || null)
+            .input('invoiceNumber', sql.VarChar(100), asset.invoice_number || null)
+            .input('isStandbyAsset', sql.Bit, asset.is_standby_asset ? 1 : 0)
+            .input('standbyAvailable', sql.Bit, asset.standby_available ? 1 : 0)
             .query(`
               INSERT INTO assets (
                 id, asset_tag, tag_no, serial_number, product_id, assigned_to,
@@ -1195,6 +1210,7 @@ router.post('/legacy-import',
                 warranty_start_date, warranty_end_date, eol_date, eos_date,
                 notes, is_active,
                 asset_type, parent_asset_id, installation_date, installation_notes,
+                vendor_id, invoice_number, is_standby_asset, standby_available,
                 created_at, updated_at
               ) VALUES (
                 @id, @assetTag, @tagNo, @serialNumber, @productId, @assignedTo,
@@ -1202,6 +1218,7 @@ router.post('/legacy-import',
                 @warrantyStartDate, @warrantyEndDate, @eolDate, @eosDate,
                 @notes, 1,
                 @assetType, @parentAssetId, @installationDate, @installationNotes,
+                @vendorId, @invoiceNumber, @isStandbyAsset, @standbyAvailable,
                 GETUTCDATE(), GETUTCDATE()
               )
             `);

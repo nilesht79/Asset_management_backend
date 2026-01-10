@@ -710,7 +710,7 @@ async function parseAssetBulkFile(fileBuffer, productId) {
  * @param {Array} params.users - List of users for assignment
  * @returns {Promise<Buffer>} Excel file buffer
  */
-async function generateLegacyAssetTemplate({ products, users }) {
+async function generateLegacyAssetTemplate({ products, users, vendors = [] }) {
   const workbook = new ExcelJS.Workbook();
 
   // Create main Assets sheet
@@ -760,6 +760,9 @@ async function generateLegacyAssetTemplate({ products, users }) {
   headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
   headerRow.height = 25;
 
+  // Get first vendor name for samples (or use default)
+  const sampleVendor = vendors.length > 0 ? vendors[0].name : 'PoleStar Consulting';
+
   // Add sample rows showing component hierarchy
   worksheet.addRow({
     row_number: 1,
@@ -772,7 +775,7 @@ async function generateLegacyAssetTemplate({ products, users }) {
     status: 'available',
     condition_status: 'good',
     importance: 'medium',
-    vendor_name: 'PoleStar',
+    vendor_name: sampleVendor,
     invoice_number: 'INV-2023-001',
     purchase_date: '2023-01-15',
     purchase_cost: 45000,
@@ -802,7 +805,7 @@ async function generateLegacyAssetTemplate({ products, users }) {
     status: 'assigned',
     condition_status: 'excellent',
     importance: 'high',
-    vendor_name: 'PoleStar',
+    vendor_name: sampleVendor,
     invoice_number: 'INV-2023-002',
     purchase_date: '2023-03-20',
     purchase_cost: 52000,
@@ -826,20 +829,21 @@ async function generateLegacyAssetTemplate({ products, users }) {
     serial_number: 'RAM-SN-003',
     product: 'Kingston 16GB DDR4',
     asset_type: 'component',
-    parent_serial_number: 'AST-001',
+    parent_serial_number: 'SN-2023-001',
     is_standby_asset: 'false',
     standby_available: '',
     status: 'in_use',
     condition_status: 'new',
     importance: 'low',
-    vendor_name: 'PoleStar',
+    vendor_name: sampleVendor,
     invoice_number: '',
     purchase_date: '2023-03-20',
     purchase_cost: 5000,
+    warranty_start_date: '2023-03-20',
     warranty_end_date: '2026-03-20',
     assigned_to: '',
     installation_notes: 'Installed in desktop during initial build',
-    notes: 'Component will be auto-installed into parent asset AST-001'
+    notes: 'Component installed in SN-2023-001 laptop'
   });
 
   // Add data validations
@@ -1148,6 +1152,27 @@ async function generateLegacyAssetTemplate({ products, users }) {
     });
   });
 
+  // Create Vendors reference sheet
+  const vendorsSheet = workbook.addWorksheet('Vendors Reference');
+  vendorsSheet.columns = [
+    { header: 'Vendor Name', key: 'name', width: 40 }
+  ];
+
+  const vendorsHeaderRow = vendorsSheet.getRow(1);
+  vendorsHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  vendorsHeaderRow.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FF9B59B6' }
+  };
+  vendorsHeaderRow.alignment = { vertical: 'middle', horizontal: 'center' };
+
+  vendors.forEach(vendor => {
+    vendorsSheet.addRow({
+      name: vendor.name
+    });
+  });
+
   return await workbook.xlsx.writeBuffer();
 }
 
@@ -1162,7 +1187,7 @@ async function generateLegacyAssetTemplate({ products, users }) {
  * @returns {Promise<Object>} Validation results with categorized rows
  */
 async function parseLegacyAssetFile(fileBuffer, referenceData) {
-  const { products, users, existingSerialNumbers, existingAssetTags } = referenceData;
+  const { products, users, vendors = [], existingSerialNumbers, existingAssetTags } = referenceData;
 
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(fileBuffer);
@@ -1193,6 +1218,12 @@ async function parseLegacyAssetFile(fileBuffer, referenceData) {
     if (u.employee_id) {
       usersByEmployeeId.set(u.employee_id.toLowerCase().trim(), u);
     }
+  });
+
+  // Create vendor lookup map
+  const vendorsByName = new Map();
+  vendors.forEach(v => {
+    vendorsByName.set(v.name.toLowerCase().trim(), v);
   });
 
   worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
@@ -1277,6 +1308,15 @@ async function parseLegacyAssetFile(fileBuffer, referenceData) {
       }
     }
 
+    // Match vendor if vendor_name is provided
+    let vendor = null;
+    if (rowData.vendor_name) {
+      vendor = vendorsByName.get(rowData.vendor_name.toLowerCase());
+      if (!vendor) {
+        warnings.push(`Vendor not found: ${rowData.vendor_name}. Will be left empty.`);
+      }
+    }
+
     // Validate status
     const validStatuses = ['available', 'assigned', 'in_use', 'under_repair', 'disposed'];
     if (!validStatuses.includes(rowData.status)) {
@@ -1336,6 +1376,7 @@ async function parseLegacyAssetFile(fileBuffer, referenceData) {
       product_name: product?.name || rowData.product_input,
       assigned_to: assignedUser?.user_id || null,
       assigned_user_name: assignedUser ? `${assignedUser.first_name} ${assignedUser.last_name}` : null,
+      vendor_id: vendor?.id || null,
       asset_type: rowData.asset_type,
       parent_serial_number: rowData.parent_serial_number,
       installation_notes: rowData.installation_notes,

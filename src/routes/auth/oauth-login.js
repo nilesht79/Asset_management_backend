@@ -18,7 +18,7 @@ const router = express.Router();
 router.post('/oauth-login',
   validateBody(validators.auth.oauthLogin),
   asyncHandler(async (req, res) => {
-    const { email, password, client_id, client_secret, scope, role } = req.body;
+    const { employeeId, password, client_id, client_secret, scope, role } = req.body;
 
     try {
       // Verify client credentials
@@ -49,7 +49,7 @@ router.post('/oauth-login',
       const oauthRequest = new OAuth2Request({
         body: {
           grant_type: 'password',
-          username: email,
+          username: employeeId,
           password: password,
           client_id: client_id,
           client_secret: client_secret,
@@ -126,18 +126,18 @@ router.post('/oauth-login',
       // Audit: Log failed login attempt
       let failureReason = 'Unknown error';
       if (error.name === 'invalid_grant') {
-        failureReason = 'Invalid username or password';
-        await auditService.logLoginFailure(req, email, failureReason);
+        failureReason = 'Invalid Employee ID or password';
+        await auditService.logLoginFailure(req, employeeId, failureReason);
         return sendUnauthorized(res, failureReason);
       } else if (error.name === 'invalid_client') {
         failureReason = 'Invalid client credentials';
-        await auditService.logLoginFailure(req, email, failureReason);
+        await auditService.logLoginFailure(req, employeeId, failureReason);
         return sendUnauthorized(res, failureReason);
       } else if (error.name === 'unsupported_grant_type') {
         return sendError(res, 'Unsupported grant type', 400);
       }
 
-      await auditService.logLoginFailure(req, email, 'Login failed - server error');
+      await auditService.logLoginFailure(req, employeeId, 'Login failed - server error');
       return sendError(res, 'Login failed', 500);
     }
   })
