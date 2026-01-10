@@ -739,12 +739,6 @@ async function generateLegacyAssetTemplate({ products, users, vendors = [] }) {
     { header: 'Expected EOL', key: 'eol_date', width: 18 },
     { header: 'Expected EOS', key: 'eos_date', width: 18 },
     { header: 'Assigned To (Email/Employee ID)', key: 'assigned_to', width: 35 },
-    { header: 'OS Name', key: 'os_name', width: 25 },
-    { header: 'OS License Key', key: 'os_license_key', width: 30 },
-    { header: 'OS License Type', key: 'os_license_type', width: 18 },
-    { header: 'Office Name', key: 'office_name', width: 25 },
-    { header: 'Office License Key', key: 'office_license_key', width: 30 },
-    { header: 'Office License Type', key: 'office_license_type', width: 18 },
     { header: 'Installation Notes', key: 'installation_notes', width: 35 },
     { header: 'Notes', key: 'notes', width: 40 }
   ];
@@ -784,14 +778,8 @@ async function generateLegacyAssetTemplate({ products, users, vendors = [] }) {
     eol_date: '2028-01-15',
     eos_date: '2027-01-15',
     assigned_to: '',
-    os_name: 'Windows 11 Pro',
-    os_license_key: 'XXXXX-XXXXX-XXXXX-XXXXX',
-    os_license_type: 'oem',
-    office_name: 'Microsoft Office 2021',
-    office_license_key: 'YYYYY-YYYYY-YYYYY-YYYYY',
-    office_license_type: 'retail',
     installation_notes: '',
-    notes: 'Legacy asset from old system. Asset tag and tag number will be auto-generated.'
+    notes: 'Legacy asset. Asset tag and tag number will be auto-generated.'
   });
 
   worksheet.addRow({
@@ -814,12 +802,6 @@ async function generateLegacyAssetTemplate({ products, users, vendors = [] }) {
     eol_date: '',
     eos_date: '',
     assigned_to: users.length > 0 ? users[0].email : '',
-    os_name: '',
-    os_license_key: '',
-    os_license_type: 'oem',
-    office_name: '',
-    office_license_key: '',
-    office_license_type: 'retail',
     installation_notes: '',
     notes: 'Asset inherits location from assigned user'
   });
@@ -1241,7 +1223,7 @@ async function parseLegacyAssetFile(fileBuffer, referenceData) {
       status: row.getCell(8).value?.toString().trim().toLowerCase() || 'available',
       condition_status: row.getCell(9).value?.toString().trim().toLowerCase() || 'good',
       importance: row.getCell(10).value?.toString().trim().toLowerCase() || 'medium',
-      vendor_name: row.getCell(11).value?.toString().trim() || 'PoleStar',
+      vendor_name: row.getCell(11).value?.toString().trim() || null,
       invoice_number: row.getCell(12).value?.toString().trim() || null,
       purchase_date: row.getCell(13).value || null,
       purchase_cost: row.getCell(14).value || null,
@@ -1250,14 +1232,8 @@ async function parseLegacyAssetFile(fileBuffer, referenceData) {
       eol_date: row.getCell(17).value || null,
       eos_date: row.getCell(18).value || null,
       assigned_to_input: row.getCell(19).value?.toString().trim() || '',
-      os_name: row.getCell(20).value?.toString().trim() || null,
-      os_license_key: row.getCell(21).value?.toString().trim() || null,
-      os_license_type: row.getCell(22).value?.toString().trim() || 'oem',
-      office_name: row.getCell(23).value?.toString().trim() || null,
-      office_license_key: row.getCell(24).value?.toString().trim() || null,
-      office_license_type: row.getCell(25).value?.toString().trim() || 'retail',
-      installation_notes: row.getCell(26).value?.toString().trim() || null,
-      notes: row.getCell(27).value?.toString().trim() || null,
+      installation_notes: row.getCell(20).value?.toString().trim() || null,
+      notes: row.getCell(21).value?.toString().trim() || null,
       additional_software: [] // Will be populated from Additional Software sheet
     };
 

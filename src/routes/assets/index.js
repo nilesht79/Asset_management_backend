@@ -1223,23 +1223,7 @@ router.post('/legacy-import',
               )
             `);
 
-          // Install OS software if provided
-          if (asset.os_name) {
-            const osProductId = await findSoftwareProductByName(pool, asset.os_name);
-            if (osProductId) {
-              await installSoftware(pool, assetId, osProductId, 'operating_system', asset.os_license_key, asset.os_license_type || 'oem', null, null, null);
-            }
-          }
-
-          // Install Office software if provided
-          if (asset.office_name) {
-            const officeProductId = await findSoftwareProductByName(pool, asset.office_name);
-            if (officeProductId) {
-              await installSoftware(pool, assetId, officeProductId, 'application', asset.office_license_key, asset.office_license_type || 'retail', null, null, null);
-            }
-          }
-
-          // Install additional software
+          // Install additional software (from Additional Software sheet)
           if (asset.additional_software && asset.additional_software.length > 0) {
             for (const software of asset.additional_software) {
               if (software.software_name) {
