@@ -11,9 +11,9 @@ const { authenticateOAuth } = require('../middleware/oauth-auth');
 const { requireRole } = require('../middleware/permissions');
 
 // Roles that can manage tickets
-const TICKET_MANAGERS = ['it_head', 'coordinator', 'superadmin', 'department_coordinator', 'admin', 'engineer'];
+const TICKET_MANAGERS = ['it_head', 'coordinator', 'superadmin', 'department_coordinator', 'admin', 'engineer', 'department_head'];
 const COORDINATORS = ['it_head', 'coordinator', 'superadmin', 'department_coordinator', 'admin'];
-const ALL_AUTHENTICATED = ['it_head', 'coordinator', 'superadmin', 'department_coordinator', 'admin', 'engineer', 'employee'];
+const ALL_AUTHENTICATED = ['it_head', 'coordinator', 'superadmin', 'department_coordinator', 'admin', 'engineer', 'employee', 'department_head'];
 
 /**
  * @route   GET /api/tickets/my-assets
