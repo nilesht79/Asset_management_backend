@@ -23,6 +23,7 @@ const reconciliationRoutes = require('./reconciliations');
 const systemConfigRoutes = require('./settings/system-config');
 const companySettingsRoutes = require('./settings/company-settings');
 const emailSettingsRoutes = require('./emailSettings');
+const smsSettingsRoutes = require('./smsSettings');
 const consumableRoutes = require('./consumables');
 const consumableRequestRoutes = require('./consumables/requests');
 const licenseRoutes = require('./licenses');
@@ -86,6 +87,7 @@ router.get('/', (req, res) => {
       systemConfig: '/settings/system-config',
       companySettings: '/settings/company',
       emailSettings: '/settings/email',
+      smsSettings: '/settings/sms',
       consumables: '/consumables',
       consumableRequests: '/consumables/requests',
       licenses: '/licenses',
@@ -125,6 +127,7 @@ router.use('/reconciliations', reconciliationRoutes);
 router.use('/settings/system-config', systemConfigRoutes);
 router.use('/settings/company', companySettingsRoutes);
 router.use('/settings/email', emailSettingsRoutes);
+router.use('/settings/sms', smsSettingsRoutes);
 // IMPORTANT: Mount specific routes before generic ones to prevent /:id from matching 'requests'
 router.use('/consumables/requests', consumableRequestRoutes);
 router.use('/consumables', consumableRoutes);

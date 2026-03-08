@@ -11,6 +11,8 @@ const SlaTrackingModel = require('../models/slaTracking');
 const inAppNotificationService = require('../services/inAppNotificationService');
 const NotificationModel = require('../models/notification');
 const emailService = require('../services/emailService');
+const smsService = require('../services/smsService');
+const ServiceReportModel = require('../models/serviceReport');
 const { connectDB, sql } = require('../config/database');
 
 class TicketController {
@@ -253,9 +255,67 @@ This is an automated notification. Please do not reply to this email.
             await emailService.sendEmail(engineerEmail, emailSubject, emailBody.trim());
             console.log(`Assignment email sent to ${engineerEmail} for ticket ${ticket.ticket_number}`);
           }
+
+          // Send SMS notification
+          await TicketController.sendAssignmentSms(assigned_to_engineer_id, fullTicket);
         } catch (notificationError) {
           // Log but don't fail ticket creation if notification fails
           console.error('Failed to create assignment notification:', notificationError.message);
+        }
+      }
+
+      // Notify all coordinators when employee creates a ticket (self-service)
+      if (!coordinatorId && !is_guest) {
+        try {
+          const coordinators = await TicketController.getAllCoordinators();
+          if (coordinators.length > 0) {
+            // In-app notification (bulk)
+            const coordUserIds = coordinators.map(c => c.user_id);
+            await NotificationModel.createBulkNotifications(coordUserIds, {
+              ticket_id: ticket.ticket_id,
+              notification_type: 'new_ticket_created',
+              title: `New Ticket Created: ${ticket.ticket_number}`,
+              message: `A new ticket "${title}" has been created by ${fullTicket.created_by_user_name || 'an employee'}.`,
+              priority: fullTicket.priority === 'critical' ? 'high' : 'medium',
+              related_data: {
+                ticket_number: ticket.ticket_number,
+                ticket_title: title,
+                created_by: fullTicket.created_by_user_name,
+                department: fullTicket.department_name,
+                priority: fullTicket.priority || 'medium'
+              }
+            });
+
+            // Email notifications
+            for (const coord of coordinators) {
+              if (coord.email) {
+                const emailSubject = `New Ticket Created: ${ticket.ticket_number}`;
+                const emailBody = `
+Hello,
+
+A new ticket has been created and requires your attention.
+
+Ticket Number: ${ticket.ticket_number}
+Title: ${title}
+Priority: ${fullTicket.priority || 'medium'}
+Status: ${fullTicket.status}
+Created By: ${fullTicket.created_by_user_name || 'Employee'}
+Department: ${fullTicket.department_name || 'N/A'}
+
+Description:
+${description || 'No description provided'}
+
+Please log in to the Unified ITSM Platform to review and assign this ticket.
+
+This is an automated notification. Please do not reply to this email.
+                `;
+                await emailService.sendEmail(coord.email, emailSubject, emailBody.trim());
+              }
+            }
+            console.log(`New ticket notifications sent to ${coordinators.length} coordinator(s) for ticket ${ticket.ticket_number}`);
+          }
+        } catch (notificationError) {
+          console.error('Failed to notify coordinators about new ticket:', notificationError.message);
         }
       }
 
@@ -368,6 +428,7 @@ This is an automated notification. Please do not reply to this email.
       const previousEngineerId = existingTicket.assigned_to_engineer_id;
       const previousCategory = existingTicket.category;
       const previousTicketType = existingTicket.ticket_type;
+      const previousServiceType = existingTicket.service_type;
 
       // Update ticket
       const updatedTicket = await TicketModel.updateTicket(id, updateData);
@@ -567,6 +628,9 @@ This is an automated notification. Please do not reply to this email.
             await emailService.sendEmail(engineerEmail, emailSubject, emailBody.trim());
             console.log(`${isReassignment ? 'Reassignment' : 'Assignment'} email sent to ${engineerEmail} for ticket ${fullTicket.ticket_number}`);
           }
+
+          // Send SMS notification
+          await TicketController.sendAssignmentSms(updateData.assigned_to_engineer_id, fullTicket);
         } catch (notificationError) {
           // Log but don't fail update if notification fails
           console.error('Failed to create assignment notification:', notificationError.message);
@@ -632,6 +696,42 @@ This is an automated notification. Please do not reply to this email.
         } catch (notificationError) {
           // Log but don't fail update if notification fails
           console.error('Failed to create reopen notification:', notificationError.message);
+        }
+      }
+
+      // Auto-create draft service report when service_type changes to repair/replace
+      const newServiceType = updateData.service_type || previousServiceType;
+      const serviceTypeChangedToRepairReplace =
+        updateData.service_type &&
+        (updateData.service_type === 'repair' || updateData.service_type === 'replace') &&
+        previousServiceType !== updateData.service_type;
+
+      if (serviceTypeChangedToRepairReplace) {
+        try {
+          // Check if a service report already exists for this ticket
+          const existingReport = await ServiceReportModel.getReportByTicketId(id);
+          if (!existingReport) {
+            const reportData = {
+              ticket_id: id,
+              service_type: newServiceType,
+              asset_id: null,
+              replacement_asset_id: null,
+              fault_type_id: null,
+              diagnosis: null,
+              work_performed: null,
+              condition_before: null,
+              condition_after: null,
+              total_parts_cost: 0,
+              labor_cost: 0,
+              engineer_notes: null,
+              created_by: authUserId
+            };
+            await ServiceReportModel.createDraftReport(reportData);
+            console.log(`Auto-created draft service report for ticket ${fullTicket.ticket_number} (service_type changed to ${newServiceType})`);
+          }
+        } catch (reportError) {
+          // Log but don't fail the update if report creation fails
+          console.error('Failed to auto-create draft service report:', reportError.message);
         }
       }
 
@@ -704,6 +804,9 @@ This is an automated notification. Please do not reply to this email.
           await emailService.sendEmail(engineerEmail, emailSubject, emailBody.trim());
           console.log(`Assignment email sent to ${engineerEmail} for ticket ${updatedTicket.ticket_number}`);
         }
+
+        // Send SMS notification
+        await TicketController.sendAssignmentSms(engineer_id, updatedTicket);
       } catch (notificationError) {
         // Log but don't fail assignment if notification fails
         console.error('Failed to create assignment notification:', notificationError.message);
@@ -750,6 +853,94 @@ This is an automated notification. Please do not reply to this email.
 
       // Fetch updated ticket
       const updatedTicket = await TicketModel.getTicketById(id);
+
+      // Notify employee and engineer about ticket closure
+      try {
+        const closedByName = req.oauth?.user?.name || req.oauth?.user?.email || 'Coordinator';
+
+        // Notify the employee (ticket creator)
+        if (existingTicket.created_by_user_id) {
+          await NotificationModel.createNotification({
+            user_id: existingTicket.created_by_user_id,
+            ticket_id: id,
+            notification_type: 'ticket_closed',
+            title: `Ticket Closed: ${existingTicket.ticket_number}`,
+            message: `Your ticket "${existingTicket.title}" has been closed by ${closedByName}.`,
+            priority: 'medium',
+            related_data: {
+              ticket_number: existingTicket.ticket_number,
+              ticket_title: existingTicket.title,
+              closed_by: closedByName,
+              resolution_notes: resolution_notes
+            }
+          });
+
+          const employeeEmail = await TicketController.getEngineerEmail(existingTicket.created_by_user_id);
+          if (employeeEmail) {
+            const emailSubject = `Ticket Closed: ${existingTicket.ticket_number}`;
+            const emailBody = `
+Hello,
+
+Your ticket has been closed.
+
+Ticket Number: ${existingTicket.ticket_number}
+Title: ${existingTicket.title}
+Status: Closed
+Closed By: ${closedByName}
+
+Resolution:
+${resolution_notes || 'No resolution notes provided'}
+
+If you believe this issue is not fully resolved, please contact the IT support team.
+
+This is an automated notification. Please do not reply to this email.
+            `;
+            await emailService.sendEmail(employeeEmail, emailSubject, emailBody.trim());
+          }
+        }
+
+        // Notify the assigned engineer
+        if (existingTicket.assigned_to_engineer_id) {
+          await NotificationModel.createNotification({
+            user_id: existingTicket.assigned_to_engineer_id,
+            ticket_id: id,
+            notification_type: 'ticket_closed',
+            title: `Ticket Closed: ${existingTicket.ticket_number}`,
+            message: `Ticket "${existingTicket.title}" has been closed by ${closedByName}.`,
+            priority: 'low',
+            related_data: {
+              ticket_number: existingTicket.ticket_number,
+              ticket_title: existingTicket.title,
+              closed_by: closedByName,
+              resolution_notes: resolution_notes
+            }
+          });
+
+          const engineerEmail = await TicketController.getEngineerEmail(existingTicket.assigned_to_engineer_id);
+          if (engineerEmail) {
+            const emailSubject = `Ticket Closed: ${existingTicket.ticket_number}`;
+            const emailBody = `
+Hello,
+
+A ticket assigned to you has been closed.
+
+Ticket Number: ${existingTicket.ticket_number}
+Title: ${existingTicket.title}
+Status: Closed
+Closed By: ${closedByName}
+
+Resolution:
+${resolution_notes || 'No resolution notes provided'}
+
+This is an automated notification. Please do not reply to this email.
+            `;
+            await emailService.sendEmail(engineerEmail, emailSubject, emailBody.trim());
+          }
+        }
+        console.log(`Ticket closure notifications sent for ticket ${existingTicket.ticket_number}`);
+      } catch (notificationError) {
+        console.error('Failed to send ticket closure notifications:', notificationError.message);
+      }
 
       return sendSuccess(res, updatedTicket, 'Ticket closed successfully');
     } catch (error) {
@@ -1172,6 +1363,66 @@ This is an automated notification. Please do not reply to this email.
       // Fetch updated ticket
       const updatedTicket = await TicketModel.getTicketById(id);
 
+      // Notify coordinator(s) about close request
+      try {
+        let coordinatorsToNotify = [];
+
+        if (existingTicket.created_by_coordinator_id) {
+          coordinatorsToNotify = [{
+            user_id: existingTicket.created_by_coordinator_id,
+            email: existingTicket.coordinator_email
+          }];
+        } else {
+          coordinatorsToNotify = await TicketController.getAllCoordinators();
+        }
+
+        if (coordinatorsToNotify.length > 0) {
+          // In-app notification
+          const coordUserIds = coordinatorsToNotify.map(c => c.user_id);
+          await NotificationModel.createBulkNotifications(coordUserIds, {
+            ticket_id: existingTicket.ticket_id,
+            notification_type: 'close_request_submitted',
+            title: `Close Request: ${existingTicket.ticket_number}`,
+            message: `Engineer ${existingTicket.engineer_name || 'assigned engineer'} has requested closure of ticket "${existingTicket.title}". Please review.`,
+            priority: 'medium',
+            related_data: {
+              ticket_number: existingTicket.ticket_number,
+              ticket_title: existingTicket.title,
+              engineer_name: existingTicket.engineer_name,
+              request_notes: request_notes
+            }
+          });
+
+          // Email notifications
+          for (const coord of coordinatorsToNotify) {
+            if (coord.email) {
+              const emailSubject = `Close Request Pending: ${existingTicket.ticket_number}`;
+              const emailBody = `
+Hello,
+
+An engineer has requested closure of a ticket that requires your review.
+
+Ticket Number: ${existingTicket.ticket_number}
+Title: ${existingTicket.title}
+Priority: ${existingTicket.priority || 'medium'}
+Engineer: ${existingTicket.engineer_name || 'Assigned Engineer'}
+
+Resolution Notes:
+${request_notes || 'No notes provided'}
+
+Please log in to the Unified ITSM Platform to approve or reject this close request.
+
+This is an automated notification. Please do not reply to this email.
+              `;
+              await emailService.sendEmail(coord.email, emailSubject, emailBody.trim());
+            }
+          }
+          console.log(`Close request notifications sent for ticket ${existingTicket.ticket_number}`);
+        }
+      } catch (notificationError) {
+        console.error('Failed to notify coordinators about close request:', notificationError.message);
+      }
+
       return sendSuccess(res, updatedTicket, 'Close request submitted successfully');
     } catch (error) {
       console.error('Request ticket close error:', error);
@@ -1251,6 +1502,134 @@ This is an automated notification. Please do not reply to this email.
           }
         } catch (slaError) {
           console.error('Failed to stop SLA tracking on close request approval:', slaError.message);
+        }
+      }
+
+      // Notify relevant parties about close request decision
+      if (updatedTicket) {
+        try {
+          const reviewerName = req.oauth?.user?.name || req.oauth?.user?.email || 'Coordinator';
+
+          if (action === 'approved') {
+            // Notify employee about ticket closure
+            if (updatedTicket.created_by_user_id) {
+              await NotificationModel.createNotification({
+                user_id: updatedTicket.created_by_user_id,
+                ticket_id: updatedTicket.ticket_id,
+                notification_type: 'ticket_closed',
+                title: `Ticket Closed: ${updatedTicket.ticket_number}`,
+                message: `Your ticket "${updatedTicket.title}" has been closed.`,
+                priority: 'medium',
+                related_data: {
+                  ticket_number: updatedTicket.ticket_number,
+                  ticket_title: updatedTicket.title,
+                  closed_by: reviewerName,
+                  review_notes: review_notes
+                }
+              });
+
+              const employeeEmail = await TicketController.getEngineerEmail(updatedTicket.created_by_user_id);
+              if (employeeEmail) {
+                const emailSubject = `Ticket Closed: ${updatedTicket.ticket_number}`;
+                const emailBody = `
+Hello,
+
+Your ticket has been closed after review.
+
+Ticket Number: ${updatedTicket.ticket_number}
+Title: ${updatedTicket.title}
+Status: Closed
+Approved By: ${reviewerName}
+
+If you believe this issue is not fully resolved, please contact the IT support team.
+
+This is an automated notification. Please do not reply to this email.
+                `;
+                await emailService.sendEmail(employeeEmail, emailSubject, emailBody.trim());
+              }
+            }
+
+            // Notify engineer that close request was approved
+            if (updatedTicket.assigned_to_engineer_id) {
+              await NotificationModel.createNotification({
+                user_id: updatedTicket.assigned_to_engineer_id,
+                ticket_id: updatedTicket.ticket_id,
+                notification_type: 'ticket_closed',
+                title: `Close Request Approved: ${updatedTicket.ticket_number}`,
+                message: `Your close request for ticket "${updatedTicket.title}" has been approved by ${reviewerName}.`,
+                priority: 'low',
+                related_data: {
+                  ticket_number: updatedTicket.ticket_number,
+                  ticket_title: updatedTicket.title,
+                  approved_by: reviewerName,
+                  review_notes: review_notes
+                }
+              });
+
+              const engineerEmail = await TicketController.getEngineerEmail(updatedTicket.assigned_to_engineer_id);
+              if (engineerEmail) {
+                const emailSubject = `Close Request Approved: ${updatedTicket.ticket_number}`;
+                const emailBody = `
+Hello,
+
+Your close request has been approved and the ticket is now closed.
+
+Ticket Number: ${updatedTicket.ticket_number}
+Title: ${updatedTicket.title}
+Status: Closed
+Approved By: ${reviewerName}
+${review_notes ? `Review Notes: ${review_notes}` : ''}
+
+This is an automated notification. Please do not reply to this email.
+                `;
+                await emailService.sendEmail(engineerEmail, emailSubject, emailBody.trim());
+              }
+            }
+            console.log(`Close approval notifications sent for ticket ${updatedTicket.ticket_number}`);
+
+          } else if (action === 'rejected') {
+            // Notify engineer that close request was rejected
+            if (updatedTicket.assigned_to_engineer_id) {
+              await NotificationModel.createNotification({
+                user_id: updatedTicket.assigned_to_engineer_id,
+                ticket_id: updatedTicket.ticket_id,
+                notification_type: 'close_request_rejected',
+                title: `Close Request Rejected: ${updatedTicket.ticket_number}`,
+                message: `Your close request for ticket "${updatedTicket.title}" has been rejected by ${reviewerName}. The ticket has been returned to In Progress.`,
+                priority: 'high',
+                related_data: {
+                  ticket_number: updatedTicket.ticket_number,
+                  ticket_title: updatedTicket.title,
+                  rejected_by: reviewerName,
+                  review_notes: review_notes
+                }
+              });
+
+              const engineerEmail = await TicketController.getEngineerEmail(updatedTicket.assigned_to_engineer_id);
+              if (engineerEmail) {
+                const emailSubject = `Close Request Rejected: ${updatedTicket.ticket_number}`;
+                const emailBody = `
+Hello,
+
+Your close request for the following ticket has been rejected. The ticket has been returned to "In Progress" status.
+
+Ticket Number: ${updatedTicket.ticket_number}
+Title: ${updatedTicket.title}
+Status: In Progress
+Rejected By: ${reviewerName}
+${review_notes ? `Reason: ${review_notes}` : ''}
+
+Please review the feedback and continue working on this ticket.
+
+This is an automated notification. Please do not reply to this email.
+                `;
+                await emailService.sendEmail(engineerEmail, emailSubject, emailBody.trim());
+              }
+            }
+            console.log(`Close rejection notification sent for ticket ${updatedTicket.ticket_number}`);
+          }
+        } catch (notificationError) {
+          console.error('Failed to send close request review notifications:', notificationError.message);
         }
       }
 
@@ -1367,7 +1746,7 @@ This is an automated notification. Please do not reply to this email.
       summarySheet.addRow({ metric: 'Closed Tickets', value: summary.closed_tickets || 0 });
       summarySheet.addRow({ metric: 'Active Tickets', value: summary.active_tickets || 0 });
       summarySheet.addRow({ metric: 'Critical Tickets', value: summary.critical_tickets || 0 });
-      summarySheet.addRow({ metric: 'Avg Resolution Hours', value: summary.avg_resolution_hours ? Math.round(summary.avg_resolution_hours) : 'N/A' });
+      summarySheet.addRow({ metric: 'Avg Resolution Hours', value: summary.avg_resolution_hours ? Math.round(summary.avg_resolution_hours) : 'NA' });
       summarySheet.addRow({ metric: 'Unique Categories', value: summary.unique_categories || 0 });
       summarySheet.addRow({ metric: 'Analysis Period (Months)', value: filters.months_back || 6 });
 
@@ -1394,9 +1773,9 @@ This is an automated notification. Please do not reply to this email.
       (trendData.monthly_volume || []).forEach(row => {
         monthlySheet.addRow({
           ...row,
-          avg_resolution_hours: row.avg_resolution_hours ? Math.round(row.avg_resolution_hours) : 'N/A',
-          change: row.change !== null ? row.change : 'N/A',
-          change_percent: row.change_percent !== null ? `${row.change_percent}%` : 'N/A'
+          avg_resolution_hours: row.avg_resolution_hours ? Math.round(row.avg_resolution_hours) : 'NA',
+          change: row.change !== null ? row.change : 'NA',
+          change_percent: row.change_percent !== null ? `${row.change_percent}%` : 'NA'
         });
       });
 
@@ -1712,6 +2091,337 @@ This is an automated notification. Please do not reply to this email.
     } catch (error) {
       console.error('Error fetching engineer email:', error);
       return null;
+    }
+  }
+
+  /**
+   * Get engineer phone number for SMS notifications
+   */
+  static async getEngineerPhone(engineerId) {
+    try {
+      const pool = await connectDB();
+      const result = await pool.request()
+        .input('engineerId', sql.UniqueIdentifier, engineerId)
+        .query('SELECT contact_number FROM USER_MASTER WHERE user_id = @engineerId');
+
+      if (result.recordset.length > 0) {
+        return result.recordset[0].contact_number;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error fetching engineer phone:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get all active coordinators for notifications
+   */
+  static async getAllCoordinators() {
+    try {
+      const pool = await connectDB();
+      const result = await pool.request()
+        .query(`
+          SELECT user_id, email, first_name + ' ' + last_name AS full_name
+          FROM USER_MASTER
+          WHERE role = 'coordinator' AND is_active = 1
+        `);
+      return result.recordset;
+    } catch (error) {
+      console.error('Error fetching coordinators:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Build DLT-compliant SMS message for ticket assignment
+   * Template: "Ticket ID {ticket_number} has been assigned to you at {location}, {floor}, {department}, raised by {name}({employee_id}) - MMRDA"
+   */
+  static async buildAssignmentSmsMessage(ticket) {
+    try {
+      const pool = await connectDB();
+
+      // Get location building/floor details
+      // DLT template variables reject short values like "NA", use descriptive fallbacks
+      let locationName = ticket.location_name || 'Office';
+      let floor = 'Floor';
+
+      if (ticket.location_id) {
+        const locResult = await pool.request()
+          .input('locationId', sql.UniqueIdentifier, ticket.location_id)
+          .query('SELECT name, building, floor FROM locations WHERE id = @locationId');
+
+        if (locResult.recordset.length > 0) {
+          const loc = locResult.recordset[0];
+          locationName = loc.name || locationName;
+          floor = loc.floor ? loc.floor + ' Floor' : 'Floor';
+        }
+      }
+
+      const departmentName = ticket.department_name || 'General';
+      // Use coordinator (who actually raised) if present, otherwise the employee/guest
+      const raisedByName = ticket.coordinator_name || ticket.created_by_user_name || ticket.guest_name || 'User';
+      const employeeId = ticket.coordinator_employee_id || ticket.created_by_user_employee_id || '00000';
+
+      return `Ticket ID ${ticket.ticket_number} has been assigned to you at ${locationName}, ${floor}, ${departmentName}, raised by ${raisedByName}(${employeeId}) - MMRDA`;
+    } catch (error) {
+      console.error('Error building SMS message:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Send assignment SMS to engineer
+   */
+  static async sendAssignmentSms(engineerId, ticket) {
+    try {
+      const engineerPhone = await TicketController.getEngineerPhone(engineerId);
+      if (!engineerPhone) {
+        console.log(`No contact number found for engineer ${engineerId}, skipping SMS`);
+        return;
+      }
+
+      const smsMessage = await TicketController.buildAssignmentSmsMessage(ticket);
+      if (!smsMessage) {
+        console.log('Failed to build SMS message, skipping SMS');
+        return;
+      }
+
+      // Clean phone number — only strip 91 prefix if number is 12+ digits (country code + 10 digit)
+      let formattedPhone = engineerPhone.replace(/[\s\-\+]/g, '');
+      if (formattedPhone.length >= 12 && formattedPhone.startsWith('91')) {
+        formattedPhone = formattedPhone.substring(2);
+      }
+
+      const result = await smsService.sendSms(formattedPhone, smsMessage);
+      if (result.success) {
+        console.log(`Assignment SMS sent to ${formattedPhone} for ticket ${ticket.ticket_number}`);
+      } else {
+        console.log(`SMS not sent to ${formattedPhone}: ${result.reason || result.error}`);
+      }
+    } catch (smsError) {
+      console.error('Failed to send assignment SMS:', smsError.message);
+    }
+  }
+
+  /**
+   * Engineer requests a service type change (repair/replace)
+   * POST /api/tickets/:id/request-service-type-change
+   */
+  static async requestServiceTypeChange(req, res) {
+    try {
+      const { id } = req.params;
+      const { proposed_service_type, request_notes } = req.body;
+      const engineerId = req.oauth.user.id;
+
+      if (!proposed_service_type || !['repair', 'replace'].includes(proposed_service_type)) {
+        return sendError(res, 'Please select a valid service type (repair or replace)', 400);
+      }
+
+      const existingTicket = await TicketModel.getTicketById(id);
+      if (!existingTicket) {
+        return sendNotFound(res, 'Ticket not found');
+      }
+
+      const request = await TicketModel.requestServiceTypeChange(id, engineerId, proposed_service_type, request_notes);
+
+      // Notify all coordinators
+      try {
+        const coordinators = await TicketController.getAllCoordinators();
+        if (coordinators.length > 0) {
+          const coordUserIds = coordinators.map(c => c.user_id);
+          const serviceTypeLabel = proposed_service_type === 'repair' ? 'Repair Service' : 'Replacement Service';
+
+          await NotificationModel.createBulkNotifications(coordUserIds, {
+            ticket_id: existingTicket.ticket_id,
+            notification_type: 'service_type_change_requested',
+            title: `Service Type Change Requested: ${existingTicket.ticket_number}`,
+            message: `Engineer ${existingTicket.engineer_name || 'assigned engineer'} has requested to change service type to "${serviceTypeLabel}" for ticket "${existingTicket.title}". Please review.`,
+            priority: 'medium',
+            related_data: {
+              ticket_number: existingTicket.ticket_number,
+              ticket_title: existingTicket.title,
+              engineer_name: existingTicket.engineer_name,
+              proposed_service_type,
+              request_notes
+            }
+          });
+
+          for (const coord of coordinators) {
+            if (coord.email) {
+              const emailSubject = `Service Type Change Requested: ${existingTicket.ticket_number}`;
+              const emailBody = `
+Hello,
+
+An engineer has requested a service type change that requires your review.
+
+Ticket Number: ${existingTicket.ticket_number}
+Title: ${existingTicket.title}
+Priority: ${existingTicket.priority || 'medium'}
+Engineer: ${existingTicket.engineer_name || 'Assigned Engineer'}
+Proposed Service Type: ${serviceTypeLabel}
+
+${request_notes ? `Notes:\n${request_notes}` : ''}
+
+Please log in to the Unified ITSM Platform to approve or reject this request.
+
+This is an automated notification. Please do not reply to this email.
+              `;
+              await emailService.sendEmail(coord.email, emailSubject, emailBody.trim());
+            }
+          }
+          console.log(`Service type change notifications sent for ticket ${existingTicket.ticket_number}`);
+        }
+      } catch (notificationError) {
+        console.error('Failed to notify coordinators about service type change:', notificationError.message);
+      }
+
+      return sendSuccess(res, request, 'Service type change request submitted successfully');
+    } catch (error) {
+      console.error('Request service type change error:', error);
+      return sendError(res, error.message || 'Failed to submit service type change request', 500);
+    }
+  }
+
+  /**
+   * Coordinator reviews a service type change request
+   * PUT /api/tickets/:id/review-service-type-change
+   */
+  static async reviewServiceTypeChange(req, res) {
+    try {
+      const { id } = req.params;
+      const { request_id, action, review_notes } = req.body;
+      const coordinatorId = req.oauth.user.id;
+
+      console.log('reviewServiceTypeChange body:', JSON.stringify(req.body));
+      if (!request_id) {
+        return sendError(res, 'Request ID is required', 400);
+      }
+
+      if (!action || !['approved', 'rejected'].includes(action)) {
+        return sendError(res, 'Valid action (approved/rejected) is required', 400);
+      }
+
+      const updatedTicket = await TicketModel.reviewServiceTypeChange(request_id, coordinatorId, action, review_notes);
+
+      // Notify the engineer
+      try {
+        const engineerId = updatedTicket.assigned_to_engineer_id;
+        const serviceTypeLabel = action === 'approved'
+          ? (updatedTicket.service_type === 'repair' ? 'Repair Service' : 'Replacement Service')
+          : 'change';
+
+        if (action === 'approved') {
+          await NotificationModel.createNotification({
+            user_id: engineerId,
+            ticket_id: updatedTicket.ticket_id,
+            notification_type: 'service_type_change_approved',
+            title: `Service Type Change Approved: ${updatedTicket.ticket_number}`,
+            message: `Your request to change service type to "${serviceTypeLabel}" for ticket "${updatedTicket.title}" has been approved. Please fill the service report.`,
+            priority: 'medium',
+            related_data: {
+              ticket_number: updatedTicket.ticket_number,
+              ticket_title: updatedTicket.title,
+              service_type: updatedTicket.service_type
+            }
+          });
+
+          const engineerEmail = await TicketController.getEngineerEmail(engineerId);
+          if (engineerEmail) {
+            const emailSubject = `Service Type Change Approved: ${updatedTicket.ticket_number}`;
+            const emailBody = `
+Hello,
+
+Your request to change the service type has been approved.
+
+Ticket Number: ${updatedTicket.ticket_number}
+Title: ${updatedTicket.title}
+Approved Service Type: ${serviceTypeLabel}
+
+A draft service report has been created. Please log in to fill out the service report.
+
+${review_notes ? `Coordinator Notes:\n${review_notes}` : ''}
+
+This is an automated notification. Please do not reply to this email.
+            `;
+            await emailService.sendEmail(engineerEmail, emailSubject, emailBody.trim());
+          }
+        } else {
+          await NotificationModel.createNotification({
+            user_id: engineerId,
+            ticket_id: updatedTicket.ticket_id,
+            notification_type: 'service_type_change_rejected',
+            title: `Service Type Change Rejected: ${updatedTicket.ticket_number}`,
+            message: `Your request to change service type for ticket "${updatedTicket.title}" has been rejected.${review_notes ? ' Reason: ' + review_notes : ''}`,
+            priority: 'high',
+            related_data: {
+              ticket_number: updatedTicket.ticket_number,
+              ticket_title: updatedTicket.title,
+              review_notes
+            }
+          });
+
+          const engineerEmail = await TicketController.getEngineerEmail(engineerId);
+          if (engineerEmail) {
+            const emailSubject = `Service Type Change Rejected: ${updatedTicket.ticket_number}`;
+            const emailBody = `
+Hello,
+
+Your request to change the service type has been rejected.
+
+Ticket Number: ${updatedTicket.ticket_number}
+Title: ${updatedTicket.title}
+
+${review_notes ? `Coordinator Feedback:\n${review_notes}` : ''}
+
+Please log in to the Unified ITSM Platform for more details.
+
+This is an automated notification. Please do not reply to this email.
+            `;
+            await emailService.sendEmail(engineerEmail, emailSubject, emailBody.trim());
+          }
+        }
+        console.log(`Service type ${action} notification sent for ticket ${updatedTicket.ticket_number}`);
+      } catch (notificationError) {
+        console.error('Failed to notify engineer about service type review:', notificationError.message);
+      }
+
+      const message = action === 'approved'
+        ? 'Service type change approved. Draft service report created.'
+        : 'Service type change rejected.';
+      return sendSuccess(res, updatedTicket, message);
+    } catch (error) {
+      console.error('Review service type change error:', error);
+      return sendError(res, error.message || 'Failed to review service type change', 500);
+    }
+  }
+
+  /**
+   * Get pending service type change requests (for coordinators)
+   * GET /api/tickets/pending-service-type-requests
+   */
+  static async getPendingServiceTypeRequests(req, res) {
+    try {
+      const requests = await TicketModel.getPendingServiceTypeRequests();
+      return sendSuccess(res, requests);
+    } catch (error) {
+      console.error('Get pending service type requests error:', error);
+      return sendError(res, 'Failed to fetch pending service type requests', 500);
+    }
+  }
+
+  /**
+   * Get service type change request history for a ticket
+   * GET /api/tickets/:id/service-type-requests
+   */
+  static async getServiceTypeRequestsByTicketId(req, res) {
+    try {
+      const { id } = req.params;
+      const requests = await TicketModel.getServiceTypeRequestsByTicketId(id);
+      return sendSuccess(res, requests);
+    } catch (error) {
+      console.error('Get service type requests error:', error);
+      return sendError(res, 'Failed to fetch service type requests', 500);
     }
   }
 }

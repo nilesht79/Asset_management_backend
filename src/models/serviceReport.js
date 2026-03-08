@@ -577,7 +577,7 @@ class ServiceReportModel {
       const { page = 1, limit = 20 } = pagination;
       const offset = (page - 1) * limit;
 
-      let whereClause = 'WHERE 1=1';
+      let whereClause = "WHERE sr.status = 'finalized'";
       const params = {};
 
       // Date filters

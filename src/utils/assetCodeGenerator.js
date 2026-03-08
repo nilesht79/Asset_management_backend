@@ -181,13 +181,16 @@ function generateOEMCode(oemName) {
 }
 
 /**
- * Generate 2-character asset type code from category and product name
+ * Generate 2-character asset type code from subcategory, category and product name
  * @param {string} categoryName - Asset category name
  * @param {string} productName - Product name
+ * @param {string} subcategoryName - Subcategory name (checked first)
  * @returns {string} 2-character asset type code
  */
-function generateAssetTypeCode(categoryName, productName) {
-  const combined = `${categoryName || ''} ${productName || ''}`.toUpperCase()
+function generateAssetTypeCode(categoryName, productName, subcategoryName) {
+  // Check subcategory first, then fall back to category + product name keywords
+  const combined = `${subcategoryName || ''} ${categoryName || ''} ${productName || ''}`.toUpperCase()
+  console.log('generateAssetTypeCode - subcategory:', subcategoryName, '| category:', categoryName, '| product:', productName, '| combined:', combined)
 
   // Keyword matching for common asset types
   if (combined.includes('DESKTOP') || combined.includes('PC') || combined.includes('WORKSTATION')) {
@@ -284,7 +287,7 @@ async function generateAssetCode(assetData) {
   const { org, subOrg } = await getOrgCodes()
   const department = generateDepartmentCode(assetData.department_name)
   const location = generateLocationCode(assetData.location_name)
-  const assetType = generateAssetTypeCode(assetData.category_name, assetData.product_name)
+  const assetType = generateAssetTypeCode(assetData.category_name, assetData.product_name, assetData.subcategory_name)
   const oem = generateOEMCode(assetData.oem_name)
   const assetNumber = extractAssetNumber(assetData.serial_number)
 
@@ -301,7 +304,7 @@ async function generateAssetCodeBreakdown(assetData) {
   const { org, subOrg } = await getOrgCodes()
   const department = generateDepartmentCode(assetData.department_name)
   const location = generateLocationCode(assetData.location_name)
-  const assetType = generateAssetTypeCode(assetData.category_name, assetData.product_name)
+  const assetType = generateAssetTypeCode(assetData.category_name, assetData.product_name, assetData.subcategory_name)
   const oem = generateOEMCode(assetData.oem_name)
   const assetNumber = extractAssetNumber(assetData.serial_number)
 

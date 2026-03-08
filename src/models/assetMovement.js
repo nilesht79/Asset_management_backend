@@ -185,32 +185,32 @@ class AssetMovementModel {
 
       // Add filters if provided (to both requests)
       if (assetTag) {
-        whereConditions.push('asset_tag LIKE @assetTag');
+        whereConditions.push('a.serial_number LIKE @assetTag');
         countRequest.input('assetTag', `%${assetTag}%`);
         dataRequest.input('assetTag', `%${assetTag}%`);
       }
 
       if (movementType) {
-        whereConditions.push('movement_type = @movementType');
+        whereConditions.push('am.movement_type = @movementType');
         countRequest.input('movementType', movementType);
         dataRequest.input('movementType', movementType);
       }
 
       if (status) {
-        whereConditions.push('status = @status');
+        whereConditions.push('am.status = @status');
         countRequest.input('status', status);
         dataRequest.input('status', status);
       }
 
       if (startDate) {
-        whereConditions.push('movement_date >= @startDate');
+        whereConditions.push('am.movement_date >= @startDate');
         countRequest.input('startDate', startDate);
         dataRequest.input('startDate', startDate);
       }
 
       if (endDate) {
         // Add one day to endDate to include the entire end date
-        whereConditions.push('movement_date < DATEADD(day, 1, @endDate)');
+        whereConditions.push('am.movement_date < DATEADD(day, 1, @endDate)');
         countRequest.input('endDate', endDate);
         dataRequest.input('endDate', endDate);
       }
@@ -223,7 +223,8 @@ class AssetMovementModel {
       // Get total count
       const countResult = await countRequest.query(`
         SELECT COUNT(*) as total
-        FROM ASSET_MOVEMENTS
+        FROM ASSET_MOVEMENTS am
+        LEFT JOIN ASSETS a ON am.asset_id = a.id
         ${whereClause}
       `);
 
@@ -235,28 +236,30 @@ class AssetMovementModel {
 
       const dataResult = await dataRequest.query(`
         SELECT
-          id,
-          asset_id,
-          asset_tag,
-          assigned_to,
-          assigned_to_name,
-          location_id,
-          location_name,
-          movement_type,
-          status,
-          previous_user_id,
-          previous_user_name,
-          previous_location_id,
-          previous_location_name,
-          movement_date,
-          reason,
-          notes,
-          performed_by,
-          performed_by_name,
-          created_at
-        FROM ASSET_MOVEMENTS
+          am.id,
+          am.asset_id,
+          am.asset_tag,
+          a.serial_number,
+          am.assigned_to,
+          am.assigned_to_name,
+          am.location_id,
+          am.location_name,
+          am.movement_type,
+          am.status,
+          am.previous_user_id,
+          am.previous_user_name,
+          am.previous_location_id,
+          am.previous_location_name,
+          am.movement_date,
+          am.reason,
+          am.notes,
+          am.performed_by,
+          am.performed_by_name,
+          am.created_at
+        FROM ASSET_MOVEMENTS am
+        LEFT JOIN ASSETS a ON am.asset_id = a.id
         ${whereClause}
-        ORDER BY movement_date DESC
+        ORDER BY am.movement_date DESC
         OFFSET @offset ROWS
         FETCH NEXT @limit ROWS ONLY
       `);

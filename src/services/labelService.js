@@ -29,6 +29,7 @@ async function getAssetLabelData(assetId) {
       p.name as product_name,
       p.model as product_model,
       c.name as category_name,
+      sc.name as subcategory_name,
       o.name as oem_name,
       l.name as location_name,
       l.building as location_building,
@@ -42,6 +43,7 @@ async function getAssetLabelData(assetId) {
     FROM assets a
     LEFT JOIN products p ON a.product_id = p.id
     LEFT JOIN categories c ON p.category_id = c.id
+    LEFT JOIN categories sc ON p.subcategory_id = sc.id
     LEFT JOIN oems o ON p.oem_id = o.id
     LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
     LEFT JOIN locations l ON u.location_id = l.id
@@ -65,6 +67,7 @@ async function getAssetLabelData(assetId) {
     department_name: asset.department_name,
     location_name: asset.location_name,
     category_name: asset.category_name,
+    subcategory_name: asset.subcategory_name,
     product_name: asset.product_name,
     oem_name: asset.oem_name
   })
@@ -75,6 +78,7 @@ async function getAssetLabelData(assetId) {
     department_name: asset.department_name,
     location_name: asset.location_name,
     category_name: asset.category_name,
+    subcategory_name: asset.subcategory_name,
     product_name: asset.product_name,
     oem_name: asset.oem_name
   })
@@ -118,6 +122,7 @@ async function getMultipleAssetsLabelData(assetIds) {
       p.name as product_name,
       p.model as product_model,
       c.name as category_name,
+      sc.name as subcategory_name,
       o.name as oem_name,
       l.name as location_name,
       l.building as location_building,
@@ -131,6 +136,7 @@ async function getMultipleAssetsLabelData(assetIds) {
     FROM assets a
     LEFT JOIN products p ON a.product_id = p.id
     LEFT JOIN categories c ON p.category_id = c.id
+    LEFT JOIN categories sc ON p.subcategory_id = sc.id
     LEFT JOIN oems o ON p.oem_id = o.id
     LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
     LEFT JOIN locations l ON u.location_id = l.id
@@ -153,6 +159,7 @@ async function getMultipleAssetsLabelData(assetIds) {
       department_name: asset.department_name,
       location_name: asset.location_name,
       category_name: asset.category_name,
+      subcategory_name: asset.subcategory_name,
       product_name: asset.product_name,
       oem_name: asset.oem_name
     })
@@ -162,6 +169,7 @@ async function getMultipleAssetsLabelData(assetIds) {
       department_name: asset.department_name,
       location_name: asset.location_name,
       category_name: asset.category_name,
+      subcategory_name: asset.subcategory_name,
       product_name: asset.product_name,
       oem_name: asset.oem_name
     })
@@ -246,6 +254,7 @@ async function getAllAssetsLabelData(filters = {}) {
       p.name as product_name,
       p.model as product_model,
       c.name as category_name,
+      sc.name as subcategory_name,
       o.name as oem_name,
       l.name as location_name,
       l.building as location_building,
@@ -259,6 +268,7 @@ async function getAllAssetsLabelData(filters = {}) {
     FROM assets a
     LEFT JOIN products p ON a.product_id = p.id
     LEFT JOIN categories c ON p.category_id = c.id
+    LEFT JOIN categories sc ON p.subcategory_id = sc.id
     LEFT JOIN oems o ON p.oem_id = o.id
     LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
     LEFT JOIN locations l ON u.location_id = l.id
@@ -276,6 +286,7 @@ async function getAllAssetsLabelData(filters = {}) {
       department_name: asset.department_name,
       location_name: asset.location_name,
       category_name: asset.category_name,
+      subcategory_name: asset.subcategory_name,
       product_name: asset.product_name,
       oem_name: asset.oem_name
     })
@@ -285,6 +296,7 @@ async function getAllAssetsLabelData(filters = {}) {
       department_name: asset.department_name,
       location_name: asset.location_name,
       category_name: asset.category_name,
+      subcategory_name: asset.subcategory_name,
       product_name: asset.product_name,
       oem_name: asset.oem_name
     })

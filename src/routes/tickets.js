@@ -123,6 +123,18 @@ router.get(
 );
 
 /**
+ * @route   GET /api/tickets/pending-service-type-requests
+ * @desc    Get pending service type change requests for coordinator review
+ * @access  Coordinator, Superadmin
+ */
+router.get(
+  '/pending-service-type-requests',
+  authenticateOAuth,
+  requireRole(COORDINATORS),
+  TicketController.getPendingServiceTypeRequests
+);
+
+/**
  * @route   GET /api/tickets/stats
  * @desc    Get ticket statistics for dashboard
  * @access  Coordinator, Superadmin
@@ -444,6 +456,42 @@ router.put(
   authenticateOAuth,
   requireRole(COORDINATORS),
   TicketController.reviewCloseRequest
+);
+
+/**
+ * @route   POST /api/tickets/:id/request-service-type-change
+ * @desc    Engineer requests to change service type (repair/replace)
+ * @access  Engineer
+ */
+router.post(
+  '/:id/request-service-type-change',
+  authenticateOAuth,
+  requireRole(['engineer']),
+  TicketController.requestServiceTypeChange
+);
+
+/**
+ * @route   PUT /api/tickets/:id/review-service-type-change
+ * @desc    Coordinator approves or rejects service type change request
+ * @access  Coordinator, Superadmin
+ */
+router.put(
+  '/:id/review-service-type-change',
+  authenticateOAuth,
+  requireRole(COORDINATORS),
+  TicketController.reviewServiceTypeChange
+);
+
+/**
+ * @route   GET /api/tickets/:id/service-type-requests
+ * @desc    Get service type change request history for a ticket
+ * @access  All ticket managers
+ */
+router.get(
+  '/:id/service-type-requests',
+  authenticateOAuth,
+  requireRole(TICKET_MANAGERS),
+  TicketController.getServiceTypeRequestsByTicketId
 );
 
 /**

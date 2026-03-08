@@ -1402,6 +1402,226 @@ class TicketModel {
   }
 
   /**
+   * Request a service type change (engineer proposes repair/replace)
+   */
+  static async requestServiceTypeChange(ticketId, engineerId, proposedServiceType, requestNotes = null) {
+    try {
+      const pool = await connectDB();
+
+      // Check ticket exists and is assigned to this engineer
+      const ticketCheck = await pool.request()
+        .input('ticketId', sql.UniqueIdentifier, ticketId)
+        .query(`
+          SELECT ticket_id, status, assigned_to_engineer_id, service_type, ticket_type
+          FROM TICKETS
+          WHERE ticket_id = @ticketId
+        `);
+
+      if (ticketCheck.recordset.length === 0) {
+        throw new Error('Ticket not found');
+      }
+
+      const ticket = ticketCheck.recordset[0];
+
+      if (!ticket.assigned_to_engineer_id || ticket.assigned_to_engineer_id !== engineerId) {
+        throw new Error('Ticket is not assigned to this engineer');
+      }
+
+      if (ticket.status === 'closed' || ticket.status === 'cancelled') {
+        throw new Error('Ticket is already closed');
+      }
+
+      if (ticket.service_type !== 'general') {
+        throw new Error('Service type has already been set');
+      }
+
+      // Check no pending request already exists
+      const pendingCheck = await pool.request()
+        .input('ticketId', sql.UniqueIdentifier, ticketId)
+        .query(`
+          SELECT request_id FROM TICKET_SERVICE_TYPE_REQUESTS
+          WHERE ticket_id = @ticketId AND request_status = 'pending'
+        `);
+
+      if (pendingCheck.recordset.length > 0) {
+        throw new Error('A pending service type change request already exists for this ticket');
+      }
+
+      const result = await pool.request()
+        .input('ticketId', sql.UniqueIdentifier, ticketId)
+        .input('engineerId', sql.UniqueIdentifier, engineerId)
+        .input('proposedServiceType', sql.VarChar(20), proposedServiceType)
+        .input('requestNotes', sql.NVarChar(sql.MAX), requestNotes)
+        .query(`
+          INSERT INTO TICKET_SERVICE_TYPE_REQUESTS (
+            request_id, ticket_id, requested_by_engineer_id,
+            proposed_service_type, request_notes, request_status,
+            created_at, updated_at
+          )
+          OUTPUT INSERTED.*
+          VALUES (
+            NEWID(), @ticketId, @engineerId,
+            @proposedServiceType, @requestNotes, 'pending',
+            GETUTCDATE(), GETUTCDATE()
+          )
+        `);
+
+      return result.recordset[0];
+    } catch (error) {
+      console.error('Error requesting service type change:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Review a service type change request (coordinator approves/rejects)
+   */
+  static async reviewServiceTypeChange(requestId, coordinatorId, action, reviewNotes = null) {
+    try {
+      const pool = await connectDB();
+
+      // Get the request
+      console.log('reviewServiceTypeChange called with requestId:', requestId);
+      const requestCheck = await pool.request()
+        .input('requestId', sql.UniqueIdentifier, requestId)
+        .query(`
+          SELECT r.request_id, r.ticket_id, r.requested_by_engineer_id,
+                 r.proposed_service_type, r.request_notes, r.request_status,
+                 t.ticket_number, t.service_type AS current_service_type, t.title
+          FROM TICKET_SERVICE_TYPE_REQUESTS r
+          JOIN TICKETS t ON r.ticket_id = t.ticket_id
+          WHERE r.request_id = @requestId
+        `);
+
+      if (requestCheck.recordset.length === 0) {
+        throw new Error('Service type change request not found');
+      }
+
+      const request = requestCheck.recordset[0];
+
+      if (request.request_status !== 'pending') {
+        throw new Error('This request has already been reviewed');
+      }
+
+      // Update the request
+      await pool.request()
+        .input('requestId', sql.UniqueIdentifier, requestId)
+        .input('coordinatorId', sql.UniqueIdentifier, coordinatorId)
+        .input('action', sql.VarChar(20), action)
+        .input('reviewNotes', sql.NVarChar(sql.MAX), reviewNotes)
+        .query(`
+          UPDATE TICKET_SERVICE_TYPE_REQUESTS
+          SET request_status = @action,
+              reviewed_by_coordinator_id = @coordinatorId,
+              review_notes = @reviewNotes,
+              reviewed_at = GETUTCDATE(),
+              updated_at = GETUTCDATE()
+          WHERE request_id = @requestId
+        `);
+
+      if (action === 'approved') {
+        // Update ticket service_type
+        await pool.request()
+          .input('ticketId', sql.UniqueIdentifier, request.ticket_id)
+          .input('serviceType', sql.VarChar(20), request.proposed_service_type)
+          .query(`
+            UPDATE TICKETS
+            SET service_type = @serviceType, updated_at = GETUTCDATE()
+            WHERE ticket_id = @ticketId
+          `);
+
+        // Auto-create draft service report (only if no active report exists)
+        try {
+          const activeReportCheck = await pool.request()
+            .input('ticketId', sql.UniqueIdentifier, request.ticket_id)
+            .query(`
+              SELECT report_id FROM SERVICE_REPORTS
+              WHERE ticket_id = @ticketId AND status IN ('draft', 'finalized')
+            `);
+
+          if (activeReportCheck.recordset.length === 0) {
+            const reportData = {
+              ticket_id: request.ticket_id,
+              service_type: request.proposed_service_type,
+              asset_id: null,
+              replacement_asset_id: null,
+              fault_type_id: null,
+              diagnosis: null,
+              work_performed: null,
+              condition_before: null,
+              condition_after: null,
+              parts_used: null,
+              labor_cost: null,
+              engineer_notes: null,
+              created_by: request.requested_by_engineer_id
+            };
+            await ServiceReportModel.createDraftReport(reportData);
+            console.log(`Auto-created draft service report for ticket ${request.ticket_number} (service_type approved: ${request.proposed_service_type})`);
+          } else {
+            console.log(`Skipped draft report creation for ticket ${request.ticket_number} - active report already exists`);
+          }
+        } catch (reportError) {
+          console.error('Failed to auto-create draft service report:', reportError.message);
+        }
+      }
+
+      return await this.getTicketById(request.ticket_id);
+    } catch (error) {
+      console.error('Error reviewing service type change:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get pending service type change requests (for coordinators)
+   */
+  static async getPendingServiceTypeRequests() {
+    try {
+      const pool = await connectDB();
+      const result = await pool.request()
+        .query(`
+          SELECT r.*,
+            t.ticket_number, t.title, t.status AS ticket_status, t.priority, t.service_type AS current_service_type,
+            u.first_name + ' ' + u.last_name AS engineer_name, u.email AS engineer_email
+          FROM TICKET_SERVICE_TYPE_REQUESTS r
+          JOIN TICKETS t ON r.ticket_id = t.ticket_id
+          JOIN USER_MASTER u ON r.requested_by_engineer_id = u.user_id
+          WHERE r.request_status = 'pending'
+          ORDER BY r.created_at DESC
+        `);
+      return result.recordset;
+    } catch (error) {
+      console.error('Error fetching pending service type requests:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get service type change request history for a ticket
+   */
+  static async getServiceTypeRequestsByTicketId(ticketId) {
+    try {
+      const pool = await connectDB();
+      const result = await pool.request()
+        .input('ticketId', sql.UniqueIdentifier, ticketId)
+        .query(`
+          SELECT r.*,
+            u1.first_name + ' ' + u1.last_name AS engineer_name,
+            u2.first_name + ' ' + u2.last_name AS coordinator_name
+          FROM TICKET_SERVICE_TYPE_REQUESTS r
+          LEFT JOIN USER_MASTER u1 ON r.requested_by_engineer_id = u1.user_id
+          LEFT JOIN USER_MASTER u2 ON r.reviewed_by_coordinator_id = u2.user_id
+          WHERE r.ticket_id = @ticketId
+          ORDER BY r.created_at DESC
+        `);
+      return result.recordset;
+    } catch (error) {
+      console.error('Error fetching service type requests:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Get ticket trend analysis
    * Analyzes ticket volume trends over specified months, grouped by category
    * @param {Object} filters - Optional filters (months_back, location_id, department_id)
@@ -1833,7 +2053,7 @@ class TicketModel {
             )
           `);
 
-        // 2. Update ticket status and reopen count
+        // 2. Update ticket status, reopen count, and reset service_type to general
         await transaction.request()
           .input('ticketId', sql.UniqueIdentifier, ticketId)
           .input('reopenedBy', sql.UniqueIdentifier, reopenedBy)
@@ -1841,6 +2061,7 @@ class TicketModel {
             UPDATE TICKETS
             SET
               status = 'in_progress',
+              service_type = 'general',
               reopen_count = reopen_count + 1,
               last_reopened_at = GETUTCDATE(),
               last_reopened_by = @reopenedBy,
@@ -1854,35 +2075,27 @@ class TicketModel {
             WHERE ticket_id = @ticketId
           `);
 
-        // 3. Revert service report to draft status (if exists) so engineer can update
-        const serviceReportResult = await transaction.request()
+        // 2b. Cancel any pending service type change requests for this ticket
+        await transaction.request()
           .input('ticketId', sql.UniqueIdentifier, ticketId)
           .query(`
-            SELECT report_id FROM SERVICE_REPORTS
-            WHERE ticket_id = @ticketId AND status = 'finalized'
+            UPDATE TICKET_SERVICE_TYPE_REQUESTS
+            SET request_status = 'cancelled',
+                review_notes = 'Auto-cancelled: ticket was reopened',
+                reviewed_at = GETUTCDATE(),
+                updated_at = GETUTCDATE()
+            WHERE ticket_id = @ticketId AND request_status = 'pending'
           `);
 
-        if (serviceReportResult.recordset.length > 0) {
-          const reportId = serviceReportResult.recordset[0].report_id;
-
-          // Set service report back to draft
-          await transaction.request()
-            .input('reportId', sql.UniqueIdentifier, reportId)
-            .query(`
-              UPDATE SERVICE_REPORTS
-              SET status = 'draft', updated_at = GETUTCDATE()
-              WHERE report_id = @reportId
-            `);
-
-          // Mark repair history as in_progress (if exists)
-          await transaction.request()
-            .input('ticketId', sql.UniqueIdentifier, ticketId)
-            .query(`
-              UPDATE ASSET_REPAIR_HISTORY
-              SET repair_status = 'in_progress', updated_at = GETUTCDATE()
-              WHERE ticket_id = @ticketId
-            `);
-        }
+        // 3. Cancel draft service reports (auto-created by service type approval, not yet filled)
+        //    Finalized reports are kept as-is — they are valid historical records
+        await transaction.request()
+          .input('ticketId', sql.UniqueIdentifier, ticketId)
+          .query(`
+            UPDATE SERVICE_REPORTS
+            SET status = 'cancelled', updated_at = GETUTCDATE()
+            WHERE ticket_id = @ticketId AND status = 'draft'
+          `);
 
         await transaction.commit();
 

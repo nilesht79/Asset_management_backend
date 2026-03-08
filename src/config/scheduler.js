@@ -9,6 +9,7 @@ const slaMonitoringJob = require('../jobs/slaMonitoringJob');
 const notificationCleanupJob = require('../jobs/notificationCleanupJob');
 const { runAuditRetentionJob } = require('../jobs/auditRetentionJob');
 const { runFullBackupJob, runDifferentialBackupJob, runBackupCleanupJob } = require('../jobs/backupJob');
+const warrantyExpirationJob = require('../jobs/warrantyExpirationJob');
 const { backupConfig } = require('./backup');
 
 // Track active jobs
@@ -96,6 +97,27 @@ const initializeScheduler = () => {
 
   activeJobs.set('auditRetention', auditRetention);
 
+  // Warranty & EOSL Expiration Alert Job
+  // Runs daily at 8:00 AM IST to notify about assets expiring in 7 days
+  const warrantyAlert = cron.schedule('0 8 * * *', async () => {
+    console.log('⏰ Running warranty/EOSL expiration alert job...');
+    try {
+      const result = await warrantyExpirationJob.run();
+      if (result.success) {
+        console.log(`✅ Warranty alert job completed: ${result.warranty_alerts_sent} warranty, ${result.eosl_alerts_sent} EOSL alerts sent`);
+      } else {
+        console.error(`❌ Warranty alert job failed: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('❌ Warranty alert job failed:', error);
+    }
+  }, {
+    scheduled: true,
+    timezone: process.env.TZ || 'Asia/Kolkata'
+  });
+
+  activeJobs.set('warrantyExpiration', warrantyAlert);
+
   // Database Full Backup Job
   // Runs daily at 2:00 AM IST (configurable via backupConfig)
   const fullBackupJob = cron.schedule(backupConfig.schedule.full, async () => {
@@ -167,6 +189,9 @@ const initializeScheduler = () => {
     notificationCleanupJob.run().catch(error => {
       console.error('❌ Startup notification cleanup job execution failed:', error);
     });
+    warrantyExpirationJob.run().catch(error => {
+      console.error('❌ Startup warranty alert job execution failed:', error);
+    });
   }
 
   console.log('✅ Job scheduler initialized successfully');
@@ -231,6 +256,9 @@ const triggerJob = async (jobName) => {
       break;
     case 'backupCleanup':
       await runBackupCleanupJob();
+      break;
+    case 'warrantyExpiration':
+      await warrantyExpirationJob.run();
       break;
     default:
       throw new Error(`Unknown job: ${jobName}`);

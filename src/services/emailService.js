@@ -1,10 +1,11 @@
 /**
  * EMAIL SERVICE
- * Handles sending emails via Gmail or SMTP
+ * Handles sending emails via Gmail, SMTP, or Microsoft 365 (Graph API)
  * Configuration is stored in database and can be updated by superadmin
  */
 
 const nodemailer = require('nodemailer');
+const axios = require('axios');
 const { connectDB, sql } = require('../config/database');
 
 class EmailService {
@@ -59,6 +60,9 @@ class EmailService {
           .input('smtpPassword', sql.VarChar(500), config.smtp_password)
           .input('gmailUser', sql.VarChar(255), config.gmail_user)
           .input('gmailAppPassword', sql.VarChar(500), config.gmail_app_password)
+          .input('msClientId', sql.VarChar(255), config.microsoft_client_id)
+          .input('msClientSecret', sql.VarChar(500), config.microsoft_client_secret)
+          .input('msTenantId', sql.VarChar(255), config.microsoft_tenant_id)
           .input('isEnabled', sql.Bit, config.is_enabled)
           .input('updatedBy', sql.UniqueIdentifier, userId)
           .query(`
@@ -71,6 +75,9 @@ class EmailService {
               smtp_password = CASE WHEN @smtpPassword IS NOT NULL AND @smtpPassword != '' THEN @smtpPassword ELSE smtp_password END,
               gmail_user = @gmailUser,
               gmail_app_password = CASE WHEN @gmailAppPassword IS NOT NULL AND @gmailAppPassword != '' THEN @gmailAppPassword ELSE gmail_app_password END,
+              microsoft_client_id = CASE WHEN @msClientId IS NOT NULL THEN @msClientId ELSE microsoft_client_id END,
+              microsoft_client_secret = CASE WHEN @msClientSecret IS NOT NULL AND @msClientSecret != '' THEN @msClientSecret ELSE microsoft_client_secret END,
+              microsoft_tenant_id = CASE WHEN @msTenantId IS NOT NULL THEN @msTenantId ELSE microsoft_tenant_id END,
               is_enabled = @isEnabled,
               updated_at = GETUTCDATE(),
               updated_by = @updatedBy
@@ -87,15 +94,20 @@ class EmailService {
           .input('smtpPassword', sql.VarChar(500), config.smtp_password)
           .input('gmailUser', sql.VarChar(255), config.gmail_user)
           .input('gmailAppPassword', sql.VarChar(500), config.gmail_app_password)
+          .input('msClientId', sql.VarChar(255), config.microsoft_client_id)
+          .input('msClientSecret', sql.VarChar(500), config.microsoft_client_secret)
+          .input('msTenantId', sql.VarChar(255), config.microsoft_tenant_id)
           .input('isEnabled', sql.Bit, config.is_enabled)
           .input('updatedBy', sql.UniqueIdentifier, userId)
           .query(`
             INSERT INTO EMAIL_CONFIGURATION (
               provider, smtp_host, smtp_port, smtp_secure, smtp_user, smtp_password,
-              gmail_user, gmail_app_password, is_enabled, updated_by
+              gmail_user, gmail_app_password, microsoft_client_id, microsoft_client_secret,
+              microsoft_tenant_id, is_enabled, updated_by
             ) VALUES (
               @provider, @smtpHost, @smtpPort, @smtpSecure, @smtpUser, @smtpPassword,
-              @gmailUser, @gmailAppPassword, @isEnabled, @updatedBy
+              @gmailUser, @gmailAppPassword, @msClientId, @msClientSecret,
+              @msTenantId, @isEnabled, @updatedBy
             )
           `);
       }
@@ -115,7 +127,7 @@ class EmailService {
    * Initialize the email transporter based on configuration
    */
   async initialize() {
-    if (this.isInitialized && this.transporter) {
+    if (this.isInitialized && (this.transporter || this.config?.provider === 'microsoft')) {
       return true;
     }
 
@@ -142,6 +154,13 @@ class EmailService {
             pass: this.config.gmail_app_password
           }
         });
+      } else if (this.config.provider === 'microsoft') {
+        // Microsoft 365 — no nodemailer transporter needed (uses Graph API)
+        if (!this.config.microsoft_is_authenticated) {
+          console.log('Microsoft provider selected but not authenticated');
+          return false;
+        }
+        this.transporter = null; // Graph API is used directly
       } else {
         // Generic SMTP
         this.transporter = nodemailer.createTransport({
@@ -173,9 +192,133 @@ class EmailService {
    */
   getSenderEmail() {
     if (!this.config) return null;
-    return this.config.provider === 'gmail'
-      ? this.config.gmail_user
-      : this.config.smtp_user;
+    if (this.config.provider === 'gmail') return this.config.gmail_user;
+    if (this.config.provider === 'microsoft') return this.config.microsoft_user_email;
+    return this.config.smtp_user;
+  }
+
+  /**
+   * Check if Microsoft access token is expired (with 5-min buffer)
+   */
+  isMicrosoftTokenExpired() {
+    if (!this.config?.microsoft_token_expires_at) return true;
+    const bufferMs = 5 * 60 * 1000; // 5 minutes
+    return Date.now() >= new Date(this.config.microsoft_token_expires_at).getTime() - bufferMs;
+  }
+
+  /**
+   * Refresh Microsoft access token using refresh_token
+   */
+  async refreshMicrosoftToken() {
+    try {
+      const tenantId = this.config.microsoft_tenant_id || 'common';
+      const tokenUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
+
+      const params = new URLSearchParams();
+      params.append('client_id', this.config.microsoft_client_id);
+      params.append('client_secret', this.config.microsoft_client_secret);
+      params.append('refresh_token', this.config.microsoft_refresh_token);
+      params.append('grant_type', 'refresh_token');
+
+      const response = await axios.post(tokenUrl, params, {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      });
+
+      const { access_token, refresh_token, expires_in } = response.data;
+      const expiresAt = new Date(Date.now() + (expires_in || 3600) * 1000);
+
+      // Update tokens in database
+      const pool = await connectDB();
+      await pool.request()
+        .input('accessToken', sql.NVarChar(sql.MAX), access_token)
+        .input('refreshToken', sql.NVarChar(sql.MAX), refresh_token || this.config.microsoft_refresh_token)
+        .input('expiresAt', sql.DateTime, expiresAt)
+        .query(`
+          UPDATE EMAIL_CONFIGURATION SET
+            microsoft_access_token = @accessToken,
+            microsoft_refresh_token = @refreshToken,
+            microsoft_token_expires_at = @expiresAt,
+            updated_at = GETUTCDATE()
+        `);
+
+      // Update in-memory config
+      this.config.microsoft_access_token = access_token;
+      this.config.microsoft_refresh_token = refresh_token || this.config.microsoft_refresh_token;
+      this.config.microsoft_token_expires_at = expiresAt;
+
+      console.log('Microsoft access token refreshed successfully');
+      return access_token;
+    } catch (error) {
+      console.error('Error refreshing Microsoft token:', error.response?.data || error.message);
+
+      // Mark as unauthenticated if refresh fails
+      try {
+        const pool = await connectDB();
+        await pool.request().query(`
+          UPDATE EMAIL_CONFIGURATION SET
+            microsoft_is_authenticated = 0,
+            updated_at = GETUTCDATE()
+        `);
+        this.config.microsoft_is_authenticated = false;
+      } catch (dbError) {
+        console.error('Error updating auth status:', dbError.message);
+      }
+
+      throw new Error('Microsoft token refresh failed. Please re-authenticate.');
+    }
+  }
+
+  /**
+   * Get a valid Microsoft access token (auto-refreshes if expired)
+   */
+  async getMicrosoftAccessToken() {
+    if (this.isMicrosoftTokenExpired()) {
+      return await this.refreshMicrosoftToken();
+    }
+    return this.config.microsoft_access_token;
+  }
+
+  /**
+   * Send email via Microsoft Graph API
+   */
+  async sendEmailViaMicrosoft(to, subject, body, options = {}) {
+    const accessToken = await this.getMicrosoftAccessToken();
+    const senderEmail = this.config.microsoft_user_email;
+
+    // Build Graph API email message
+    const emailMessage = {
+      subject: subject,
+      body: {
+        contentType: options.html ? 'HTML' : 'Text',
+        content: options.html || body
+      },
+      toRecipients: (Array.isArray(to) ? to : to.split(',')).map(email => ({
+        emailAddress: { address: email.trim() }
+      }))
+    };
+
+    // Add CC recipients if provided
+    if (options.cc) {
+      emailMessage.ccRecipients = (Array.isArray(options.cc) ? options.cc : options.cc.split(',')).map(email => ({
+        emailAddress: { address: email.trim() }
+      }));
+    }
+
+    const response = await axios.post(
+      `https://graph.microsoft.com/v1.0/users/${senderEmail}/sendMail`,
+      {
+        message: emailMessage,
+        saveToSentItems: true
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    return response;
   }
 
   /**
@@ -193,7 +336,18 @@ class EmailService {
         }
       }
 
-      // Use authentication email as sender (Gmail or SMTP user)
+      // Microsoft provider — use Graph API
+      if (this.config.provider === 'microsoft') {
+        await this.sendEmailViaMicrosoft(to, subject, body, options);
+        console.log(`Email sent successfully to ${to} via Microsoft Graph API`);
+        return {
+          success: true,
+          messageId: `microsoft-${Date.now()}`,
+          response: '202 Accepted'
+        };
+      }
+
+      // Gmail / SMTP — use nodemailer
       const senderEmail = this.getSenderEmail();
       const senderName = 'Unified ITSM Platform';
 
@@ -220,7 +374,7 @@ class EmailService {
         response: info.response
       };
     } catch (error) {
-      console.error(`Error sending email to ${to}:`, error);
+      console.error(`Error sending email to ${to}:`, error.response?.data || error.message);
       this.logEmail(to, subject, body);
       return {
         success: false,
