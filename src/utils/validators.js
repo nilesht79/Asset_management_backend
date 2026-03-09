@@ -32,6 +32,7 @@ const validators = {
       employee_id: Joi.string().max(20).optional(),
       designation: Joi.string().max(100).optional().allow('', null),
       room_no: Joi.string().max(50).optional().allow('', null),
+      contact_number: Joi.string().max(15).pattern(/^[0-9]+$/).optional().allow('', null),
       is_active: Joi.boolean().default(true),
       is_vip: Joi.boolean().default(false),
       allow_multi_assets: Joi.boolean().default(false)
@@ -47,6 +48,7 @@ const validators = {
       employee_id: Joi.string().max(20).optional(),
       designation: Joi.string().max(100).optional().allow('', null),
       room_no: Joi.string().max(50).optional().allow('', null),
+      contact_number: Joi.string().max(15).pattern(/^[0-9]+$/).optional().allow('', null),
       is_active: Joi.boolean().optional(),
       is_vip: Joi.boolean().optional(),
       allow_multi_assets: Joi.boolean().optional()
