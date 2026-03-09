@@ -2160,8 +2160,8 @@ This is an automated notification. Please do not reply to this email.
 
       const departmentName = ticket.department_name || 'General';
       // Use coordinator (who actually raised) if present, otherwise the employee/guest
-      const raisedByName = ticket.coordinator_name || ticket.created_by_user_name || ticket.guest_name || 'User';
-      const employeeId = ticket.coordinator_employee_id || ticket.created_by_user_employee_id || '00000';
+      const raisedByName = ticket.created_by_user_name || ticket.guest_name || 'User';
+      const employeeId = ticket.created_by_user_employee_id || '00000';
 
       return `Ticket ID ${ticket.ticket_number} has been assigned to you at ${locationName}, ${floor}, ${departmentName}, raised by ${raisedByName}(${employeeId}) - MMRDA`;
     } catch (error) {
