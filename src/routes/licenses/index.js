@@ -1558,4 +1558,255 @@ router.delete('/:id',
   })
 );
 
+// =====================================================
+// BULK DEPLOY - Assign license to multiple assets
+// =====================================================
+
+/**
+ * POST /licenses/:id/bulk-assign
+ * Bulk assign a license to multiple assets
+ * Body: { asset_ids: [uuid, ...] }
+ */
+router.post('/:id/bulk-assign',
+  requireRole(['admin', 'superadmin', 'coordinator', 'it_head']),
+  validateUUID('id'),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { asset_ids } = req.body;
+
+    if (!Array.isArray(asset_ids) || asset_ids.length === 0) {
+      return sendError(res, 'asset_ids array is required and must not be empty', 400);
+    }
+
+    const pool = await connectDB();
+
+    // Get the license details
+    const licenseResult = await pool.request()
+      .input('licenseId', sql.UniqueIdentifier, id)
+      .query(`
+        SELECT sl.*, p.name as product_name,
+          (SELECT COUNT(*) FROM asset_software_installations WHERE license_id = sl.id AND is_active = 1) as current_allocated
+        FROM software_licenses sl
+        JOIN products p ON sl.product_id = p.id
+        WHERE sl.id = @licenseId AND sl.is_active = 1
+      `);
+
+    if (licenseResult.recordset.length === 0) {
+      return sendNotFound(res, 'License not found');
+    }
+
+    const license = licenseResult.recordset[0];
+    const availableLicenses = license.total_licenses - license.current_allocated;
+
+    if (asset_ids.length > availableLicenses) {
+      return sendError(res, `Not enough licenses available. Requested: ${asset_ids.length}, Available: ${availableLicenses}`, 400);
+    }
+
+    // Check which assets already have this license installed
+    const existingResult = await pool.request()
+      .input('licenseId', sql.UniqueIdentifier, id)
+      .query(`
+        SELECT asset_id FROM asset_software_installations
+        WHERE license_id = @licenseId AND is_active = 1
+      `);
+
+    const alreadyInstalled = new Set(existingResult.recordset.map(r => r.asset_id.toLowerCase()));
+
+    const results = { success: 0, skipped: 0, failed: 0, details: [] };
+
+    for (const assetId of asset_ids) {
+      // Skip if already installed on this asset
+      if (alreadyInstalled.has(assetId.toLowerCase())) {
+        results.skipped++;
+        results.details.push({ asset_id: assetId, status: 'skipped', reason: 'Already installed' });
+        continue;
+      }
+
+      try {
+        let licenseKey = null;
+
+        // For per_user/per_device licenses, allocate an individual key
+        if (['per_user', 'per_device'].includes(license.license_type)) {
+          const keyResult = await pool.request()
+            .input('licenseId', sql.UniqueIdentifier, id)
+            .query(`
+              SELECT TOP 1 id, license_key
+              FROM SOFTWARE_LICENSE_KEYS
+              WHERE license_id = @licenseId AND is_allocated = 0 AND is_active = 1
+              ORDER BY created_at
+            `);
+
+          if (keyResult.recordset.length > 0) {
+            licenseKey = keyResult.recordset[0].license_key;
+            // Mark key as allocated
+            await pool.request()
+              .input('keyId', sql.UniqueIdentifier, keyResult.recordset[0].id)
+              .input('assetId', sql.UniqueIdentifier, assetId)
+              .query(`
+                UPDATE SOFTWARE_LICENSE_KEYS
+                SET is_allocated = 1, allocated_to_asset_id = @assetId, allocated_at = GETUTCDATE(), updated_at = GETUTCDATE()
+                WHERE id = @keyId
+              `);
+          }
+        } else {
+          // For site/volume/concurrent, use the master license key
+          licenseKey = license.license_key;
+        }
+
+        // Insert installation record
+        await pool.request()
+          .input('id', sql.UniqueIdentifier, uuidv4())
+          .input('assetId', sql.UniqueIdentifier, assetId)
+          .input('softwareProductId', sql.UniqueIdentifier, license.product_id)
+          .input('licenseId', sql.UniqueIdentifier, id)
+          .input('licenseKey', sql.NVarChar(500), licenseKey)
+          .input('licenseType', sql.VarChar(50), license.license_type)
+          .query(`
+            INSERT INTO asset_software_installations (
+              id, asset_id, software_product_id, license_id,
+              license_key, license_type, software_type,
+              installation_method, installation_date, activation_date, created_at, updated_at
+            ) VALUES (
+              @id, @assetId, @softwareProductId, @licenseId,
+              @licenseKey, @licenseType, 'application',
+              'bulk_deploy', GETUTCDATE(), CAST(GETUTCDATE() AS DATE), GETUTCDATE(), GETUTCDATE()
+            )
+          `);
+
+        results.success++;
+        results.details.push({ asset_id: assetId, status: 'success' });
+      } catch (error) {
+        results.failed++;
+        results.details.push({ asset_id: assetId, status: 'failed', reason: error.message });
+      }
+    }
+
+    sendSuccess(res, {
+      license_name: license.license_name,
+      product_name: license.product_name,
+      total_requested: asset_ids.length,
+      ...results
+    }, `Bulk deploy complete: ${results.success} installed, ${results.skipped} skipped, ${results.failed} failed`);
+  })
+);
+
+/**
+ * GET /licenses/:id/deployable-assets
+ * Get assets that can receive this license (not already installed)
+ * Supports filters: search, category_id, location_id, status
+ */
+router.get('/:id/deployable-assets',
+  requireRole(['admin', 'superadmin', 'coordinator', 'it_head']),
+  validateUUID('id'),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { search, category_id, location_id, status, page = 1, limit = 50 } = req.query;
+
+    const pool = await connectDB();
+
+    // Verify license exists
+    const licenseResult = await pool.request()
+      .input('licenseId', sql.UniqueIdentifier, id)
+      .query(`
+        SELECT id, license_name, total_licenses, product_id,
+          (SELECT COUNT(*) FROM asset_software_installations WHERE license_id = @licenseId AND is_active = 1) as current_allocated
+        FROM software_licenses
+        WHERE id = @licenseId AND is_active = 1
+      `);
+
+    if (licenseResult.recordset.length === 0) {
+      return sendNotFound(res, 'License not found');
+    }
+
+    const license = licenseResult.recordset[0];
+
+    // Build WHERE clause - exclude assets that already have this license
+    let whereClause = `a.is_active = 1 AND (a.is_standby_asset = 0 OR a.is_standby_asset IS NULL)
+      AND a.id NOT IN (
+        SELECT asset_id FROM asset_software_installations
+        WHERE license_id = @licenseId AND is_active = 1
+      )`;
+    const params = [{ name: 'licenseId', type: sql.UniqueIdentifier, value: id }];
+
+    if (search) {
+      whereClause += ' AND (a.asset_tag LIKE @search OR a.serial_number LIKE @search OR p.name LIKE @search OR p.model LIKE @search OR u.first_name + \' \' + u.last_name LIKE @search OR u.employee_id LIKE @search)';
+      params.push({ name: 'search', type: sql.VarChar(255), value: `%${search}%` });
+    }
+
+    if (category_id) {
+      whereClause += ' AND p.category_id = @categoryId';
+      params.push({ name: 'categoryId', type: sql.UniqueIdentifier, value: category_id });
+    }
+
+    if (location_id) {
+      whereClause += ' AND u.location_id = @locationId';
+      params.push({ name: 'locationId', type: sql.UniqueIdentifier, value: location_id });
+    }
+
+    if (status) {
+      whereClause += ' AND a.status = @status';
+      params.push({ name: 'status', type: sql.VarChar(20), value: status });
+    }
+
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    // Get count
+    const countRequest = pool.request();
+    params.forEach(p => countRequest.input(p.name, p.type, p.value));
+    const countResult = await countRequest.query(`
+      SELECT COUNT(*) as total
+      FROM assets a
+      INNER JOIN products p ON a.product_id = p.id
+      LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
+      WHERE ${whereClause}
+    `);
+
+    // Get assets
+    const dataRequest = pool.request();
+    params.forEach(p => dataRequest.input(p.name, p.type, p.value));
+    dataRequest.input('offset', sql.Int, offset);
+    dataRequest.input('limit', sql.Int, parseInt(limit));
+
+    const result = await dataRequest.query(`
+      SELECT
+        a.id, a.asset_tag, a.serial_number, a.status,
+        p.name as product_name, p.model as product_model,
+        c.name as category_name,
+        o.name as oem_name,
+        u.first_name + ' ' + u.last_name as assigned_user_name,
+        u.employee_id as assigned_employee_code,
+        d.department_name as department,
+        l.name as location_name
+      FROM assets a
+      INNER JOIN products p ON a.product_id = p.id
+      LEFT JOIN categories c ON p.category_id = c.id
+      LEFT JOIN oems o ON p.oem_id = o.id
+      LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
+      LEFT JOIN DEPARTMENT_MASTER d ON u.department_id = d.department_id
+      LEFT JOIN locations l ON u.location_id = l.id
+      WHERE ${whereClause}
+      ORDER BY a.asset_tag
+      OFFSET @offset ROWS
+      FETCH NEXT @limit ROWS ONLY
+    `);
+
+    sendSuccess(res, {
+      assets: result.recordset,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: countResult.recordset[0].total,
+        totalPages: Math.ceil(countResult.recordset[0].total / parseInt(limit))
+      },
+      license: {
+        id: license.id,
+        license_name: license.license_name,
+        total_licenses: license.total_licenses,
+        current_allocated: license.current_allocated,
+        available: license.total_licenses - license.current_allocated
+      }
+    }, 'Deployable assets retrieved');
+  })
+);
+
 module.exports = router;
