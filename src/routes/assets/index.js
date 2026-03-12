@@ -1520,7 +1520,7 @@ router.get('/lifecycle',
     }
 
     if (search) {
-      whereConditions.push('(a.asset_tag LIKE @search OR p.name LIKE @search OR p.model LIKE @search)');
+      whereConditions.push('(a.asset_tag LIKE @search OR a.serial_number LIKE @search OR p.name LIKE @search OR p.model LIKE @search)');
       request.input('search', sql.VarChar(255), `%${search}%`);
     }
 
