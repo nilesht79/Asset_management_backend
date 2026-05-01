@@ -75,6 +75,12 @@ router.get('/',
   validatePagination,
   asyncHandler(async (req, res) => {
     const { page, limit, offset, sortBy, sortOrder } = req.pagination;
+    let finalLimit = limit;
+
+      // 🔥 if frontend sends large limit OR no limit → fetch all
+      if (!req.query.limit || parseInt(req.query.limit) > 1000) {
+        finalLimit = 100000; // large number (acts like "all")
+      }
     const { search, status, role, department_id, location_id, board_id, employeeId } = req.query;
 
     const pool = await connectDB();
@@ -150,7 +156,7 @@ router.get('/',
     const dataRequest = pool.request();
     params.forEach(param => dataRequest.input(param.name, param.type, param.value));
     dataRequest.input('offset', sql.Int, offset);
-    dataRequest.input('limit', sql.Int, limit);
+    dataRequest.input('limit', sql.Int, finalLimit);
 
     const validSortFields = ['first_name', 'last_name', 'email', 'role', 'employee_id', 'created_at', 'last_login'];
     const safeSortBy = validSortFields.includes(sortBy) ? `u.${sortBy}` : 'u.created_at';
@@ -168,7 +174,7 @@ router.get('/',
       WHERE ${whereClause}
       ORDER BY ${safeSortBy} ${safeSortOrder}
       OFFSET @offset ROWS
-      FETCH NEXT @limit ROWS ONLY
+      FETCH NEXT ${finalLimit} ROWS ONLY
     `);
 
     const pagination = getPaginationInfo(page, limit, total);
