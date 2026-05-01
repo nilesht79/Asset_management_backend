@@ -172,10 +172,24 @@ router.get('/',
     }
 
     // Board filter (via user's department)
-    if (board_id) {
-      whereClause += ' AND bd.board_id = @boardId';
-      params.push({ name: 'boardId', type: sql.UniqueIdentifier, value: board_id });
-    }
+    // if (board_id) {
+    //   whereClause += ' AND bd.board_id = @boardId';
+    //   params.push({ name: 'boardId', type: sql.UniqueIdentifier, value: board_id });
+    // }
+
+    // Board filter (via user's department)
+if (board_id) {
+  whereClause += `
+    AND EXISTS (
+      SELECT 1 
+      FROM BOARD_DEPARTMENTS bd 
+      WHERE bd.department_id = d.department_id 
+      AND bd.board_id = @boardId
+    )
+  `;
+
+  params.push({ name: 'boardId', type: sql.UniqueIdentifier, value: board_id });
+}
 
     // Serial number filter
     if (serial_number) {
@@ -202,11 +216,25 @@ router.get('/',
       LEFT JOIN oems o ON p.oem_id = o.id
       LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
       LEFT JOIN DEPARTMENT_MASTER dept ON u.department_id = dept.department_id
-      LEFT JOIN BOARD_DEPARTMENTS bd ON dept.department_id = bd.department_id
       WHERE ${whereClause}
     `);
 
+    console.log("----- COUNT QUERY -----");
+console.log(`
+SELECT COUNT(*) as total
+FROM assets a
+INNER JOIN products p ON a.product_id = p.id
+LEFT JOIN categories c ON p.category_id = c.id
+LEFT JOIN product_types pt ON p.type_id = pt.id
+LEFT JOIN oems o ON p.oem_id = o.id
+LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
+LEFT JOIN DEPARTMENT_MASTER dept ON u.department_id = dept.department_id
+WHERE ${whereClause}
+`);
+console.log("PARAMS:", params);
+
     const total = countResult.recordset[0].total;
+    console.log("TOTAL ASSETS:", total);
 
     // Get paginated results
     const dataRequest = pool.request();
@@ -218,11 +246,87 @@ router.get('/',
     const safeSortBy = validSortFields.includes(sortBy) ? `a.${sortBy}` : 'a.created_at';
     const safeSortOrder = sortOrder === 'asc' ? 'ASC' : 'DESC';
 
+    const dataQuery = `
+SELECT
+  a.id, a.asset_tag, a.tag_no, a.serial_number, a.status, a.condition_status, a.importance, a.purchase_date,
+  a.warranty_start_date, a.warranty_end_date,
+  a.purchase_cost, a.vendor_id as asset_vendor_id,, a.invoice_number, a.notes, a.created_at, a.updated_at,
+  a.eol_date, a.eos_date,
+  a.product_id, a.assigned_to,
+  a.asset_type, a.parent_asset_id, a.installation_date, a.removal_date,
+  p.name as product_name, p.model as product_model,
+  c.id as category_id, c.name as category_name,
+  pt.id as product_type_id, pt.name as product_type_name,
+  subcat.id as subcategory_id, subcat.name as subcategory_name,
+  o.id as oem_id, o.name as oem_name,
+  v.id as vendor_id, v.name as vendor_name, v.code as vendor_code,
+  u.location_id,
+  u.first_name + ' ' + u.last_name as assigned_user_name,
+  u.email as assigned_user_email,
+  u.employee_id as assigned_employee_code,
+  d.department_name as department,
+  l.name as location_name,
+  l.address as location_address,
+  l.building as location_building,
+  l.floor as location_floor,
+  (SELECT COUNT(*) FROM assets comp WHERE comp.parent_asset_id = a.id AND comp.is_active = 1 AND comp.removal_date IS NULL) as installed_component_count,
+  CASE
+    WHEN a.warranty_end_date IS NULL THEN 'No Warranty'
+    WHEN a.warranty_end_date < GETUTCDATE() THEN 'Expired'
+    WHEN a.warranty_end_date BETWEEN GETUTCDATE() AND DATEADD(day, 30, GETUTCDATE()) THEN 'Expiring Soon'
+    ELSE 'Active'
+  END as warranty_status
+FROM assets a
+INNER JOIN products p ON a.product_id = p.id
+LEFT JOIN categories c ON p.category_id = c.id
+LEFT JOIN product_types pt ON p.type_id = pt.id
+LEFT JOIN categories subcat ON p.subcategory_id = subcat.id
+LEFT JOIN oems o ON p.oem_id = o.id
+LEFT JOIN vendors v ON a.vendor_id = v.id
+LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
+LEFT JOIN DEPARTMENT_MASTER d ON u.department_id = d.department_id
+LEFT JOIN locations l ON u.location_id = l.id
+WHERE ${whereClause}
+ORDER BY ${safeSortBy} ${safeSortOrder}
+OFFSET @offset ROWS
+FETCH NEXT @limit ROWS ONLY
+`;
+
+console.log("===== RAW QUERY =====");
+console.log(dataQuery);
+
+console.log("===== PARAMETERS =====");
+
+params.forEach(p => {
+  console.log(`${p.name} = ${p.value}`);
+});
+
+console.log("offset =", offset);
+console.log("limit =", limit);
+
+let finalQuery = dataQuery;
+
+// replace dynamic params
+params.forEach(p => {
+  finalQuery = finalQuery.replace(
+    new RegExp(`@${p.name}`, 'g'),
+    typeof p.value === 'string' ? `'${p.value}'` : p.value
+  );
+});
+
+// replace pagination
+finalQuery = finalQuery.replace('@offset', offset);
+finalQuery = finalQuery.replace('@limit', limit);
+
+console.log("===== FINAL QUERY (RUN IN SSMS) =====");
+console.log(finalQuery);
+
+    console.log("----- DATA QUERY -----");
     const result = await dataRequest.query(`
       SELECT
         a.id, a.asset_tag, a.tag_no, a.serial_number, a.status, a.condition_status, a.importance, a.purchase_date,
         a.warranty_start_date, a.warranty_end_date,
-        a.purchase_cost, a.vendor_id, a.invoice_number, a.notes, a.created_at, a.updated_at,
+        a.purchase_cost, a.vendor_id as asset_vendor_id, a.invoice_number, a.notes, a.created_at, a.updated_at,
         a.eol_date, a.eos_date,
         a.product_id, a.assigned_to,
         a.asset_type, a.parent_asset_id, a.installation_date, a.removal_date,
@@ -258,12 +362,15 @@ router.get('/',
       LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
       LEFT JOIN DEPARTMENT_MASTER d ON u.department_id = d.department_id
       LEFT JOIN locations l ON u.location_id = l.id
-      LEFT JOIN BOARD_DEPARTMENTS bd ON d.department_id = bd.department_id
       WHERE ${whereClause}
       ORDER BY ${safeSortBy} ${safeSortOrder}
       OFFSET @offset ROWS
       FETCH NEXT @limit ROWS ONLY
     `);
+
+      console.log("===== RESULT =====");
+console.log("Total Rows:", result.recordset.length);
+console.log(result.recordset);
 
     const pagination = getPaginationInfo(page, limit, total);
 
@@ -647,7 +754,8 @@ router.get('/export',
     const pool = await connectDB();
 
     // Build WHERE clause for export (same as list query)
-    let whereClause = 'a.is_active = 1';
+    // let whereClause = 'a.is_active = 1';
+    let whereClause = `a.is_active = 1 AND (a.is_standby_asset = 0 OR a.is_standby_asset IS NULL)`;
     const params = [];
 
     if (search) {
@@ -700,10 +808,39 @@ router.get('/export',
       params.push({ name: 'oemId', type: sql.UniqueIdentifier, value: oem_id });
     }
 
+    // if (warranty_expiring === 'true') {
+    //   whereClause += ' AND a.warranty_end_date IS NOT NULL AND a.warranty_end_date <= DATEADD(day, 30, GETUTCDATE())';
+    // } else if (warranty_expiring === 'false') {
+    //   whereClause += ' AND (a.warranty_end_date IS NULL OR a.warranty_end_date > DATEADD(day, 30, GETUTCDATE()))';
+    // }
+
     if (warranty_expiring === 'true') {
-      whereClause += ' AND a.warranty_end_date IS NOT NULL AND a.warranty_end_date <= DATEADD(day, 30, GETUTCDATE())';
-    } else if (warranty_expiring === 'false') {
-      whereClause += ' AND (a.warranty_end_date IS NULL OR a.warranty_end_date > DATEADD(day, 30, GETUTCDATE()))';
+  whereClause += ' AND a.warranty_end_date IS NOT NULL AND a.warranty_end_date <= DATEADD(day, 30, GETUTCDATE())';
+}
+
+    // Board filter
+      if (req.query.board_id) {
+        whereClause += `
+          AND EXISTS (
+            SELECT 1 
+            FROM BOARD_DEPARTMENTS bd 
+            WHERE bd.department_id = d.department_id 
+            AND bd.board_id = @boardId
+          )
+        `;
+        params.push({ name: 'boardId', type: sql.UniqueIdentifier, value: req.query.board_id });
+      }
+
+    // Serial number filter
+    if (req.query.serial_number) {
+      whereClause += ' AND a.serial_number = @serialNumber';
+      params.push({ name: 'serialNumber', type: sql.VarChar(255), value: req.query.serial_number });
+    }
+
+    // Employee code filter
+    if (req.query.employee_code) {
+      whereClause += ' AND u.employee_id LIKE @employeeCode';
+      params.push({ name: 'employeeCode', type: sql.VarChar(20), value: `%${req.query.employee_code}%` });
     }
 
     // Get all assets for export (no pagination)
@@ -742,7 +879,6 @@ console.log(exportQuery);
 console.log("PARAMS:", params);
 
 
-    
     const result = await dataRequest.query(`
       SELECT
         a.id, a.asset_tag, a.tag_no, a.serial_number, a.status, a.condition_status,
@@ -2661,7 +2797,7 @@ router.put('/:id',
       SELECT
         a.id, a.asset_tag, a.serial_number, a.status, a.condition_status, a.importance, a.purchase_date,
         a.warranty_start_date, a.warranty_end_date, a.eol_date, a.eos_date,
-        a.purchase_cost, a.vendor_id, a.invoice_number, a.notes, a.asset_type, a.parent_asset_id, a.installation_date,
+        a.purchase_cost, a.vendor_id as asset_vendor_id, a.invoice_number, a.notes, a.asset_type, a.parent_asset_id, a.installation_date,
         a.installation_notes, a.created_at, a.updated_at,
         u.location_id, a.assigned_to,
         p.name as product_name, p.model as product_model,
