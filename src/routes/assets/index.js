@@ -878,6 +878,21 @@ console.log("RAW QUERY:");
 console.log(exportQuery);
 console.log("PARAMS:", params);
 
+    console.log("===== EXPORT FINAL QUERY =====");
+
+let finalExportQuery = exportQuery;
+
+params.forEach(p => {
+  finalExportQuery = finalExportQuery.replace(
+    new RegExp(`@${p.name}`, "g"),
+    typeof p.value === "string"
+      ? `'${p.value}'`
+      : p.value
+  );
+});
+
+console.log(finalExportQuery);
+
 
     const result = await dataRequest.query(`
       SELECT
