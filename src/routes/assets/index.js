@@ -250,7 +250,7 @@ console.log("PARAMS:", params);
 SELECT
   a.id, a.asset_tag, a.tag_no, a.serial_number, a.status, a.condition_status, a.importance, a.purchase_date,
   a.warranty_start_date, a.warranty_end_date,
-  a.purchase_cost, a.vendor_id as asset_vendor_id,, a.invoice_number, a.notes, a.created_at, a.updated_at,
+  a.purchase_cost, a.vendor_id as asset_vendor_id, a.invoice_number, a.notes, a.created_at, a.updated_at,
   a.eol_date, a.eos_date,
   a.product_id, a.assigned_to,
   a.asset_type, a.parent_asset_id, a.installation_date, a.removal_date,
