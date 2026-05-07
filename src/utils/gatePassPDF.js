@@ -634,7 +634,7 @@ class GatePassPDF {
     doc.font('Helvetica-Bold')
       .fontSize(8)
       .fillColor(this.colors.gray)
-      .text('Security', secX + 10, y + 8, { lineBreak: false });
+      .text('Issued By', secX + 10, y + 8, { lineBreak: false });
 
     doc.font('Helvetica')
       .fontSize(9)
