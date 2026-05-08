@@ -219,23 +219,7 @@ if (board_id) {
       WHERE ${whereClause}
     `);
 
-    console.log("----- COUNT QUERY -----");
-console.log(`
-SELECT COUNT(*) as total
-FROM assets a
-INNER JOIN products p ON a.product_id = p.id
-LEFT JOIN categories c ON p.category_id = c.id
-LEFT JOIN product_types pt ON p.type_id = pt.id
-LEFT JOIN oems o ON p.oem_id = o.id
-LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
-LEFT JOIN DEPARTMENT_MASTER dept ON u.department_id = dept.department_id
-WHERE ${whereClause}
-`);
-console.log("PARAMS:", params);
-
     const total = countResult.recordset[0].total;
-    console.log("TOTAL ASSETS:", total);
-
     // Get paginated results
     const dataRequest = pool.request();
     params.forEach(param => dataRequest.input(param.name, param.type, param.value));
@@ -260,7 +244,8 @@ SELECT
   subcat.id as subcategory_id, subcat.name as subcategory_name,
   o.id as oem_id, o.name as oem_name,
   v.id as vendor_id, v.name as vendor_name, v.code as vendor_code,
-  u.location_id,
+   COALESCE(a.location_id, u.location_id) as location_id,
+  COALESCE(a.department_id, u.department_id) as department_id,
   u.first_name + ' ' + u.last_name as assigned_user_name,
   u.email as assigned_user_email,
   u.employee_id as assigned_employee_code,
@@ -284,25 +269,19 @@ LEFT JOIN categories subcat ON p.subcategory_id = subcat.id
 LEFT JOIN oems o ON p.oem_id = o.id
 LEFT JOIN vendors v ON a.vendor_id = v.id
 LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
-LEFT JOIN DEPARTMENT_MASTER d ON u.department_id = d.department_id
-LEFT JOIN locations l ON u.location_id = l.id
+LEFT JOIN DEPARTMENT_MASTER d 
+ON COALESCE(a.department_id, u.department_id) = d.department_id
+LEFT JOIN locations l 
+ON COALESCE(a.location_id, u.location_id) = l.id
 WHERE ${whereClause}
 ORDER BY ${safeSortBy} ${safeSortOrder}
 OFFSET @offset ROWS
 FETCH NEXT @limit ROWS ONLY
 `;
 
-console.log("===== RAW QUERY =====");
-console.log(dataQuery);
-
-console.log("===== PARAMETERS =====");
-
 params.forEach(p => {
   console.log(`${p.name} = ${p.value}`);
 });
-
-console.log("offset =", offset);
-console.log("limit =", limit);
 
 let finalQuery = dataQuery;
 
@@ -318,10 +297,6 @@ params.forEach(p => {
 finalQuery = finalQuery.replace('@offset', offset);
 finalQuery = finalQuery.replace('@limit', limit);
 
-console.log("===== FINAL QUERY (RUN IN SSMS) =====");
-console.log(finalQuery);
-
-    console.log("----- DATA QUERY -----");
     const result = await dataRequest.query(`
       SELECT
         a.id, a.asset_tag, a.tag_no, a.serial_number, a.status, a.condition_status, a.importance, a.purchase_date,
@@ -336,7 +311,8 @@ console.log(finalQuery);
         subcat.id as subcategory_id, subcat.name as subcategory_name,
         o.id as oem_id, o.name as oem_name,
         v.id as vendor_id, v.name as vendor_name, v.code as vendor_code,
-        u.location_id,
+        COALESCE(a.location_id, u.location_id) as location_id,
+        COALESCE(a.department_id, u.department_id) as department_id,
         u.first_name + ' ' + u.last_name as assigned_user_name,
         u.email as assigned_user_email,
         u.employee_id as assigned_employee_code,
@@ -360,17 +336,16 @@ console.log(finalQuery);
       LEFT JOIN oems o ON p.oem_id = o.id
       LEFT JOIN vendors v ON a.vendor_id = v.id
       LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
-      LEFT JOIN DEPARTMENT_MASTER d ON u.department_id = d.department_id
-      LEFT JOIN locations l ON u.location_id = l.id
+      LEFT JOIN DEPARTMENT_MASTER d 
+      ON COALESCE(a.department_id, u.department_id) = d.department_id
+      LEFT JOIN locations l 
+      ON COALESCE(a.location_id, u.location_id) = l.id
       WHERE ${whereClause}
       ORDER BY ${safeSortBy} ${safeSortOrder}
       OFFSET @offset ROWS
       FETCH NEXT @limit ROWS ONLY
     `);
 
-      console.log("===== RESULT =====");
-console.log("Total Rows:", result.recordset.length);
-console.log(result.recordset);
 
     const pagination = getPaginationInfo(page, limit, total);
 
@@ -847,7 +822,7 @@ router.get('/export',
     const dataRequest = pool.request();
     params.forEach(param => dataRequest.input(param.name, param.type, param.value));
 
-    console.log("===== EXPORT QUERY =====");
+
 
 let exportQuery = `
 SELECT
@@ -874,11 +849,7 @@ WHERE ${whereClause}
 ORDER BY a.created_at DESC
 `;
 
-console.log("RAW QUERY:");
-console.log(exportQuery);
-console.log("PARAMS:", params);
 
-    console.log("===== EXPORT FINAL QUERY =====");
 
 let finalExportQuery = exportQuery;
 
@@ -890,9 +861,6 @@ params.forEach(p => {
       : p.value
   );
 });
-
-console.log(finalExportQuery);
-
 
     const result = await dataRequest.query(`
       SELECT
@@ -914,18 +882,14 @@ console.log(finalExportQuery);
       LEFT JOIN categories subcat ON p.subcategory_id = subcat.id
       LEFT JOIN oems o ON p.oem_id = o.id
       LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
-      LEFT JOIN locations l ON u.location_id = l.id
-      LEFT JOIN DEPARTMENT_MASTER d ON u.department_id = d.department_id
+      LEFT JOIN locations l ON a.location_id = l.id
+      LEFT JOIN DEPARTMENT_MASTER d ON a.department_id = d.department_id
       LEFT JOIN assets parent ON a.parent_asset_id = parent.id
       WHERE ${whereClause}
       ORDER BY a.created_at DESC
     `);
 
     const assets = result.recordset;
-
-    console.log("===== EXPORT COUNT =====");
-console.log("Total Rows:", result.recordset.length);
-
     
     if (format === 'xlsx') {
       const XLSX = require('xlsx');
@@ -1036,7 +1000,7 @@ router.get('/deleted',
         a.purchase_cost, a.notes, a.created_at, a.updated_at,
         a.product_id, p.name as product_name, p.model as product_model, p.description as product_description,
         p.specifications, p.warranty_period,
-        u.location_id, l.name as location_name, l.address as location_address,
+        u.location_id, u.department_id, l.name as location_name, l.address as location_address, d.name as department_name,
         a.assigned_to, u.first_name + ' ' + u.last_name as assigned_user_name,
         u.email as assigned_user_email, u.employee_id,
         c.id as category_id, c.name as category_name,
@@ -1048,7 +1012,7 @@ router.get('/deleted',
       LEFT JOIN categories sc ON p.subcategory_id = sc.id
       LEFT JOIN oems o ON p.oem_id = o.id
       LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
-      LEFT JOIN locations l ON u.location_id = l.id
+      LEFT JOIN locations l ON COALESCE(a.location_id, u.location_id) = l.id
       WHERE ${whereClause}
       ORDER BY a.${sort_by} ${order.toUpperCase()}
       OFFSET @offset ROWS
@@ -1393,6 +1357,8 @@ router.post('/legacy-import',
             .input('installationNotes', sql.Text, installation_notes)
             .input('vendorId', sql.UniqueIdentifier, asset.vendor_id || null)
             .input('invoiceNumber', sql.VarChar(100), asset.invoice_number || null)
+            .input('locationId', sql.UniqueIdentifier, userLocationId || null)
+            .input('departmentId', sql.UniqueIdentifier, asset.department_id || null)
             .input('isStandbyAsset', sql.Bit, asset.is_standby_asset ? 1 : 0)
             .input('standbyAvailable', sql.Bit, asset.standby_available ? 1 : 0)
             .query(`
@@ -1403,7 +1369,7 @@ router.post('/legacy-import',
                 notes, is_active,
                 asset_type, parent_asset_id, installation_date, installation_notes,
                 vendor_id, invoice_number, is_standby_asset, standby_available,
-                created_at, updated_at
+                created_at, updated_at, location_id, department_id
               ) VALUES (
                 @id, @assetTag, @tagNo, @serialNumber, @productId, @assignedTo,
                 @status, @conditionStatus, @importance, @purchaseDate, @purchaseCost,
@@ -1411,7 +1377,7 @@ router.post('/legacy-import',
                 @notes, 1,
                 @assetType, @parentAssetId, @installationDate, @installationNotes,
                 @vendorId, @invoiceNumber, @isStandbyAsset, @standbyAvailable,
-                GETUTCDATE(), GETUTCDATE()
+                GETUTCDATE(), GETUTCDATE(),  @locationId, @departmentId
               )
             `);
 
@@ -1470,6 +1436,7 @@ router.get('/dropdown',
       status,
       category_id,
       location_id,
+      department_id,
       available_only,
       asset_type,
       exclude_standby,        // NEW: Exclude standby pool assets
@@ -1496,7 +1463,7 @@ router.get('/dropdown',
       FROM assets a
       INNER JOIN products p ON a.product_id = p.id
       LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
-      LEFT JOIN locations l ON u.location_id = l.id
+      LEFT JOIN locations l ON a.location_id = l.id
       WHERE a.is_active = 1
     `;
 
@@ -1918,7 +1885,7 @@ router.get('/:id',
           a.eol_date, a.eos_date,
           a.product_id, p.name as product_name, p.model as product_model, p.description as product_description,
           p.specifications, p.warranty_period,
-          u.location_id, l.name as location_name, l.address as location_address,
+          COALESCE(a.location_id, u.location_id) as location_id, COALESCE(a.department_id, u.department_id) as department_id, l.name as location_name, l.address as location_address, d.name as department_name,
           a.assigned_to, u.first_name + ' ' + u.last_name as assigned_user_name,
           u.email as assigned_user_email, u.employee_id,
           c.id as category_id, c.name as category_name,
@@ -1937,7 +1904,7 @@ router.get('/:id',
         LEFT JOIN categories sc ON p.subcategory_id = sc.id
         LEFT JOIN oems o ON p.oem_id = o.id
         LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
-        LEFT JOIN locations l ON u.location_id = l.id
+        LEFT JOIN locations l ON COALESCE(a.location_id, u.location_id) = l.id
         WHERE a.id = @id AND a.is_active = 1
       `);
 
@@ -2140,14 +2107,14 @@ router.post('/bulk',
             purchase_date, warranty_start_date, warranty_end_date, eol_date, eos_date,
             purchase_cost, notes, is_active,
             asset_type, parent_asset_id, installation_date, installation_notes,
-            created_at, updated_at
+            created_at, updated_at, location_id, department_id
           )
           VALUES (
             @id, @assetTag, @tagNo, @serialNumber, @productId, @assignedTo, @status, @conditionStatus,
             @purchaseDate, @warrantyStartDate, @warrantyEndDate, @eolDate, @eosDate,
             @purchaseCost, @notes, @isActive,
             @assetType, @parentAssetId, @installationDate, @installationNotes,
-            GETUTCDATE(), GETUTCDATE()
+            GETUTCDATE(), GETUTCDATE(), @locationId, @departmentId
           )
         `);
 
@@ -2418,14 +2385,14 @@ router.post('/',
           purchase_date, warranty_end_date, warranty_start_date, eol_date, eos_date,
           purchase_cost, vendor_id, invoice_number, notes, is_active,
           asset_type, parent_asset_id, installation_date, installation_notes, installed_by,
-          created_at, updated_at
+          created_at, updated_at, location_id, department_id
         )
         VALUES (
           @id, @assetTag, @tagNo, @serialNumber, @productId, @assignedTo, @status, @conditionStatus, @importance,
           @purchaseDate, @warrantyEndDate, @warrantyStartDate, @eolDate, @eosDate,
           @purchaseCost, @vendorId, @invoiceNumber, @notes, @isActive,
           @assetType, @parentAssetId, @installationDate, @installationNotes, @installedBy,
-          GETUTCDATE(), GETUTCDATE()
+          GETUTCDATE(), GETUTCDATE(), @locationId, @departmentId
         );
 
         SELECT
@@ -2446,7 +2413,7 @@ router.post('/',
         LEFT JOIN oems o ON p.oem_id = o.id
         LEFT JOIN vendors v ON a.vendor_id = v.id
         LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
-        LEFT JOIN locations l ON u.location_id = l.id
+        LEFT JOIN locations l ON a.location_id = l.id
         LEFT JOIN assets parent ON a.parent_asset_id = parent.id
         LEFT JOIN USER_MASTER installer ON a.installed_by = installer.user_id
         WHERE a.id = @id;
@@ -2578,7 +2545,9 @@ router.put('/:id',
       installation_notes,
       installed_by,
       // Software installations
-      software_installations
+      software_installations,
+      location_id,
+      department_id
     } = req.body;
 
     const pool = await connectDB();
@@ -2726,6 +2695,17 @@ router.put('/:id',
       updateFields.push('assigned_to = @assignedTo');
       updateRequest.input('assignedTo', sql.UniqueIdentifier, assigned_to);
     }
+        if (location_id !== undefined) {
+        updateFields.push('location_id = @locationId');
+        updateRequest.input('locationId', sql.UniqueIdentifier, location_id);
+      }
+
+      if (department_id !== undefined) {
+        updateFields.push('department_id = @departmentId');
+        updateRequest.input('departmentId', sql.UniqueIdentifier, department_id);
+      }
+    
+
     if (status !== undefined) {
       updateFields.push('status = @status');
       updateRequest.input('status', sql.VarChar(20), status);
@@ -2824,14 +2804,15 @@ router.put('/:id',
         o.name as oem_name,
         v.name as vendor_name, v.code as vendor_code,
         parent.asset_tag as parent_asset_tag,
-        installer.first_name + ' ' + installer.last_name as installed_by_name
+        installer.first_name + ' ' + installer.last_name as installed_by_name,
+        COALESCE(a.location_id, u.location_id) as location_id, COALESCE(a.department_id, u.department_id) as department_id
       FROM assets a
       INNER JOIN products p ON a.product_id = p.id
       LEFT JOIN categories c ON p.category_id = c.id
       LEFT JOIN oems o ON p.oem_id = o.id
       LEFT JOIN vendors v ON a.vendor_id = v.id
       LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
-      LEFT JOIN locations l ON u.location_id = l.id
+      LEFT JOIN locations l ON COALESCE(a.location_id, u.location_id) = l.id
       LEFT JOIN assets parent ON a.parent_asset_id = parent.id
       LEFT JOIN USER_MASTER installer ON a.installed_by = installer.user_id
       WHERE a.id = @id;
@@ -3371,7 +3352,7 @@ router.post('/:id/lifecycle/dispose',
                l.id as location_id, l.name as location_name
         FROM assets a
         LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
-        LEFT JOIN locations l ON u.location_id = l.id
+        LEFT JOIN locations l ON a.location_id = l.id
         WHERE a.id = @id AND a.is_active = 1
       `);
 
@@ -3456,6 +3437,8 @@ router.post('/:id/lifecycle/dispose',
 const RepairHistoryController = require('../../controllers/repairHistoryController');
 const TicketAssetsController = require('../../controllers/ticketAssetsController');
 const FaultAnalysisController = require('../../controllers/faultAnalysisController');
+const { query } = require('mssql');
+
 
 /**
  * GET /assets/:id/repair-history
