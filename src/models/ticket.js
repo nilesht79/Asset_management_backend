@@ -661,7 +661,8 @@ class TicketModel {
           SUM(CASE WHEN status = 'closed' THEN 1 ELSE 0 END) AS closed_tickets,
           SUM(CASE WHEN priority = 'critical' OR priority = 'emergency' THEN 1 ELSE 0 END) AS critical_tickets,
           SUM(CASE WHEN due_date < GETUTCDATE() AND status NOT IN ('closed', 'resolved') THEN 1 ELSE 0 END) AS overdue_tickets,
-          SUM(CASE WHEN CAST(closed_at AS DATE) = CAST(GETUTCDATE() AS DATE) THEN 1 ELSE 0 END) AS closed_today
+          SUM(CASE WHEN CAST(closed_at AS DATE) = CAST(GETUTCDATE() AS DATE) THEN 1 ELSE 0 END) AS closed_today,
+          SUM(CASE WHEN CAST(created_at AS DATE) = CAST(GETUTCDATE() AS DATE) THEN 1 ELSE 0 END) AS today_tickets
         FROM TICKETS
         ${whereClause}
       `;
