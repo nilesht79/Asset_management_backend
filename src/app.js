@@ -121,7 +121,8 @@ const startServer = async () => {
     initializeScheduler();
 
     // Start the server
-    const server = app.listen(appConfig.app.port, () => {
+     // const server = app.listen(appConfig.app.port, () => {
+      const server = app.listen(appConfig.app.port, '0.0.0.0', () => {
       console.log(`🚀 Server running on port ${appConfig.app.port}`);
       console.log(`📍 Environment: ${appConfig.app.env}`);
       console.log(`🔗 Health check: ${appConfig.app.url}/health`);
