@@ -329,7 +329,16 @@ router.post('/',
       return sendError(res, 'Purpose is required', 400);
     }
 
-    if (!assets || !Array.isArray(assets) || assets.length === 0) {
+    // Old code to require at least one asset for all gate pass types
+    // if (!assets || !Array.isArray(assets) || assets.length === 0) {
+    //   return sendError(res, 'At least one asset is required', 400);
+    // }
+
+    // For without asset gate pass, assets can be empty if proceed_without_asset is true
+    if (
+      (!assets || !Array.isArray(assets) || assets.length === 0) &&
+      !req.body.proceed_without_asset
+    ) {
       return sendError(res, 'At least one asset is required', 400);
     }
 
@@ -356,22 +365,43 @@ router.post('/',
         ? `${creatorResult.recordset[0].first_name} ${creatorResult.recordset[0].last_name}`
         : 'Unknown';
 
-      // Get first asset's location as from_location
-      const firstAssetLocation = await transaction.request()
-        .input('asset_id', sql.UniqueIdentifier, assets[0].asset_id)
-        .query(`
-          SELECT
-            l.id as location_id,
-            l.name as location_name,
-            CONCAT(l.address, ', ', l.city_name, ', ', l.state_name) as location_address
-          FROM ASSETS a
-          LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
-          LEFT JOIN locations l ON u.location_id = l.id
-          WHERE a.id = @asset_id
-        `);
+     // Old code  Get first asset's location as from_location
+      // const firstAssetLocation = await transaction.request()
+      //   .input('asset_id', sql.UniqueIdentifier, assets[0].asset_id)
+      //   .query(`
+      //     SELECT
+      //       l.id as location_id,
+      //       l.name as location_name,
+      //       CONCAT(l.address, ', ', l.city_name, ', ', l.state_name) as location_address
+      //     FROM ASSETS a
+      //     LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
+      //     LEFT JOIN locations l ON u.location_id = l.id
+      //     WHERE a.id = @asset_id
+      //   `);
 
-      const fromLocation = firstAssetLocation.recordset[0] || {};
+      // const fromLocation = firstAssetLocation.recordset[0] || {};
 
+
+      // New code to handle case when no assets are provided (proceed_without_asset = true)
+      let fromLocation = {};
+
+      if (assets && assets.length > 0) {
+
+        const firstAssetLocation = await transaction.request()
+          .input('asset_id', sql.UniqueIdentifier, assets[0].asset_id)
+          .query(`
+            SELECT
+              l.id as location_id,
+              l.name as location_name,
+              CONCAT(l.address, ', ', l.city_name, ', ', l.state_name) as location_address
+            FROM ASSETS a
+            LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
+            LEFT JOIN locations l ON u.location_id = l.id
+            WHERE a.id = @asset_id
+          `);
+
+        fromLocation = firstAssetLocation.recordset[0] || {};
+      }
       // Get vendor info if disposal/service
       let vendorName = null;
       if (gate_pass_type === 'disposal_service' && vendor_id) {
