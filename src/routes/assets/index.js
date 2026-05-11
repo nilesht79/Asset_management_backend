@@ -996,11 +996,11 @@ router.get('/deleted',
 
     const result = await dataRequest.query(`
       SELECT
-        a.id, a.asset_tag, a.status, a.condition_status, a.purchase_date, a.warranty_end_date,
+        a.id, a.asset_tag, a.status, a.serial_number, a.condition_status, a.purchase_date, a.warranty_end_date,
         a.purchase_cost, a.notes, a.created_at, a.updated_at,
         a.product_id, p.name as product_name, p.model as product_model, p.description as product_description,
         p.specifications, p.warranty_period,
-        u.location_id, u.department_id, l.name as location_name, l.address as location_address, d.name as department_name,
+        u.location_id, u.department_id, l.name as location_name, l.address as location_address, d.department_name as department_name,
         a.assigned_to, u.first_name + ' ' + u.last_name as assigned_user_name,
         u.email as assigned_user_email, u.employee_id,
         c.id as category_id, c.name as category_name,
@@ -1012,6 +1012,7 @@ router.get('/deleted',
       LEFT JOIN categories sc ON p.subcategory_id = sc.id
       LEFT JOIN oems o ON p.oem_id = o.id
       LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
+      LEFT JOIN DEPARTMENT_MASTER d ON COALESCE(a.department_id, u.department_id) = d.department_id
       LEFT JOIN locations l ON COALESCE(a.location_id, u.location_id) = l.id
       WHERE ${whereClause}
       ORDER BY a.${sort_by} ${order.toUpperCase()}
