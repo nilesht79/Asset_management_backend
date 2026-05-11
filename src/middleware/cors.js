@@ -53,9 +53,14 @@ const corsMiddleware = cors({
     if (process.env.NODE_ENV === 'development') return callback(null, true);
 
     // Check if origin is in allowed list
-    if (allowedOrigins.includes(origin) || origin.includes('localhost') || origin.includes('127.0.0.1')) {
-      return callback(null, true);
-    }
+    if (
+  allowedOrigins.includes(origin) ||
+  origin.includes('localhost') ||
+  origin.includes('127.0.0.1') ||
+  origin.includes('172.16.150.80')
+) {
+  return callback(null, true);
+}
 
     callback(new Error('Not allowed by CORS'));
   },
@@ -74,11 +79,13 @@ const corsForRoute = (origins = []) => {
     origin: function (origin, callback) {
       if (!origin) return callback(null, true);
       
-      if (origins.includes(origin) || 
-          process.env.NODE_ENV === 'development' ||
-          origin.includes('localhost')) {
-        return callback(null, true);
-      }
+     if (
+  origins.includes(origin) ||
+  process.env.NODE_ENV === 'development' ||
+  origin.includes('localhost') ||
+  origin.includes('127.0.0.1') ||
+  origin.includes('172.16.150.80')
+) {
       
       callback(new Error('Not allowed by CORS for this route'));
     }
