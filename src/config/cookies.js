@@ -17,8 +17,8 @@ function getSecureCookieOptions(type = 'access', maxAge = 3600000) {
   // Base security configuration
   const baseOptions = {
     httpOnly: true,       // Prevent XSS attacks by making cookies inaccessible to JavaScript
-    secure: isProduction, // Secure in production, allow HTTP in development for localhost
-    sameSite: 'strict',   // Strict CSRF protection
+    secure: false, // Secure in production, allow HTTP in development for localhost
+    sameSite: 'lax',   // Strict CSRF protection
     path: '/',           // Cookie available on all paths
     domain: process.env.COOKIE_DOMAIN || undefined, // Set domain if specified in env
   };
@@ -66,8 +66,8 @@ function getClearCookieOptions() {
 
   return {
     httpOnly: true,
-    secure: isProduction, // Must match the secure setting used when setting cookies
-    sameSite: 'strict',   // Must match the sameSite setting used when setting cookies
+    secure: false, // Must match the secure setting used when setting cookies
+    sameSite: 'lax',   // Must match the sameSite setting used when setting cookies
     path: '/',           // Must match the path used when setting cookies
     domain: process.env.COOKIE_DOMAIN || undefined, // Must match domain if set
   };
