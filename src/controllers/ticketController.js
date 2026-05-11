@@ -343,7 +343,10 @@ This is an automated notification. Please do not reply to this email.
         assigned_to_engineer_id,
         created_by_user_id,
         search,
-        is_guest
+        is_guest,
+        // Date range filters
+        start_date,
+        end_date
       } = req.query;
 
       const filters = {};
@@ -355,6 +358,9 @@ This is an automated notification. Please do not reply to this email.
       if (assigned_to_engineer_id) filters.assigned_to_engineer_id = assigned_to_engineer_id;
       if (created_by_user_id) filters.created_by_user_id = created_by_user_id;
       if (search) filters.search = search;
+      // Date range filters for tickets in date range
+      if (start_date) filters.start_date = start_date;
+      if (end_date) filters.end_date = end_date;
       if (is_guest !== undefined) filters.is_guest = parseInt(is_guest);
 
       const pagination = {
