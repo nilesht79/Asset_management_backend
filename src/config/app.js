@@ -4,9 +4,9 @@ module.exports = {
   app: {
     name: 'Unified ITSM Platform',
     version: '1.0.0',
-    port: process.env.PORT || 5000,
+    port: process.env.PORT || 3001,
     env: process.env.NODE_ENV || 'development',
-    url: process.env.APP_URL || 'http://localhost:5000',
+    url: process.env.APP_URL || 'http://localhost:3001',
     apiVersion: process.env.API_VERSION || 'v1'
   },
   
