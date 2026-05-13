@@ -232,36 +232,82 @@ const EmailSettingsController = {
    * Toggle email service
    * POST /api/v1/settings/email/toggle
    */
+  // async toggleService(req, res) {
+  //   try {
+  //     const { is_enabled } = req.body;
+
+  //     const config = await emailService.getConfiguration();
+  //     if (!config) {
+  //       return res.status(400).json({
+  //         success: false,
+  //         message: 'No email configuration found. Please configure email settings first.'
+  //       });
+  //     }
+
+  //     await emailService.saveConfiguration({
+  //       ...config,
+  //       is_enabled: is_enabled
+  //     }, req.user.user_id);
+
+  //     res.json({
+  //       success: true,
+  //       message: `Email service ${is_enabled ? 'enabled' : 'disabled'} successfully`
+  //     });
+  //   } catch (error) {
+  //     console.error('Error toggling email service:', error);
+  //     res.status(500).json({
+  //       success: false,
+  //       message: 'Failed to toggle email service',
+  //       error: error.message
+  //     });
+  //   }
+  // },
+
   async toggleService(req, res) {
-    try {
-      const { is_enabled } = req.body;
+  try {
 
-      const config = await emailService.getConfiguration();
-      if (!config) {
-        return res.status(400).json({
-          success: false,
-          message: 'No email configuration found. Please configure email settings first.'
-        });
-      }
+    console.log('Toggle API hit');
+    console.log('Body:', req.body);
 
-      await emailService.saveConfiguration({
-        ...config,
-        is_enabled: is_enabled
-      }, req.user.user_id);
+    const { is_enabled } = req.body;
 
-      res.json({
-        success: true,
-        message: `Email service ${is_enabled ? 'enabled' : 'disabled'} successfully`
-      });
-    } catch (error) {
-      console.error('Error toggling email service:', error);
-      res.status(500).json({
+    const config = await emailService.getConfiguration();
+
+    if (!config) {
+      return res.status(400).json({
         success: false,
-        message: 'Failed to toggle email service',
-        error: error.message
+        message: 'No email configuration found'
       });
     }
-  },
+
+    const pool = await connectDB();
+
+    await pool.request()
+      .input('is_enabled', sql.Bit, is_enabled ? 1 : 0)
+      .query(`
+        UPDATE EMAIL_CONFIGURATION
+        SET
+          is_enabled = @is_enabled,
+          updated_at = GETUTCDATE()
+      `);
+
+    res.json({
+      success: true,
+      message: `Email service ${is_enabled ? 'enabled' : 'disabled'} successfully`
+    });
+
+  } catch (error) {
+
+    console.log('TOGGLE ERROR:', error);
+    console.log('MESSAGE:', error.message);
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to toggle email service',
+      error: error.message
+    });
+  }
+},
 
   /**
    * Get Microsoft OAuth authorization URL
