@@ -403,7 +403,8 @@ class TicketModel {
           -- Guest Information
           gt.guest_name,
           gt.guest_email,
-          gt.guest_phone
+          gt.guest_phone,
+          c.name AS asset_subcategory
         FROM TICKETS t
         LEFT JOIN USER_MASTER u1 ON t.created_by_user_id = u1.user_id
         LEFT JOIN USER_MASTER u2 ON t.created_by_coordinator_id = u2.user_id
@@ -411,6 +412,10 @@ class TicketModel {
         LEFT JOIN DEPARTMENT_MASTER d ON t.department_id = d.department_id
         LEFT JOIN locations l ON t.location_id = l.id
         LEFT JOIN GUEST_TICKETS gt ON t.ticket_id = gt.ticket_id
+        LEFT JOIN ticket_assets ta ON ta.ticket_id = t.ticket_id
+        LEFT JOIN assets a ON a.id = ta.asset_id
+        LEFT JOIN products p ON p.id = a.product_id
+        LEFT JOIN categories c ON c.id = p.subcategory_id
         ${whereClause}
         ORDER BY t.created_at DESC
         OFFSET @offset ROWS
