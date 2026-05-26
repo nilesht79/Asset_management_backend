@@ -1162,28 +1162,55 @@ async function parseLegacyAssetFile(fileBuffer, referenceData) {
   const seenSerialNumbers = new Set();
 
   // Create lookup maps for faster matching
-  const productsByName = new Map();
-  const productsById = new Map();
-  products.forEach(p => {
-    productsByName.set(p.name.toLowerCase().trim(), p);
-    productsById.set(p.id.toLowerCase(), p);
-  });
+const productsByName = new Map();
+const productsById = new Map();
 
-  const usersByEmail = new Map();
-  const usersByEmployeeId = new Map();
-  users.forEach(u => {
-    usersByEmail.set(u.email.toLowerCase().trim(), u);
-    if (u.employee_id) {
-      usersByEmployeeId.set(u.employee_id.toLowerCase().trim(), u);
-    }
-  });
+products.forEach((p) => {
+  if (p && p.name) {
+    productsByName.set(
+      String(p.name).toLowerCase().trim(),
+      p
+    );
+  }
 
-  // Create vendor lookup map
-  const vendorsByName = new Map();
-  vendors.forEach(v => {
-    vendorsByName.set(v.name.toLowerCase().trim(), v);
-  });
+  if (p && p.id) {
+    productsById.set(
+      String(p.id).toLowerCase().trim(),
+      p
+    );
+  }
+});
 
+const usersByEmail = new Map();
+const usersByEmployeeId = new Map();
+
+users.forEach((u) => {
+  if (u && u.email) {
+    usersByEmail.set(
+      String(u.email).toLowerCase().trim(),
+      u
+    );
+  }
+
+  if (u && u.employee_id) {
+    usersByEmployeeId.set(
+      String(u.employee_id).toLowerCase().trim(),
+      u
+    );
+  }
+});
+
+// Create vendor lookup map
+const vendorsByName = new Map();
+
+vendors.forEach((v) => {
+  if (v && v.name) {
+    vendorsByName.set(
+      String(v.name).toLowerCase().trim(),
+      v
+    );
+  }
+});
   worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
     // Skip header row and sample rows (rows 1-4)
     if (rowNumber <= 1) return;
