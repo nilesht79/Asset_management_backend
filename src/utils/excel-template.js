@@ -1162,28 +1162,57 @@ async function parseLegacyAssetFile(fileBuffer, referenceData) {
   const seenSerialNumbers = new Set();
 
   // Create lookup maps for faster matching
-  const productsByName = new Map();
-  const productsById = new Map();
-  products.forEach(p => {
-    productsByName.set(p.name.toLowerCase().trim(), p);
-    productsById.set(p.id.toLowerCase(), p);
-  });
+const productsByName = new Map();
+const productsById = new Map();
 
-  const usersByEmail = new Map();
-  const usersByEmployeeId = new Map();
-  users.forEach(u => {
-    usersByEmail.set(u.email.toLowerCase().trim(), u);
-    if (u.employee_id) {
-      usersByEmployeeId.set(u.employee_id.toLowerCase().trim(), u);
-    }
-  });
+products.forEach(p => {
+  if (p?.name) {
+    productsByName.set(
+      String(p.name).toLowerCase().trim(),
+      p
+    );
+  }
 
-  // Create vendor lookup map
-  const vendorsByName = new Map();
-  vendors.forEach(v => {
-    vendorsByName.set(v.name.toLowerCase().trim(), v);
-  });
+  if (p?.id) {
+    productsById.set(
+      String(p.id).toLowerCase().trim(),
+      p
+    );
+  }
+});
 
+const usersByEmail = new Map();
+const usersByEmployeeId = new Map();
+
+users.forEach(u => {
+
+  if (u?.email) {
+    usersByEmail.set(
+      String(u.email).toLowerCase().trim(),
+      u
+    );
+  }
+
+  if (u?.employee_id) {
+    usersByEmployeeId.set(
+      String(u.employee_id).toLowerCase().trim(),
+      u
+    );
+  }
+});
+
+// Create vendor lookup map
+const vendorsByName = new Map();
+
+vendors.forEach(v => {
+
+  if (v?.name) {
+    vendorsByName.set(
+      String(v.name).toLowerCase().trim(),
+      v
+    );
+  }
+});
   worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
     // Skip header row and sample rows (rows 1-4)
     if (rowNumber <= 1) return;
@@ -1226,23 +1255,25 @@ async function parseLegacyAssetFile(fileBuffer, referenceData) {
 
     // Check for duplicates within file
     if (rowData.serial_number) {
-      if (seenSerialNumbers.has(rowData.serial_number.toLowerCase())) {
+      if (seenSerialNumbers.has(String(rowData.serial_number).toLowerCase().trim())
+      {  
         errors.push('Duplicate serial number within file');
       } else {
-        seenSerialNumbers.add(rowData.serial_number.toLowerCase());
+        // seenSerialNumbers.add(rowData.serial_number.toLowerCase());
+        seenSerialNumbers.add(String(rowData.serial_number).toLowerCase().trim());
       }
     }
 
     // Check for duplicates in database
-    if (rowData.serial_number && existingSerialNumbers.includes(rowData.serial_number.toLowerCase())) {
+    if (rowData.serial_number && existingSerialNumbers.includes(String(rowData.serial_number).toLowerCase().trim()
+) {
       errors.push('Serial number already exists in database');
     }
 
     // Match product (by ID or name)
     let product = null;
     if (rowData.product_input) {
-      product = productsById.get(rowData.product_input.toLowerCase()) ||
-                productsByName.get(rowData.product_input.toLowerCase());
+      product = productsById.get(String(rowData.product_input).toLowerCase().trim()) || productsByName.get(String(rowData.product_input).toLowerCase().trim())
 
       if (!product) {
         errors.push(`Product not found: ${rowData.product_input}`);
@@ -1252,8 +1283,8 @@ async function parseLegacyAssetFile(fileBuffer, referenceData) {
     // Match user if assigned_to is provided (asset will inherit location from user)
     let assignedUser = null;
     if (rowData.assigned_to_input) {
-      assignedUser = usersByEmail.get(rowData.assigned_to_input.toLowerCase()) ||
-                     usersByEmployeeId.get(rowData.assigned_to_input.toLowerCase());
+      assignedUser = usersByEmail.get(String(rowData.assigned_to_input).toLowerCase().trim()) ||
+                     usersByEmployeeId.get(String(rowData.assigned_to_input).toLowerCase().trim())
 
       if (!assignedUser) {
         errors.push(`User not found: ${rowData.assigned_to_input}`);
@@ -1263,7 +1294,7 @@ async function parseLegacyAssetFile(fileBuffer, referenceData) {
     // Match vendor if vendor_name is provided
     let vendor = null;
     if (rowData.vendor_name) {
-      vendor = vendorsByName.get(rowData.vendor_name.toLowerCase());
+      vendor = vendorsByName.get(String(rowData.vendor_name).toLowerCase().trim())
       if (!vendor) {
         warnings.push(`Vendor not found: ${rowData.vendor_name}. Will be left empty.`);
       }
