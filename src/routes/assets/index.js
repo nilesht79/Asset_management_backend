@@ -709,7 +709,7 @@ router.get('/user/:userId/assets',
 
 // GET /assets/export - Export assets to Excel
 router.get('/export',
-  requireRole(['superadmin', 'admin', 'coordinator']),
+  requireRole(['superadmin', 'admin', 'coordinator','it_head']),
   asyncHandler(async (req, res) => {
     const {
       format = 'xlsx',
