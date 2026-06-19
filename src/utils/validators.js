@@ -453,7 +453,7 @@ const validators = {
       assigned_to: Joi.string().uuid().optional().allow(null),
       location_id: Joi.string().uuid().optional().allow(null),
       department_id: Joi.string().uuid().optional().allow(null),
-      status: Joi.string().valid('available', 'assigned', 'in_use', 'under_repair', 'disposed', 'maintenance').optional(),
+      status: Joi.string().valid('available', 'assigned', 'in_use', 'under_repair', 'disposed', 'maintenance', 'not found').optional(),
       condition_status: Joi.string().valid('excellent', 'good', 'fair', 'needs_repair', 'poor').optional(),
       importance: Joi.string().valid('critical', 'high', 'medium', 'low').optional(),
       purchase_date: Joi.date().optional().allow(null),
