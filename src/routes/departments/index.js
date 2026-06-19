@@ -204,7 +204,8 @@ router.get('/users',
   },
   requireDynamicPermission(),
   asyncHandler(async (req, res) => {
-    const { limit = 100, search } = req.query;
+    // const { limit = 100, search } = req.query;
+    const { limit = 10000, search } = req.query;
     
     const pool = await connectDB();
     
