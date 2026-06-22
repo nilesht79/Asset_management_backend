@@ -1958,8 +1958,7 @@ router.post('/bulk',
 
     // Check for existing serial numbers in database
     if (serialNumbers.length > 0) {
-      console.log('userLocationId =', userLocationId);
-console.log('department_id =', asset.department_id);
+      
       const request = pool.request();
       serialNumbers.forEach((sn, i) => request.input(`serial${i}`, sql.VarChar(100), sn));
       const existingResult = await request.query(`
@@ -2062,6 +2061,9 @@ console.log('department_id =', asset.department_id);
             userLocationId = userResult.recordset[0].location_id;
           }
         }
+
+        console.log('userLocationId =', userLocationId);
+console.log('department_id =', asset.department_id);
 
         
         // Generate unique tag_no
