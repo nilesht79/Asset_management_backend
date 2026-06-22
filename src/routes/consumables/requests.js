@@ -58,9 +58,18 @@ router.get('/',
     // Non-admin users can only see their own requests or requests they created
     if (!['admin', 'superadmin', 'coordinator'].includes(userRole)) {
       // Engineers can see requests they created on behalf of others OR their own requests
+      // if (userRole === 'engineer') {
+      //   whereClause += ' AND (cr.requested_by = @user_id OR cr.created_by = @user_id)';
+      // } 
       if (userRole === 'engineer') {
-        whereClause += ' AND (cr.requested_by = @user_id OR cr.created_by = @user_id)';
-      } else {
+          whereClause += `
+            AND (
+              cr.requested_by = @user_id
+              OR cr.created_by = @user_id
+              OR cr.assigned_engineer = @user_id
+            )
+          `;
+        } else {
         whereClause += ' AND cr.requested_by = @user_id';
       }
       params.push({ name: 'user_id', type: sql.UniqueIdentifier, value: userId });
