@@ -1956,6 +1956,8 @@ router.post('/bulk',
 
     // Check for existing serial numbers in database
     if (serialNumbers.length > 0) {
+      console.log('userLocationId =', userLocationId);
+console.log('department_id =', asset.department_id);
       const request = pool.request();
       serialNumbers.forEach((sn, i) => request.input(`serial${i}`, sql.VarChar(100), sn));
       const existingResult = await request.query(`
@@ -2105,6 +2107,8 @@ router.post('/bulk',
           .input('parentAssetId', sql.UniqueIdentifier, parentAssetId)
           .input('installationDate', sql.DateTime, asset_type === 'component' ? new Date() : null)
           .input('installationNotes', sql.Text, installation_notes || null)
+          .input('locationId', sql.UniqueIdentifier, userLocationId || null)
+          .input('departmentId', sql.UniqueIdentifier, null);
          
 
         await request.query(`
