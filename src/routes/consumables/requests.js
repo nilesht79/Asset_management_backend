@@ -665,27 +665,63 @@ router.put('/:id/approve',
       return sendError(res, 'Invalid engineer selected or user is not an engineer', 400);
     }
 
-    // Determine source location for stock - prefer specified location, then requester's location, then any available
-    const sourceLocationId = location_id || reqData.requester_location_id || null;
+    // // Determine source location for stock - prefer specified location, then requester's location, then any available
+    // const sourceLocationId = location_id || reqData.requester_location_id || null;
 
-    // Check stock availability at the determined location
-    const stockCheck = await pool.request()
-      .input('consumable_id', sql.UniqueIdentifier, reqData.consumable_id)
-      .input('location_id', sql.UniqueIdentifier, sourceLocationId)
-      .query(`
-        SELECT id, quantity_in_stock, COALESCE(quantity_reserved, 0) as quantity_reserved, location_id
-        FROM consumable_inventory
-        WHERE consumable_id = @consumable_id
-          AND (
-            (@location_id IS NOT NULL AND location_id = @location_id) OR
-            (@location_id IS NULL)
-          )
-        ORDER BY quantity_in_stock DESC
-      `);
+    // // Check stock availability at the determined location
+    // const stockCheck = await pool.request()
+    //   .input('consumable_id', sql.UniqueIdentifier, reqData.consumable_id)
+    //   .input('location_id', sql.UniqueIdentifier, sourceLocationId)
+    //   .query(`
+    //     SELECT id, quantity_in_stock, COALESCE(quantity_reserved, 0) as quantity_reserved, location_id
+    //     FROM consumable_inventory
+    //     WHERE consumable_id = @consumable_id
+    //       AND (
+    //         (@location_id IS NOT NULL AND location_id = @location_id) OR
+    //         (@location_id IS NULL)
+    //       )
+    //     ORDER BY quantity_in_stock DESC
+    //   `);
 
-    if (stockCheck.recordset.length === 0) {
-      return sendError(res, 'No inventory record found for this consumable', 400);
-    }
+    // if (stockCheck.recordset.length === 0) {
+    //   return sendError(res, 'No inventory record found for this consumable', 400);
+    // }
+
+    let sourceLocationId = location_id || reqData.requester_location_id;
+
+let stockCheck = await pool.request()
+  .input('consumable_id', sql.UniqueIdentifier, reqData.consumable_id)
+  .input('location_id', sql.UniqueIdentifier, sourceLocationId)
+  .query(`
+    SELECT id,
+           quantity_in_stock,
+           COALESCE(quantity_reserved,0) as quantity_reserved,
+           location_id
+    FROM consumable_inventory
+    WHERE consumable_id = @consumable_id
+      AND location_id = @location_id
+  `);
+
+// Fallback to any location having stock
+if (stockCheck.recordset.length === 0) {
+  stockCheck = await pool.request()
+    .input('consumable_id', sql.UniqueIdentifier, reqData.consumable_id)
+    .query(`
+      SELECT TOP 1
+             id,
+             quantity_in_stock,
+             COALESCE(quantity_reserved,0) as quantity_reserved,
+             location_id
+      FROM consumable_inventory
+      WHERE consumable_id = @consumable_id
+        AND quantity_in_stock > COALESCE(quantity_reserved,0)
+      ORDER BY quantity_in_stock DESC
+    `);
+}
+
+if (stockCheck.recordset.length === 0) {
+  return sendError(res, 'No stock available for this consumable', 400);
+}
 
     const stockRecord = stockCheck.recordset[0];
     const availableStock = stockRecord.quantity_in_stock - stockRecord.quantity_reserved;
