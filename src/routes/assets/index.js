@@ -2063,6 +2063,25 @@ console.log('department_id =', asset.department_id);
           }
         }
 
+        let userLocationId = null;
+
+        if (asset.assigned_to) {
+          const userResult = await pool.request()
+            .input('userId', sql.UniqueIdentifier, asset.assigned_to)
+            .query(`
+              SELECT location_id, department_id
+              FROM USER_MASTER
+              WHERE user_id = @userId
+            `);
+        
+          if (userResult.recordset.length > 0) {
+            userLocationId = userResult.recordset[0].location_id;
+        
+            if (!asset.department_id) {
+              asset.department_id = userResult.recordset[0].department_id;
+            }
+          }
+        }
         // Generate unique tag_no
         const tagNo = await generateUniqueTagNo(assetTag, userLocationId);
 
