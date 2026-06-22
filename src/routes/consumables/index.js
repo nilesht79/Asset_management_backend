@@ -492,30 +492,67 @@ router.get('/inventory',
     const { search, category_id, low_stock } = req.query;
     const pool = await connectDB();
 
+    // let whereClause = 'WHERE c.is_active = 1';
+    // const request = pool.request();
+
+    // if (search) {
+    //   whereClause += ` AND (c.name LIKE @search OR c.sku LIKE @search)`;
+    //   request.input('search', sql.NVarChar, `%${search}%`);
+    // }
+
+    // if (category_id) {
+    //   whereClause += ` AND c.category_id = @category_id`;
+    //   request.input('category_id', sql.UniqueIdentifier, category_id);
+    // }
+
+    // let havingClause = '';
+    // if (low_stock === 'true') {
+    //   havingClause = 'HAVING COALESCE(SUM(ci.quantity_in_stock), 0) <= c.reorder_level';
+    // }
+
+    // // Get total count
+    // const countResult = await pool.request()
+    //   .query(`
+    //     SELECT COUNT(DISTINCT c.id) as total
+    //     FROM consumables c
+    //     ${whereClause.replace('@search', `'%${search || ''}%'`).replace('@category_id', `'${category_id || ''}'`)}
+    //   `);
+
     let whereClause = 'WHERE c.is_active = 1';
-    const request = pool.request();
 
-    if (search) {
-      whereClause += ` AND (c.name LIKE @search OR c.sku LIKE @search)`;
-      request.input('search', sql.NVarChar, `%${search}%`);
-    }
-
-    if (category_id) {
-      whereClause += ` AND c.category_id = @category_id`;
-      request.input('category_id', sql.UniqueIdentifier, category_id);
-    }
-
-    let havingClause = '';
-    if (low_stock === 'true') {
-      havingClause = 'HAVING COALESCE(SUM(ci.quantity_in_stock), 0) <= c.reorder_level';
-    }
-
-    // Get total count
-    const countResult = await pool.request()
-      .query(`
+      const request = pool.request();
+      
+      if (search) {
+        whereClause += ` AND (c.name LIKE @search OR c.sku LIKE @search)`;
+        request.input('search', sql.NVarChar, `%${search}%`);
+      }
+      
+      if (category_id) {
+        whereClause += ` AND c.category_id = @category_id`;
+        request.input('category_id', sql.UniqueIdentifier, category_id);
+      }
+      
+      let havingClause = '';
+      
+      if (low_stock === 'true') {
+        havingClause =
+          'HAVING COALESCE(SUM(ci.quantity_in_stock), 0) <= c.reorder_level';
+      }
+      
+      const countRequest = pool.request();
+      
+      if (search) {
+        countRequest.input('search', sql.NVarChar, `%${search}%`);
+      }
+      
+      if (category_id) {
+        countRequest.input('category_id', sql.UniqueIdentifier, category_id);
+      }
+      
+      const countResult = await countRequest.query(`
         SELECT COUNT(DISTINCT c.id) as total
         FROM consumables c
-        ${whereClause.replace('@search', `'%${search || ''}%'`).replace('@category_id', `'${category_id || ''}'`)}
+        ${whereClause}
       `);
     const total = countResult.recordset[0].total;
 
