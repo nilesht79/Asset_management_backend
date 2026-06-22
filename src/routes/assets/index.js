@@ -2104,7 +2104,7 @@ router.post('/bulk',
           .input('assetType', sql.VarChar(20), asset_type)
           .input('parentAssetId', sql.UniqueIdentifier, parentAssetId)
           .input('installationDate', sql.DateTime, asset_type === 'component' ? new Date() : null)
-          .input('installationNotes', sql.Text, installation_notes || null);
+          .input('installationNotes', sql.Text, installation_notes || null)
           .input('locationId', sql.UniqueIdentifier, userLocationId || null)
           .input('departmentId', sql.UniqueIdentifier, asset.department_id || null)
 
