@@ -2105,6 +2105,8 @@ router.post('/bulk',
           .input('parentAssetId', sql.UniqueIdentifier, parentAssetId)
           .input('installationDate', sql.DateTime, asset_type === 'component' ? new Date() : null)
           .input('installationNotes', sql.Text, installation_notes || null);
+          .input('locationId', sql.UniqueIdentifier, userLocationId || null)
+          .input('departmentId', sql.UniqueIdentifier, asset.department_id || null)
 
         await request.query(`
           INSERT INTO assets (
