@@ -1362,8 +1362,10 @@ router.post('/legacy-import',
             .input('installationNotes', sql.Text, installation_notes)
             .input('vendorId', sql.UniqueIdentifier, asset.vendor_id || null)
             .input('invoiceNumber', sql.VarChar(100), asset.invoice_number || null)
-            .input('locationId', sql.UniqueIdentifier, userLocationId || null)
-            .input('departmentId', sql.UniqueIdentifier, asset.department_id || null)
+            // .input('locationId', sql.UniqueIdentifier, userLocationId || null)
+            // .input('departmentId', sql.UniqueIdentifier, asset.department_id || null)
+            .input('locationId', sql.UniqueIdentifier, null)
+            .input('departmentId', sql.UniqueIdentifier, null)
             .input('isStandbyAsset', sql.Bit, asset.is_standby_asset ? 1 : 0)
             .input('standbyAvailable', sql.Bit, asset.standby_available ? 1 : 0)
             .query(`
