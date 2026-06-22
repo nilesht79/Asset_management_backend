@@ -2107,8 +2107,8 @@ console.log('department_id =', asset.department_id);
           .input('parentAssetId', sql.UniqueIdentifier, parentAssetId)
           .input('installationDate', sql.DateTime, asset_type === 'component' ? new Date() : null)
           .input('installationNotes', sql.Text, installation_notes || null)
-          .input('locationId', sql.UniqueIdentifier, userLocationId || null)
-          .input('departmentId', sql.UniqueIdentifier, null);
+          .input('locationId', sql.UniqueIdentifier, null)
+          .input('departmentId', sql.UniqueIdentifier, null)
          
 
         await request.query(`
