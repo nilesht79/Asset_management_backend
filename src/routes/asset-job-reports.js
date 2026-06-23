@@ -157,9 +157,6 @@ router.get('/',
 
         -- Current location (fallback: movement location -> user's location)
         am.location_id,
-        // COALESCE(loc.name, am.location_name, user_loc.name) as location_name,
-        // COALESCE(loc.building, user_loc.building) as location_building,
-        // COALESCE(loc.floor, user_loc.floor) as location_floor,
         loc.name as location_name,
         loc.building as location_building,
         loc.floor as location_floor,
@@ -203,7 +200,6 @@ router.get('/',
       LEFT JOIN categories cat ON p.category_id = cat.id
       LEFT JOIN USER_MASTER assigned_user ON am.assigned_to = assigned_user.user_id
       LEFT JOIN DEPARTMENT_MASTER assigned_dept ON assigned_user.department_id = assigned_dept.department_id
-      // LEFT JOIN locations loc ON am.location_id = loc.id
       LEFT JOIN locations loc ON a.location_id = loc.id
       LEFT JOIN locations user_loc ON assigned_user.location_id = user_loc.id
       LEFT JOIN USER_MASTER prev_user ON am.previous_user_id = prev_user.user_id
@@ -395,9 +391,6 @@ router.get('/export/excel',
         COALESCE(assigned_user.first_name + ' ' + assigned_user.last_name, am.assigned_to_name) as [Assigned To],
         assigned_user.employee_id as [Emp Code],
         assigned_dept.department_name as [Department],
-        // COALESCE(loc.name, am.location_name, user_loc.name) as [Location],
-        // COALESCE(loc.building, user_loc.building) as [Building],
-        // COALESCE(loc.floor, user_loc.floor) as [Floor],
         loc.name as [Location],
         loc.building as [Building],
         loc.floor as [Floor],
@@ -414,7 +407,6 @@ router.get('/export/excel',
       LEFT JOIN categories cat ON p.category_id = cat.id
       LEFT JOIN USER_MASTER assigned_user ON am.assigned_to = assigned_user.user_id
       LEFT JOIN DEPARTMENT_MASTER assigned_dept ON assigned_user.department_id = assigned_dept.department_id
-      // LEFT JOIN locations loc ON am.location_id = loc.id
       LEFT JOIN locations loc ON a.location_id = loc.id
       LEFT JOIN locations user_loc ON assigned_user.location_id = user_loc.id
       LEFT JOIN USER_MASTER prev_user ON am.previous_user_id = prev_user.user_id
@@ -544,9 +536,6 @@ router.get('/:id',
 
           -- Current location (fallback: movement location -> user's location)
           am.location_id,
-          // COALESCE(loc.name, am.location_name, user_loc.name) as location_name,
-          // COALESCE(loc.building, user_loc.building) as location_building,
-          // COALESCE(loc.floor, user_loc.floor) as location_floor,
           loc.name as location_name,
           loc.building as location_building,
           loc.floor as location_floor,
@@ -592,7 +581,6 @@ router.get('/:id',
         LEFT JOIN categories cat ON p.category_id = cat.id
         LEFT JOIN USER_MASTER assigned_user ON am.assigned_to = assigned_user.user_id
         LEFT JOIN DEPARTMENT_MASTER assigned_dept ON assigned_user.department_id = assigned_dept.department_id
-        // LEFT JOIN locations loc ON am.location_id = loc.id
         LEFT JOIN locations loc ON a.location_id = loc.id
         LEFT JOIN locations user_loc ON assigned_user.location_id = user_loc.id
         LEFT JOIN USER_MASTER prev_user ON am.previous_user_id = prev_user.user_id
@@ -652,9 +640,6 @@ router.get('/:id/pdf',
 
           -- Current location (fallback: movement location -> user's location)
           am.location_id,
-          // COALESCE(loc.name, am.location_name, user_loc.name) as location_name,
-          // COALESCE(loc.building, user_loc.building) as location_building,
-          // COALESCE(loc.floor, user_loc.floor) as location_floor,
           loc.name as location_name,
           loc.building as location_building,
           loc.floor as location_floor,
@@ -695,7 +680,6 @@ router.get('/:id/pdf',
         LEFT JOIN categories cat ON p.category_id = cat.id
         LEFT JOIN USER_MASTER assigned_user ON am.assigned_to = assigned_user.user_id
         LEFT JOIN DEPARTMENT_MASTER assigned_dept ON assigned_user.department_id = assigned_dept.department_id
-        // LEFT JOIN locations loc ON am.location_id = loc.id
         LEFT JOIN locations loc ON a.location_id = loc.id
         LEFT JOIN locations user_loc ON assigned_user.location_id = user_loc.id
         LEFT JOIN USER_MASTER prev_user ON am.previous_user_id = prev_user.user_id
@@ -778,9 +762,6 @@ router.post('/pdf/bulk',
 
           -- Current location (fallback: movement location -> user's location)
           am.location_id,
-          // COALESCE(loc.name, am.location_name, user_loc.name) as location_name,
-          // COALESCE(loc.building, user_loc.building) as location_building,
-          // COALESCE(loc.floor, user_loc.floor) as location_floor,
           loc.name as location_name,
           loc.building as location_building,
           loc.floor as location_floor,
@@ -821,7 +802,6 @@ router.post('/pdf/bulk',
         LEFT JOIN categories cat ON p.category_id = cat.id
         LEFT JOIN USER_MASTER assigned_user ON am.assigned_to = assigned_user.user_id
         LEFT JOIN DEPARTMENT_MASTER assigned_dept ON assigned_user.department_id = assigned_dept.department_id
-        // LEFT JOIN locations loc ON am.location_id = loc.id
         LEFT JOIN locations loc ON a.location_id = loc.id
         LEFT JOIN locations user_loc ON assigned_user.location_id = user_loc.id
         LEFT JOIN USER_MASTER prev_user ON am.previous_user_id = prev_user.user_id
