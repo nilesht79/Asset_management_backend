@@ -125,6 +125,7 @@ router.get('/',
         d.*,
         a.asset_tag,
         p.name as product_name,
+        a.serial_number,
         CONCAT(detector.first_name, ' ', detector.last_name) as detected_by_name,
         CONCAT(resolver.first_name, ' ', resolver.last_name) as resolved_by_name
       FROM RECONCILIATION_DISCREPANCIES d
@@ -407,6 +408,7 @@ router.get('/export',
       .query(`
         SELECT
           a.asset_tag,
+          a.serial_number,
           p.name as product_name,
           d.field_display_name,
           d.discrepancy_type,
@@ -443,6 +445,7 @@ router.get('/export',
       // CSV Headers
       const headers = [
         'Asset Tag',
+        'Serial Number',
         'Product',
         'Field',
         'Type',
@@ -466,6 +469,7 @@ router.get('/export',
       discrepancies.forEach(row => {
         const values = [
           `"${row.asset_tag || ''}"`,
+          `${row.serial_number || ''}`,
           `"${row.product_name || ''}"`,
           `"${row.field_display_name || ''}"`,
           `"${row.discrepancy_type || ''}"`,
@@ -518,6 +522,7 @@ router.get('/:discrepancyId',
           d.*,
           a.asset_tag,
           p.name as product_name,
+          a.serial_number,
           rr.reconciliation_id,
           CONCAT(detector.first_name, ' ', detector.last_name) as detected_by_name,
           detector.email as detected_by_email,
