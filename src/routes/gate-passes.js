@@ -217,8 +217,7 @@ router.get('/assets/search',
         LEFT JOIN products p ON a.product_id = p.id
         LEFT JOIN oems oem ON p.oem_id = oem.id
         LEFT JOIN categories cat ON p.category_id = cat.id
-        LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
-        LEFT JOIN locations l ON u.location_id = l.id
+        LEFT JOIN locations l ON a.location_id = l.id
         WHERE (a.asset_tag LIKE @search OR a.serial_number LIKE @search OR p.name LIKE @search)
           AND a.is_active = 1
           AND a.status NOT IN ('disposed', 'scrapped')
@@ -267,8 +266,7 @@ router.get('/assets/:assetId/with-components',
         LEFT JOIN products p ON a.product_id = p.id
         LEFT JOIN oems oem ON p.oem_id = oem.id
         LEFT JOIN categories cat ON p.category_id = cat.id
-        LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
-        LEFT JOIN locations l ON u.location_id = l.id
+        LEFT JOIN locations l ON a.location_id = l.id
         WHERE a.id = @assetId OR a.parent_asset_id = @assetId
         ORDER BY
           CASE WHEN a.id = @assetId THEN 0 ELSE 1 END,
@@ -388,17 +386,17 @@ router.post('/',
       if (assets && assets.length > 0) {
 
         const firstAssetLocation = await transaction.request()
-          .input('asset_id', sql.UniqueIdentifier, assets[0].asset_id)
-          .query(`
-            SELECT
-              l.id as location_id,
-              l.name as location_name,
-              CONCAT(l.address, ', ', l.city_name, ', ', l.state_name) as location_address
-            FROM ASSETS a
-            LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
-            LEFT JOIN locations l ON u.location_id = l.id
-            WHERE a.id = @asset_id
-          `);
+            .input('asset_id', sql.UniqueIdentifier, assets[0].asset_id)
+            .query(`
+              SELECT
+                l.id as location_id,
+                l.name as location_name,
+                CONCAT(l.address, ', ', l.city_name, ', ', l.state_name) as location_address
+              FROM ASSETS a
+              LEFT JOIN locations l
+                ON a.location_id = l.id
+              WHERE a.id = @asset_id
+            `);
 
         fromLocation = firstAssetLocation.recordset[0] || {};
       }
@@ -429,6 +427,10 @@ router.post('/',
             WHERE u.user_id = @user_id
           `);
         recipientInfo = recipientResult.recordset[0] || {};
+        // Use asset location instead of user location
+          if (fromLocation.location_name) {
+            recipientInfo.location_name = fromLocation.location_name;
+          }
       }
 
       // Get authorizer info
