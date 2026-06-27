@@ -393,16 +393,27 @@ doc.text(
     }
 );
 
-doc.text(
-    String(
-        (request.quantity_requested || 0) -
-        (request.quantity_issued || 0)
-    ),
+// doc.text(
+//     String(
+//         (request.quantity_requested || 0) -
+//         (request.quantity_issued || 0)
+//     ),
+//     startX + c1 + c2 + c3 + c4,
+//     dataY,
+//     {
+//         width: c5,
+//         align: 'center'
+//     }
+// );
+
+  doc.text(
+    String(request.current_stock || 0),
     startX + c1 + c2 + c3 + c4,
     dataY,
     {
         width: c5,
-        align: 'center'
+        align: 'center',
+        lineBreak: false
     }
 );
 
