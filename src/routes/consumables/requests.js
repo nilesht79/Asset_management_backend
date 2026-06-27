@@ -396,52 +396,61 @@ router.get(
       )
       .query(`
         SELECT
-            cr.*,
+    cr.*,
 
-            c.name AS consumable_name,
+    c.name AS consumable_name,
 
-            a.asset_tag,
+    a.asset_tag,
 
-            req.employee_id,
+    req.employee_id,
 
-            req.designation,
+    req.designation,
 
-            req.room_no,
+    req.room_no,
 
-            req.first_name + ' ' +
-            req.last_name
-              AS requested_by_name,
+    req.first_name + ' ' + req.last_name AS requested_by_name,
 
-            d.department_name,
+    d.department_name,
 
-            eng.first_name + ' ' +
-            eng.last_name
-              AS engineer_name,
+    eng.first_name + ' ' + eng.last_name AS engineer_name,
 
-            loc.name AS location_name
+    loc.name AS location_name,
 
-        FROM consumable_requests cr
+    ISNULL(ci.quantity_in_stock,0) AS current_stock
 
-        JOIN consumables c
-          ON cr.consumable_id = c.id
+FROM consumable_requests cr
 
-        LEFT JOIN assets a
-          ON cr.for_asset_id = a.id
+JOIN consumables c
+ON cr.consumable_id = c.id
 
-        JOIN USER_MASTER req
-          ON cr.requested_by = req.user_id
+LEFT JOIN assets a
+ON cr.for_asset_id = a.id
 
-        LEFT JOIN USER_MASTER eng
-          ON cr.assigned_engineer = eng.user_id
+JOIN USER_MASTER req
+ON cr.requested_by = req.user_id
 
-        LEFT JOIN DEPARTMENT_MASTER d
-          ON req.department_id = d.department_id
+LEFT JOIN USER_MASTER eng
+ON cr.assigned_engineer = eng.user_id
 
-        LEFT JOIN locations loc
-          ON req.location_id = loc.id
+LEFT JOIN DEPARTMENT_MASTER d
+ON req.department_id = d.department_id
 
-        WHERE cr.id = @id
+LEFT JOIN locations loc
+ON req.location_id = loc.id
+
+LEFT JOIN (
+    SELECT
+        consumable_id,
+        SUM(quantity_in_stock) AS quantity_in_stock
+    FROM consumable_inventory
+    GROUP BY consumable_id
+) ci
+ON ci.consumable_id = cr.consumable_id
+
+WHERE cr.id = @id
       `);
+
+    console.log(result.recordset[0]);
 
     if (
       result.recordset.length === 0
