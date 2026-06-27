@@ -10,6 +10,9 @@ const { validatePagination } = require('../../middleware/validation');
 const NotificationModel = require('../../models/notification');
 const emailService = require('../../services/emailService');
 
+const ConsumableRequestPDF =
+  require('../../utils/consumableRequestPDF');
+
 const router = express.Router();
 
 router.use(authenticateToken);
@@ -69,7 +72,7 @@ router.get('/',
               OR cr.assigned_engineer = @user_id
             )
           `;
-        } else {
+        }   else {
         whereClause += ' AND cr.requested_by = @user_id';
       }
       params.push({ name: 'user_id', type: sql.UniqueIdentifier, value: userId });
@@ -374,6 +377,99 @@ router.get('/statistics/summary',
     `);
 
     sendSuccess(res, result.recordset[0], 'Statistics retrieved');
+  })
+);
+
+router.get(
+  '/:id/pdf',
+  asyncHandler(async (req, res) => {
+
+    const { id } = req.params;
+
+    const pool = await connectDB();
+
+    const result = await pool.request()
+      .input(
+        'id',
+        sql.UniqueIdentifier,
+        id
+      )
+      .query(`
+        SELECT
+            cr.*,
+
+            c.name AS consumable_name,
+
+            a.asset_tag,
+
+            req.employee_id,
+
+            req.designation,
+
+            req.room_no,
+
+            req.first_name + ' ' +
+            req.last_name
+              AS requested_by_name,
+
+            d.department_name,
+
+            eng.first_name + ' ' +
+            eng.last_name
+              AS engineer_name,
+
+            loc.name AS location_name
+
+        FROM consumable_requests cr
+
+        JOIN consumables c
+          ON cr.consumable_id = c.id
+
+        LEFT JOIN assets a
+          ON cr.for_asset_id = a.id
+
+        JOIN USER_MASTER req
+          ON cr.requested_by = req.user_id
+
+        LEFT JOIN USER_MASTER eng
+          ON cr.assigned_engineer = eng.user_id
+
+        LEFT JOIN DEPARTMENT_MASTER d
+          ON req.department_id = d.department_id
+
+        LEFT JOIN locations loc
+          ON req.location_id = loc.id
+
+        WHERE cr.id = @id
+      `);
+
+    if (
+      result.recordset.length === 0
+    ) {
+      return sendNotFound(
+        res,
+        'Request not found'
+      );
+    }
+
+    const pdfBuffer =
+      await ConsumableRequestPDF.generateRequest(
+        result.recordset[0]
+      );
+
+    res.setHeader(
+      'Content-Type',
+      'application/pdf'
+    );
+
+    res.setHeader(
+      'Content-Disposition',
+      // `attachment; filename=${result.recordset[0].request_number}.pdf`
+      'attachment; filename="E-requisition.pdf"'
+    );
+
+    res.send(pdfBuffer);
+
   })
 );
 
