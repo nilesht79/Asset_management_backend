@@ -621,7 +621,8 @@ class SlaTrackingModel {
       const request = pool.request();
 
       // Build WHERE clause
-      let whereConditions = ['tst.resolved_at IS NOT NULL'];
+      // let whereConditions = ['tst.resolved_at IS NOT NULL'];
+      let whereConditions = ["1=1"];
 
       // Pre-calculate dates for consistent use across all queries
       const startDate = filters.date_from ? new Date(filters.date_from) : null;
@@ -633,12 +634,12 @@ class SlaTrackingModel {
       }
 
       if (startDate) {
-        whereConditions.push('tst.resolved_at >= @dateFrom');
+        whereConditions.push('t.created_at >= @dateFrom');
         request.input('dateFrom', sql.DateTime, startDate);
       }
 
       if (endDate) {
-        whereConditions.push('tst.resolved_at <= @dateTo');
+        whereConditions.push('t.created_at <= @dateTo');
         request.input('dateTo', sql.DateTime, endDate);
       }
 
@@ -677,20 +678,20 @@ class SlaTrackingModel {
 
       switch (filters.frequency) {
         case 'daily':
-          periodSelect = "CONVERT(VARCHAR(10), tst.resolved_at, 120) AS period";
-          groupByClause = "GROUP BY CONVERT(VARCHAR(10), tst.resolved_at, 120)";
+          periodSelect = "CONVERT(VARCHAR(10), t.created_at,120) AS period";
+          groupByClause = "GROUP BY CONVERT(VARCHAR(10), t.created_at, 120)";
           break;
         case 'weekly':
-          periodSelect = "CONCAT(YEAR(tst.resolved_at), '-W', RIGHT('0' + CAST(DATEPART(WEEK, tst.resolved_at) AS VARCHAR), 2)) AS period";
-          groupByClause = "GROUP BY YEAR(tst.resolved_at), DATEPART(WEEK, tst.resolved_at)";
+          periodSelect = "CONCAT(YEAR(t.created_at), '-W', RIGHT('0' + CAST(DATEPART(WEEK, t.created_at) AS VARCHAR), 2)) AS period";
+          groupByClause = "GROUP BY YEAR(t.created_at), DATEPART(WEEK, t.created_at)";
           break;
         case 'monthly':
-          periodSelect = "CONCAT(YEAR(tst.resolved_at), '-', RIGHT('0' + CAST(MONTH(tst.resolved_at) AS VARCHAR), 2)) AS period";
-          groupByClause = "GROUP BY YEAR(tst.resolved_at), MONTH(tst.resolved_at)";
+          periodSelect = "CONCAT(YEAR(t.created_at), '-', RIGHT('0' + CAST(MONTH(t.created_at) AS VARCHAR), 2)) AS period";
+          groupByClause = "GROUP BY YEAR(t.created_at), MONTH(t.created_at)";
           break;
         case 'quarterly':
-          periodSelect = "CONCAT(YEAR(tst.resolved_at), '-Q', DATEPART(QUARTER, tst.resolved_at)) AS period";
-          groupByClause = "GROUP BY YEAR(tst.resolved_at), DATEPART(QUARTER, tst.resolved_at)";
+          periodSelect = "CONCAT(YEAR(t.created_at), '-Q', DATEPART(QUARTER, t.created_at)) AS period";
+          groupByClause = "GROUP BY YEAR(t.created_at), DATEPART(QUARTER, t.created_at)";
           break;
         default:
           periodSelect = "'Total' AS period";
@@ -701,18 +702,30 @@ class SlaTrackingModel {
       const complianceQuery = `
         SELECT
           ${periodSelect},
-          COUNT(*) AS total_resolved,
-          SUM(CASE WHEN tst.final_status != 'breached' THEN 1 ELSE 0 END) AS resolved_within_sla,
-          SUM(CASE WHEN tst.final_status = 'breached' THEN 1 ELSE 0 END) AS resolved_breached,
+          COUNT(DISTINCT t.ticket_id) AS total_tickets,
+          COUNT(DISTINCT CASE
+    WHEN tst.final_status IS NULL
+         OR tst.final_status <> 'breached'
+    THEN t.ticket_id
+END) AS resolved_within_sla,
+          COUNT(DISTINCT CASE
+    WHEN tst.final_status='breached'
+    THEN t.ticket_id
+END) AS resolved_breached,
           CAST(
-            SUM(CASE WHEN tst.final_status != 'breached' THEN 1.0 ELSE 0 END) * 100.0 /
-            NULLIF(COUNT(*), 0)
-          AS DECIMAL(5,2)) AS compliance_rate,
+    (
+        COUNT(DISTINCT CASE
+            WHEN tst.final_status <> 'breached'
+            THEN t.ticket_id
+        END) * 100.0
+    ) / NULLIF(COUNT(DISTINCT t.ticket_id), 0)
+    AS DECIMAL(5,2)
+) AS compliance_rate,
           AVG(tst.business_elapsed_minutes) AS avg_resolution_minutes,
           MIN(tst.business_elapsed_minutes) AS min_resolution_minutes,
           MAX(tst.business_elapsed_minutes) AS max_resolution_minutes
-        FROM TICKET_SLA_TRACKING tst
-        INNER JOIN TICKETS t ON tst.ticket_id = t.ticket_id
+        FROM TICKETS t
+        LEFT JOIN TICKET_SLA_TRACKING tst ON tst.ticket_id = t.ticket_id
         LEFT JOIN TICKET_ASSETS ta ON t.ticket_id = ta.ticket_id
         LEFT JOIN assets a ON ta.asset_id = a.id
         LEFT JOIN products p ON a.product_id = p.id
@@ -735,16 +748,28 @@ class SlaTrackingModel {
 
       const summaryQuery = `
         SELECT
-          COUNT(*) AS total_resolved,
-          SUM(CASE WHEN tst.final_status != 'breached' THEN 1 ELSE 0 END) AS resolved_within_sla,
-          SUM(CASE WHEN tst.final_status = 'breached' THEN 1 ELSE 0 END) AS resolved_breached,
+          COUNT(DISTINCT t.ticket_id) AS total_tickets,
+          COUNT(DISTINCT CASE
+    WHEN tst.final_status IS NULL
+         OR tst.final_status <> 'breached'
+    THEN t.ticket_id
+END) AS resolved_within_sla,
+          COUNT(DISTINCT CASE
+    WHEN tst.final_status='breached'
+    THEN t.ticket_id
+END) AS resolved_breached,
           CAST(
-            SUM(CASE WHEN tst.final_status != 'breached' THEN 1.0 ELSE 0 END) * 100.0 /
-            NULLIF(COUNT(*), 0)
-          AS DECIMAL(5,2)) AS compliance_rate,
+    (
+        COUNT(DISTINCT CASE
+            WHEN tst.final_status <> 'breached'
+            THEN t.ticket_id
+        END) * 100.0
+    ) / NULLIF(COUNT(DISTINCT t.ticket_id), 0)
+    AS DECIMAL(5,2)
+) AS compliance_rate,
           AVG(tst.business_elapsed_minutes) AS avg_resolution_minutes
-        FROM TICKET_SLA_TRACKING tst
-        INNER JOIN TICKETS t ON tst.ticket_id = t.ticket_id
+        FROM TICKETS t
+        LEFT JOIN TICKET_SLA_TRACKING tst ON tst.ticket_id = t.ticket_id
         LEFT JOIN TICKET_ASSETS ta ON t.ticket_id = ta.ticket_id
         LEFT JOIN assets a ON ta.asset_id = a.id
         LEFT JOIN products p ON a.product_id = p.id
@@ -767,21 +792,30 @@ class SlaTrackingModel {
         SELECT
           l.id AS location_id,
           l.name AS location_name,
-          COUNT(*) AS total_resolved,
-          SUM(CASE WHEN tst.final_status != 'breached' THEN 1 ELSE 0 END) AS resolved_within_sla,
+          COUNT(DISTINCT t.ticket_id) AS total_tickets,
+          COUNT(DISTINCT CASE
+    WHEN tst.final_status IS NULL
+         OR tst.final_status <> 'breached'
+    THEN t.ticket_id
+END) AS resolved_within_sla,
           CAST(
-            SUM(CASE WHEN tst.final_status != 'breached' THEN 1.0 ELSE 0 END) * 100.0 /
-            NULLIF(COUNT(*), 0)
-          AS DECIMAL(5,2)) AS compliance_rate
-        FROM TICKET_SLA_TRACKING tst
-        INNER JOIN TICKETS t ON tst.ticket_id = t.ticket_id
+    (
+        COUNT(DISTINCT CASE
+            WHEN tst.final_status <> 'breached'
+            THEN t.ticket_id
+        END) * 100.0
+    ) / NULLIF(COUNT(DISTINCT t.ticket_id), 0)
+    AS DECIMAL(5,2)
+) AS compliance_rate
+        FROM TICKETS t
+        LEFT JOIN TICKET_SLA_TRACKING tst ON tst.ticket_id = t.ticket_id
         LEFT JOIN locations l ON t.location_id = l.id
         LEFT JOIN TICKET_ASSETS ta ON t.ticket_id = ta.ticket_id
         LEFT JOIN assets a ON ta.asset_id = a.id
         LEFT JOIN products p ON a.product_id = p.id
         ${whereClause}
         GROUP BY l.id, l.name
-        ORDER BY total_resolved DESC
+        ORDER BY total_tickets DESC
       `;
 
       const locationBreakdown = await locationRequest.query(locationBreakdownQuery);
@@ -800,21 +834,30 @@ class SlaTrackingModel {
         SELECT
           d.department_id,
           d.department_name,
-          COUNT(*) AS total_resolved,
-          SUM(CASE WHEN tst.final_status != 'breached' THEN 1 ELSE 0 END) AS resolved_within_sla,
-          CAST(
-            SUM(CASE WHEN tst.final_status != 'breached' THEN 1.0 ELSE 0 END) * 100.0 /
-            NULLIF(COUNT(*), 0)
-          AS DECIMAL(5,2)) AS compliance_rate
-        FROM TICKET_SLA_TRACKING tst
-        INNER JOIN TICKETS t ON tst.ticket_id = t.ticket_id
+          COUNT(DISTINCT t.ticket_id) AS total_tickets,
+          COUNT(DISTINCT CASE
+    WHEN tst.final_status IS NULL
+         OR tst.final_status <> 'breached'
+    THEN t.ticket_id
+END) AS resolved_within_sla,
+         CAST(
+    (
+        COUNT(DISTINCT CASE
+            WHEN tst.final_status <> 'breached'
+            THEN t.ticket_id
+        END) * 100.0
+    ) / NULLIF(COUNT(DISTINCT t.ticket_id), 0)
+    AS DECIMAL(5,2)
+) AS compliance_rate
+        FROM TICKETS t
+        LEFT JOIN TICKET_SLA_TRACKING tst ON tst.ticket_id = t.ticket_id
         LEFT JOIN DEPARTMENT_MASTER d ON t.department_id = d.department_id
         LEFT JOIN TICKET_ASSETS ta ON t.ticket_id = ta.ticket_id
         LEFT JOIN assets a ON ta.asset_id = a.id
         LEFT JOIN products p ON a.product_id = p.id
         ${whereClause}
         GROUP BY d.department_id, d.department_name
-        ORDER BY total_resolved DESC
+        ORDER BY total_tickets DESC
       `;
 
       const deptBreakdown = await deptRequest.query(deptBreakdownQuery);
@@ -847,9 +890,11 @@ class SlaTrackingModel {
           l.name AS location_name,
           d.department_name,
           u.first_name + ' ' + u.last_name AS engineer_name
-        FROM TICKET_SLA_TRACKING tst
-        INNER JOIN TICKETS t ON tst.ticket_id = t.ticket_id
-        INNER JOIN SLA_RULES sr ON tst.sla_rule_id = sr.rule_id
+        FROM TICKETS t
+        LEFT JOIN TICKET_SLA_TRACKING tst
+          ON tst.ticket_id = t.ticket_id
+        LEFT JOIN SLA_RULES sr
+          ON sr.rule_id = tst.sla_rule_id
         LEFT JOIN locations l ON t.location_id = l.id
         LEFT JOIN DEPARTMENT_MASTER d ON t.department_id = d.department_id
         LEFT JOIN USER_MASTER u ON t.assigned_to_engineer_id = u.user_id
@@ -857,17 +902,17 @@ class SlaTrackingModel {
         LEFT JOIN assets a ON ta.asset_id = a.id
         LEFT JOIN products p ON a.product_id = p.id
         ${whereClause}
-        ORDER BY tst.resolved_at DESC
+        ORDER BY t.created_at DESC
       `;
 
       const detailResult = await detailRequest.query(detailQuery);
 
       return {
         summary: summaryResult.recordset[0] || {
-          total_resolved: 0,
+          total_tickets: 0,
           resolved_within_sla: 0,
           resolved_breached: 0,
-          compliance_rate: null,
+          compliance_rate: 0,
           avg_resolution_minutes: 0
         },
         by_period: complianceResult.recordset,
