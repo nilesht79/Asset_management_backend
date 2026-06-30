@@ -60,8 +60,13 @@ class SlaTrackingModel {
     .query(`
         SELECT created_at
         FROM TICKETS
-        WHERE ticket_id=@ticketId
+        WHERE ticket_id = @ticketId
     `);
+
+const now =
+    ticketResult.recordset.length > 0
+        ? ticketResult.recordset[0].created_at
+        : new Date();
       
       const minDeadline = await businessHoursCalculator.calculateDeadline(
         now,
