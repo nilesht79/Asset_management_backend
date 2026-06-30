@@ -227,10 +227,10 @@ class TicketController {
     asset_ids: linkedAssetIds // can be []
       };
       
-      await SlaTrackingModel.initializeTracking(
-          ticket.ticket_id,
-          ticketContext
-      );
+      // await SlaTrackingModel.initializeTracking(
+      //     ticket.ticket_id,
+      //     ticketContext
+      // );
 
 //       // Create notification for assigned engineer
 //       if (assigned_to_engineer_id) {
