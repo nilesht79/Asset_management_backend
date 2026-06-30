@@ -123,7 +123,25 @@ class TicketModel {
         .input('dueDate', sql.DateTime, ticketData.due_date || null)
         .query(insertQuery);
 
-      return result.recordset[0];
+      // return result.recordset[0];
+      const ticket = result.recordset[0];
+
+      try {
+        await SlaTrackingModel.initializeTracking(ticket.ticket_id, {
+            priority: ticket.priority,
+            category: ticket.category,
+            department_id: ticket.department_id,
+            location_id: ticket.location_id,
+            ticket_type: ticket.ticket_type,
+            service_type: ticket.service_type
+        });
+      
+        console.log(`SLA initialized for ${ticket.ticket_number}`);
+      } catch (err) {
+        console.error("SLA initialization failed:", err.message);
+      }
+      
+      return ticket;
     } catch (error) {
       console.error('Error creating ticket:', error);
       throw error;
