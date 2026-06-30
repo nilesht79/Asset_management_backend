@@ -27,11 +27,42 @@ class SlaTrackingModel {
       }
 
       // Find matching SLA rule
+      // const matchResult = await slaMatchingEngine.findMatchingRule(ticketContext);
+      // const rule = matchResult.rule;
+
       const matchResult = await slaMatchingEngine.findMatchingRule(ticketContext);
-      const rule = matchResult.rule;
+
+      let rule = matchResult?.rule;
+      
+      if (!rule) {
+      
+          console.log("No matching SLA Rule found. Using default SLA Rule.");
+      
+          const defaultRule = await pool.request().query(`
+              SELECT TOP 1 *
+              FROM SLA_RULES
+              WHERE is_active = 1
+              ORDER BY max_tat_minutes
+          `);
+      
+          if (defaultRule.recordset.length === 0) {
+              throw new Error("No active SLA Rule found.");
+          }
+      
+          rule = defaultRule.recordset[0];
+      }
 
       // Calculate deadlines
-      const now = new Date();
+      // const now = new Date();
+
+      const ticketResult = await pool.request()
+    .input("ticketId", sql.UniqueIdentifier, ticketId)
+    .query(`
+        SELECT created_at
+        FROM TICKETS
+        WHERE ticket_id=@ticketId
+    `);
+      
       const minDeadline = await businessHoursCalculator.calculateDeadline(
         now,
         rule.min_tat_minutes,
@@ -87,11 +118,18 @@ class SlaTrackingModel {
         .input('maxDeadline', sql.DateTime, maxDeadline)
         .query(query);
 
+      // return {
+      //   tracking: result.recordset[0],
+      //   rule: rule,
+      //   escalation_rules: matchResult.escalation_rules
+      // };
+
       return {
-        tracking: result.recordset[0],
-        rule: rule,
-        escalation_rules: matchResult.escalation_rules
-      };
+    tracking: result.recordset[0],
+    rule,
+    escalation_rules: matchResult?.escalation_rules || []
+};
+      
     } catch (error) {
       console.error('Error initializing SLA tracking:', error);
       throw error;
