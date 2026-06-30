@@ -232,15 +232,24 @@ doc.font('Helvetica-Bold')
 y += 22;
 
 const startX = 40;
-const tableWidth = 515;
+// const tableWidth = 515;
+
 
 // Column widths
-const c1 = 105; // Asset Code
-const c2 = 150; // Item Name
-const c3 = 60;  // Required
-const c4 = 60;  // Issued
-const c5 = 60;  // Balance
-const c6 = 80;  // Remarks
+// const c1 = 105; // Asset Code
+// const c2 = 150; // Item Name
+// const c3 = 60;  // Required
+// const c4 = 60;  // Issued
+// const c5 = 60;  // Balance
+// const c6 = 80;  // Remarks
+const c1 = 105;
+const c2 = 170;
+const c3 = 70;  // Required
+const c4 = 70;  // Issued
+const c5 = 100; // Remarks
+
+
+const tableWidth = c1 + c2 + c3 + c4 + c5;
 
 const head1 = 30;
 const head2 = 42;
@@ -250,24 +259,43 @@ const rowH = 55;
 doc.rect(startX, y, tableWidth, head1 + head2 + rowH).stroke();
 
 // Vertical lines
+// Vertical lines
 let xx = startX;
 
+// Asset Code
 xx += c1;
-doc.moveTo(xx, y).lineTo(xx, y + head1 + head2 + rowH).stroke();
+doc.moveTo(xx, y)
+   .lineTo(xx, y + head1 + head2 + rowH)
+   .stroke();
 
+// Item Name
 xx += c2;
-doc.moveTo(xx, y).lineTo(xx, y + head1 + head2 + rowH).stroke();
+doc.moveTo(xx, y)
+   .lineTo(xx, y + head1 + head2 + rowH)
+   .stroke();
 
-doc.moveTo(xx, y + head1).lineTo(xx + c3 + c4 + c5, y + head1).stroke();
+// Header line only for Stationary/Consumables
+doc.moveTo(xx, y + head1)
+   .lineTo(xx + c3 + c4, y + head1)
+   .stroke();
 
+// Required Qty
 xx += c3;
-doc.moveTo(xx, y + head1).lineTo(xx, y + head1 + head2 + rowH).stroke();
+doc.moveTo(xx, y + head1)
+   .lineTo(xx, y + head1 + head2 + rowH)
+   .stroke();
 
+// Issued Qty
 xx += c4;
-doc.moveTo(xx, y + head1).lineTo(xx, y + head1 + head2 + rowH).stroke();
+doc.moveTo(xx, y + head1)
+   .lineTo(xx, y + head1 + head2 + rowH)
+   .stroke();
 
-xx += c5;
-doc.moveTo(xx, y).lineTo(xx, y + head1 + head2 + rowH).stroke();
+// >>> THIS IS THE IMPORTANT LINE <<<
+// Draw full-height line before Remarks
+doc.moveTo(xx, y)
+   .lineTo(xx, y + head1 + head2 + rowH)
+   .stroke();
 
 // Horizontal lines
 doc.moveTo(startX, y + head1 + head2)
@@ -295,18 +323,29 @@ doc.text(
     startX + c1 + c2,
     y + 10,
     {
-        width: c3 + c4 + c5,
+        // width: c3 + c4 + c5,
+        width: c3 + c4,
         align: 'center',
         lineBreak: false
     }
 );
 
+// doc.text(
+//     'Remarks',
+//     startX + c1 + c2 + c3 + c4 + c5,
+//     y + 15,
+//     {
+//         width: c6,
+//         align: 'center',
+//         lineBreak: false
+//     }
+// );
 doc.text(
     'Remarks',
-    startX + c1 + c2 + c3 + c4 + c5,
+    startX + c1 + c2 + c3 + c4,
     y + 15,
     {
-        width: c6,
+        width: c5,
         align: 'center',
         lineBreak: false
     }
@@ -336,16 +375,16 @@ doc.text(
     }
 );
 
-doc.text(
-    'Balance\nQuantity',
-    startX + c1 + c2 + c3 + c4,
-    y + head1 + 6,
-    {
-        width: c5,
-        align: 'center',
-        lineBreak: false
-    }
-);
+// doc.text(
+//     'Balance\nQuantity',
+//     startX + c1 + c2 + c3 + c4,
+//     y + head1 + 6,
+//     {
+//         width: c5,
+//         align: 'center',
+//         lineBreak: false
+//     }
+// );
 
 // ================= Data =================
 
@@ -406,23 +445,33 @@ doc.text(
 //     }
 // );
 
-  doc.text(
-    String(request.current_stock || 0),
-    startX + c1 + c2 + c3 + c4,
-    dataY,
-    {
-        width: c5,
-        align: 'center',
-        lineBreak: false
-    }
-);
+// doc.text(
+//     String(request.current_stock || 0),
+//     startX + c1 + c2 + c3 + c4,
+//     dataY,
+//     {
+//         width: c5,
+//         align: 'center',
+//         lineBreak: false
+//     }
+// );
+
+// doc.text(
+//     request.notes || '',
+//     startX + c1 + c2 + c3 + c4 + c5 + 5,
+//     dataY,
+//     {
+//         width: c6 - 10
+//     }
+// );
+
 
 doc.text(
     request.notes || '',
-    startX + c1 + c2 + c3 + c4 + c5 + 5,
+    startX + c1 + c2 + c3 + c4 + 5,
     dataY,
     {
-        width: c6 - 10
+        width: c5 - 10
     }
 );
 
