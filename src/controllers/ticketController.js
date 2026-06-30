@@ -195,27 +195,42 @@ class TicketController {
       }
 
       // Initialize SLA tracking ONLY if assets are linked to the ticket
-      if (linkedAssetIds.length > 0) {
-        try {
-          const ticketContext = {
-            ticket_id: ticket.ticket_id,
-            ticket_type: fullTicket.ticket_type || 'internal',
-            service_type: fullTicket.service_type || 'general',
-            ticket_channel: 'portal', // Default channel
-            priority: fullTicket.priority || 'medium',
-            user_id: fullTicket.created_by_user_id,
-            asset_ids: linkedAssetIds
-          };
+      // if (linkedAssetIds.length > 0) {
+      //   try {
+      //     const ticketContext = {
+      //       ticket_id: ticket.ticket_id,
+      //       ticket_type: fullTicket.ticket_type || 'internal',
+      //       service_type: fullTicket.service_type || 'general',
+      //       ticket_channel: 'portal', // Default channel
+      //       priority: fullTicket.priority || 'medium',
+      //       user_id: fullTicket.created_by_user_id,
+      //       asset_ids: linkedAssetIds
+      //     };
 
-          await SlaTrackingModel.initializeTracking(ticket.ticket_id, ticketContext);
-          console.log(`SLA tracking initialized for ticket ${ticket.ticket_number}`);
-        } catch (slaError) {
-          // Log but don't fail the ticket creation if SLA init fails
-          console.error('Failed to initialize SLA tracking:', slaError.message);
-        }
-      } else {
-        console.log(`SLA tracking skipped for ticket ${ticket.ticket_number} - no assets linked`);
-      }
+      //     await SlaTrackingModel.initializeTracking(ticket.ticket_id, ticketContext);
+      //     console.log(`SLA tracking initialized for ticket ${ticket.ticket_number}`);
+      //   } catch (slaError) {
+      //     // Log but don't fail the ticket creation if SLA init fails
+      //     console.error('Failed to initialize SLA tracking:', slaError.message);
+      //   }
+      // } else {
+      //   console.log(`SLA tracking skipped for ticket ${ticket.ticket_number} - no assets linked`);
+      // }
+
+      const ticketContext = {
+    ticket_id: ticket.ticket_id,
+    ticket_type: fullTicket.ticket_type || 'internal',
+    service_type: fullTicket.service_type || 'general',
+    ticket_channel: 'portal',
+    priority: fullTicket.priority || 'medium',
+    user_id: fullTicket.created_by_user_id,
+    asset_ids: linkedAssetIds // can be []
+      };
+      
+      await SlaTrackingModel.initializeTracking(
+          ticket.ticket_id,
+          ticketContext
+      );
 
 //       // Create notification for assigned engineer
 //       if (assigned_to_engineer_id) {
