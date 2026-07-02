@@ -154,7 +154,7 @@ class RequisitionNotificationService {
           department_name,
           purpose,
           urgency,
-          redirectPage: '/approvals/it-head'
+          redirectPage: '/requisitions/my-requisitions',
           action: `Your requisition has been approved by ${approver.firstName} ${approver.lastName} (Department Head).`,
           status: 'Pending IT Head Approval'
         });
@@ -198,7 +198,7 @@ class RequisitionNotificationService {
           category_name,
           subcategory_name,
           quantity,
-          redirectPage
+          redirectPage: '/approvals/it-head',
           action: 'This requisition has been approved by the Department Head and now requires your approval.',
           status: 'Pending Your Approval'
         });
@@ -795,7 +795,8 @@ class RequisitionNotificationService {
         subcategory_name,
         quantity,
         action,
-        status
+        status,
+        redirectPage
       } = emailData;
 
 //       const loginUrl =
