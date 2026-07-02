@@ -1027,7 +1027,8 @@ color:#888;
 </html>
 `;
 
-      await emailService.sendEmail(to, subject, htmlBody);
+      // await emailService.sendEmail(to, subject, htmlBody);
+      await emailService.sendHtmlEmail( to, subject, htmlBody);
      
     } catch (error) {
       console.error('Error sending requisition email:', error);
