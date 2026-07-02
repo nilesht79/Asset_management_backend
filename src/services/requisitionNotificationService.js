@@ -467,13 +467,25 @@ class RequisitionNotificationService {
    */
   async notifyAssetAssigned(requisition, assignmentData) {
     try {
+      // const {
+      //   requisition_id,
+      //   requisition_number,
+      //   requested_by,
+      //   requester_name,
+      //   department_name
+      // } = requisition;
+
       const {
         requisition_id,
         requisition_number,
         requested_by,
         requester_name,
-        department_name
-      } = requisition;
+        department_name,
+        category_name,
+        subcategory_name,
+        quantity,
+        urgency
+    } = requisition;
 
       const {
         asset_tag,
@@ -520,8 +532,11 @@ class RequisitionNotificationService {
           requisition_number,
           requester_name,
           department_name,
+          category_name,
+          subcategory_name,
+          quantity,
+          urgency,
           purpose: `Asset: ${asset_tag}`,
-          urgency: 'N/A',
           action: `An asset (${asset_tag}) has been assigned to your requisition by ${coordinator_name}.\n\nEngineer ${engineer_name} will handle the delivery and installation.\n${scheduleInfo}`,
           status: 'Asset Assigned - Pending Delivery'
         });
