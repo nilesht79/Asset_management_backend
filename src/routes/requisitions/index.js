@@ -227,10 +227,25 @@ router.post('/',
     }
 
     // Get created requisition
+    // const result = await pool.request()
+    //   .input('requisitionId', sql.UniqueIdentifier, requisitionId)
+    //   .query(`
+    //     SELECT * FROM ASSET_REQUISITIONS WHERE requisition_id = @requisitionId
+    //   `);
+
     const result = await pool.request()
       .input('requisitionId', sql.UniqueIdentifier, requisitionId)
       .query(`
-        SELECT * FROM ASSET_REQUISITIONS WHERE requisition_id = @requisitionId
+        SELECT
+            r.*,
+            cat.name AS category_name,
+            subcat.name AS subcategory_name
+        FROM ASSET_REQUISITIONS r
+        LEFT JOIN categories cat
+            ON r.asset_category_id = cat.id
+        LEFT JOIN categories subcat
+            ON r.product_type_id = subcat.id
+        WHERE r.requisition_id = @requisitionId
       `);
 
     // Send notification
