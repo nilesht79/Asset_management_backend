@@ -21,7 +21,10 @@ class RequisitionNotificationService {
         department_name,
         purpose,
         urgency,
-        dept_head_id
+        dept_head_id,
+        category_name,
+        subcategory_name,
+        quantity
       } = requisition;
 
       if (!dept_head_id) {
@@ -58,6 +61,20 @@ class RequisitionNotificationService {
       });
 
       // Send email notification
+      // await this.sendRequisitionEmail({
+      //   to: deptHead.email,
+      //   subject: `[Action Required] New Asset Requisition ${requisition_number}`,
+      //   recipientName: deptHead.first_name,
+      //   requisition_number,
+      //   requester_name,
+      //   department_name,
+      //   purpose,
+      //   urgency,
+      //   action: 'A new asset requisition requires your approval.',
+      //   status: 'Pending Your Approval'
+      // });
+
+      // Send email notification
       await this.sendRequisitionEmail({
         to: deptHead.email,
         subject: `[Action Required] New Asset Requisition ${requisition_number}`,
@@ -67,6 +84,9 @@ class RequisitionNotificationService {
         department_name,
         purpose,
         urgency,
+        category_name,
+        subcategory_name,
+        quantity,
         action: 'A new asset requisition requires your approval.',
         status: 'Pending Your Approval'
       });
@@ -754,6 +774,9 @@ class RequisitionNotificationService {
         department_name,
         purpose,
         urgency,
+        category_name,
+        subcategory_name,
+        quantity,
         action,
         status
       } = emailData;
@@ -771,6 +794,9 @@ Requisition Details:
 Requisition Number: ${requisition_number}
 Requester: ${requester_name}
 Department: ${department_name}
+Asset Category: ${category_name || 'N/A'}
+Requested Asset: ${subcategory_name || 'N/A'}
+Quantity: ${quantity || 1}
 Purpose: ${purpose}
 Urgency: ${urgency}
 Current Status: ${status}
