@@ -80,6 +80,7 @@ class RequisitionNotificationService {
         subject: `[Action Required] New Asset Requisition ${requisition_number}`,
         recipientName: deptHead.first_name,
         requisition_number,
+        requisition_id,
         requester_name,
         department_name,
         purpose,
@@ -769,6 +770,7 @@ class RequisitionNotificationService {
         to,
         subject,
         recipientName,
+        requisition_id,
         requisition_number,
         requester_name,
         department_name,
@@ -782,7 +784,7 @@ class RequisitionNotificationService {
       } = emailData;
 
       const loginUrl =
-  `https://itsm.cidcoindia.com/login?redirect=/requisitions/view/${requisition_id}`;
+"https://itsm.cidcoindia.com/login?redirect=/approvals/department-head";
 
       const body = `
 ASSET REQUISITION NOTIFICATION
@@ -804,10 +806,12 @@ Purpose: ${purpose}
 Urgency: ${urgency}
 Current Status: ${status}
 
-Review Requisition:
+Review and Approve Requisition
+------------------------------
+
 ${loginUrl}
 
-Please log in to the Unified ITSM Platform to take action or view more details.
+Click the above link to log in and review the pending requisition.
 
 ---
 This is an automated notification from the Unified ITSM Platform.
