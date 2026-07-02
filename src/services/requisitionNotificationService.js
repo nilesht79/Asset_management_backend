@@ -1027,12 +1027,8 @@ color:#888;
 </html>
 `;
 
-      // await emailService.sendEmail(to, subject, htmlBody, body);
-      const fs = require("fs");
-
-fs.writeFileSync("requisition-email-preview.html", htmlBody);
-
-console.log("Email preview saved as requisition-email-preview.html");
+      await emailService.sendEmail(to, subject, htmlBody, body);
+     
     } catch (error) {
       console.error('Error sending requisition email:', error);
       // Don't throw - email failure shouldn't block notifications
