@@ -113,7 +113,10 @@ class RequisitionNotificationService {
         requester_name,
         department_name,
         purpose,
-        urgency
+        urgency,
+        category_name,
+    subcategory_name,
+    quantity
       } = requisition;
 
       const pool = await connectDB();
@@ -173,6 +176,9 @@ class RequisitionNotificationService {
             department_name,
             purpose,
             urgency,
+            category_name,
+            subcategory_name,
+            quantity,
             action_required: 'approve_or_reject'
           }
         });
@@ -186,6 +192,9 @@ class RequisitionNotificationService {
           department_name,
           purpose,
           urgency,
+          category_name,
+          subcategory_name,
+          quantity,
           action: 'This requisition has been approved by the Department Head and now requires your approval.',
           status: 'Pending Your Approval'
         });
