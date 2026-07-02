@@ -786,39 +786,253 @@ class RequisitionNotificationService {
       const loginUrl =
 "https://itsm.cidcoindia.com/login?redirect=/approvals/department-head";
 
-      const body = `
-ASSET REQUISITION NOTIFICATION
-==============================
+//       const body = `
+// ASSET REQUISITION NOTIFICATION
+// ==============================
 
-Hello ${recipientName},
+// Hello ${recipientName},
 
+// ${action}
+
+// Requisition Details:
+// -------------------
+// Requisition Number: ${requisition_number}
+// Requester: ${requester_name}
+// Department: ${department_name}
+// Asset Category: ${category_name || 'N/A'}
+// Requested Asset: ${subcategory_name || 'N/A'}
+// Quantity: ${quantity || 1}
+// Purpose: ${purpose}
+// Urgency: ${urgency}
+// Current Status: ${status}
+
+// Review and Approve Requisition
+// ------------------------------
+
+// ${loginUrl}
+
+// Click the above link to log in and review the pending requisition.
+
+// ---
+// This is an automated notification from the Unified ITSM Platform.
+// Please do not reply to this email.
+// `;
+
+      const htmlBody = `
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Asset Requisition Notification</title>
+</head>
+
+<body style="margin:0;padding:0;background:#f5f7fb;font-family:Arial,Helvetica,sans-serif;">
+
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f7fb;padding:40px 0;">
+<tr>
+<td align="center">
+
+<table width="700" cellpadding="0" cellspacing="0"
+style="background:#ffffff;border-radius:10px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.12);">
+
+<tr>
+<td
+style="
+background:#D71920;
+padding:22px;
+color:#ffffff;
+font-size:28px;
+font-weight:bold;
+text-align:center;
+">
+PolePlus Unified ITSM Platform
+</td>
+</tr>
+
+<tr>
+<td style="padding:35px;">
+
+<h2 style="margin-top:0;color:#333;">
+Asset Requisition Notification
+</h2>
+
+<p style="font-size:15px;color:#444;">
+Hello <strong>${recipientName}</strong>,
+</p>
+
+<p style="font-size:15px;color:#444;">
 ${action}
+</p>
 
-Requisition Details:
--------------------
-Requisition Number: ${requisition_number}
-Requester: ${requester_name}
-Department: ${department_name}
-Asset Category: ${category_name || 'N/A'}
-Requested Asset: ${subcategory_name || 'N/A'}
-Quantity: ${quantity || 1}
-Purpose: ${purpose}
-Urgency: ${urgency}
-Current Status: ${status}
+<table
+width="100%"
+cellpadding="10"
+cellspacing="0"
+style="
+border-collapse:collapse;
+border:1px solid #dddddd;
+font-size:14px;
+">
 
-Review and Approve Requisition
-------------------------------
+<tr style="background:#fafafa;">
+<td width="35%"><strong>Requisition Number</strong></td>
+<td>${requisition_number}</td>
+</tr>
 
+<tr>
+<td><strong>Requester</strong></td>
+<td>${requester_name}</td>
+</tr>
+
+<tr style="background:#fafafa;">
+<td><strong>Department</strong></td>
+<td>${department_name}</td>
+</tr>
+
+<tr>
+<td><strong>Asset Category</strong></td>
+<td>${category_name || "N/A"}</td>
+</tr>
+
+<tr style="background:#fafafa;">
+<td><strong>Requested Asset</strong></td>
+<td>${subcategory_name || "N/A"}</td>
+</tr>
+
+<tr>
+<td><strong>Quantity</strong></td>
+<td>${quantity || 1}</td>
+</tr>
+
+<tr style="background:#fafafa;">
+<td><strong>Purpose</strong></td>
+<td>${purpose || "N/A"}</td>
+</tr>
+
+<tr>
+<td><strong>Urgency</strong></td>
+<td>${urgency}</td>
+</tr>
+
+<tr style="background:#fafafa;">
+<td><strong>Status</strong></td>
+<td>
+<span style="
+background:#fff3cd;
+color:#856404;
+padding:6px 12px;
+border-radius:20px;
+font-weight:bold;
+">
+${status}
+</span>
+</td>
+</tr>
+
+</table>
+
+<br>
+
+<div
+style="
+background:#fff8e1;
+border-left:5px solid #ffc107;
+padding:18px;
+margin-top:25px;
+">
+
+<strong>Action Required</strong>
+
+<p style="margin-top:8px;margin-bottom:0;">
+Please review this requisition and take the necessary approval action.
+</p>
+
+</div>
+
+<br><br>
+
+<div style="text-align:center;">
+
+<a
+href="${loginUrl}"
+style="
+background:#D71920;
+color:#ffffff;
+padding:16px 40px;
+text-decoration:none;
+font-size:18px;
+font-weight:bold;
+border-radius:6px;
+display:inline-block;
+">
+
+👉 CLICK HERE FOR APPROVAL
+
+</a>
+
+</div>
+
+<br>
+
+<p style="font-size:14px;color:#666;">
+If the button above does not work, copy and paste the following URL into your browser:
+</p>
+
+<p style="
+word-break:break-all;
+color:#1565c0;
+font-size:13px;
+">
 ${loginUrl}
+</p>
 
-Click the above link to log in and review the pending requisition.
+<hr style="border:none;border-top:1px solid #eeeeee;margin:30px 0;">
 
----
-This is an automated notification from the Unified ITSM Platform.
+<p style="font-size:13px;color:#777;">
+This email has been generated automatically by the
+<strong>PolePlus Unified ITSM Platform</strong>.
+</p>
+
+<p style="font-size:13px;color:#777;">
 Please do not reply to this email.
+</p>
+
+</td>
+</tr>
+
+<tr>
+
+<td
+style="
+background:#f2f2f2;
+padding:18px;
+text-align:center;
+font-size:12px;
+color:#888;
+">
+
+© 2026 PolePlus Unified ITSM Platform
+
+</td>
+
+</tr>
+
+</table>
+
+</td>
+</tr>
+</table>
+
+</body>
+</html>
 `;
 
-      await emailService.sendEmail(to, subject, body);
+      // await emailService.sendEmail(to, subject, htmlBody, body);
+      const fs = require("fs");
+
+fs.writeFileSync("requisition-email-preview.html", htmlBody);
+
+console.log("Email preview saved as requisition-email-preview.html");
     } catch (error) {
       console.error('Error sending requisition email:', error);
       // Don't throw - email failure shouldn't block notifications
