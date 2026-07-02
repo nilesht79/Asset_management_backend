@@ -781,6 +781,9 @@ class RequisitionNotificationService {
         status
       } = emailData;
 
+      const loginUrl =
+  `https://itsm.cidcoindia.com/login?redirect=/requisitions/view/${requisition_id}`;
+
       const body = `
 ASSET REQUISITION NOTIFICATION
 ==============================
@@ -800,6 +803,9 @@ Quantity: ${quantity || 1}
 Purpose: ${purpose}
 Urgency: ${urgency}
 Current Status: ${status}
+
+Review Requisition:
+${loginUrl}
 
 Please log in to the Unified ITSM Platform to take action or view more details.
 
