@@ -974,18 +974,6 @@ display:inline-block;
 
 <br>
 
-<p style="font-size:14px;color:#666;">
-If the button above does not work, copy and paste the following URL into your browser:
-</p>
-
-<p style="
-word-break:break-all;
-color:#1565c0;
-font-size:13px;
-">
-${loginUrl}
-</p>
-
 <hr style="border:none;border-top:1px solid #eeeeee;margin:30px 0;">
 
 <p style="font-size:13px;color:#777;">
