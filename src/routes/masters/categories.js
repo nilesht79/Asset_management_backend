@@ -50,14 +50,27 @@ router.get('/',
     // Get paginated results
     const dataRequest = pool.request();
     params.forEach(param => dataRequest.input(param.name, param.type, param.value));
-    dataRequest.input('offset', sql.Int, offset);
-    dataRequest.input('limit', sql.Int, limit);
+    // dataRequest.input('offset', sql.Int, offset);
+    // dataRequest.input('limit', sql.Int, limit);
 
     const validSortFields = ['name', 'created_at', 'updated_at'];
     const safeSortBy = validSortFields.includes(sortBy) ? `c.${sortBy}` : 'c.created_at';
     const safeSortOrder = sortOrder === 'asc' ? 'ASC' : 'DESC';
 
-    const result = await dataRequest.query(`
+    // const result = await dataRequest.query(`
+    //   SELECT c.id, c.name, c.description, c.parent_category_id, c.is_active, c.created_at, c.updated_at,
+    //          (SELECT COUNT(*) FROM categories WHERE parent_category_id = c.id) as subcategory_count,
+    //          (SELECT COUNT(*) FROM products WHERE category_id = c.id AND is_active = 1) as product_count,
+    //          pc.name as parent_category_name
+    //   FROM categories c
+    //   LEFT JOIN categories pc ON c.parent_category_id = pc.id
+    //   WHERE ${whereClause}
+    //   ORDER BY ${safeSortBy} ${safeSortOrder}
+    //   OFFSET @offset ROWS
+    //   FETCH NEXT @limit ROWS ONLY
+    // `);
+
+     const result = await dataRequest.query(`
       SELECT c.id, c.name, c.description, c.parent_category_id, c.is_active, c.created_at, c.updated_at,
              (SELECT COUNT(*) FROM categories WHERE parent_category_id = c.id) as subcategory_count,
              (SELECT COUNT(*) FROM products WHERE category_id = c.id AND is_active = 1) as product_count,
@@ -66,8 +79,6 @@ router.get('/',
       LEFT JOIN categories pc ON c.parent_category_id = pc.id
       WHERE ${whereClause}
       ORDER BY ${safeSortBy} ${safeSortOrder}
-      OFFSET @offset ROWS
-      FETCH NEXT @limit ROWS ONLY
     `);
 
     const pagination = getPaginationInfo(page, limit, total);
@@ -331,12 +342,23 @@ router.get('/:id/subcategories',
     // Get paginated results
     const dataRequest = pool.request();
     params.forEach(param => dataRequest.input(param.name, param.type, param.value));
-    dataRequest.input('offset', sql.Int, offset);
-    dataRequest.input('limit', sql.Int, limit);
+    // dataRequest.input('offset', sql.Int, offset);
+    // dataRequest.input('limit', sql.Int, limit);
 
     const validSortFields = ['name', 'created_at', 'updated_at'];
     const safeSortBy = validSortFields.includes(sortBy) ? `sc.${sortBy}` : 'sc.created_at';
     const safeSortOrder = sortOrder === 'asc' ? 'ASC' : 'DESC';
+
+    // const result = await dataRequest.query(`
+    //   SELECT sc.id, sc.name, sc.description, sc.parent_category_id, sc.is_active, 
+    //          sc.created_at, sc.updated_at,
+    //          (SELECT COUNT(*) FROM products WHERE subcategory_id = sc.id AND is_active = 1) as product_count
+    //   FROM categories sc
+    //   WHERE ${whereClause}
+    //   ORDER BY ${safeSortBy} ${safeSortOrder}
+    //   OFFSET @offset ROWS
+    //   FETCH NEXT @limit ROWS ONLY
+    // `);
 
     const result = await dataRequest.query(`
       SELECT sc.id, sc.name, sc.description, sc.parent_category_id, sc.is_active, 
@@ -345,8 +367,6 @@ router.get('/:id/subcategories',
       FROM categories sc
       WHERE ${whereClause}
       ORDER BY ${safeSortBy} ${safeSortOrder}
-      OFFSET @offset ROWS
-      FETCH NEXT @limit ROWS ONLY
     `);
 
     const pagination = getPaginationInfo(page, limit, total);
