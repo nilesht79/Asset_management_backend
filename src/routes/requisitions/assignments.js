@@ -143,12 +143,32 @@ router.post(
       await transaction.begin();
 
       // 1. Check requisition exists and is pending assignment
-      const reqResult = await transaction.request()
-        .input('requisition_id', sql.UniqueIdentifier, requisition_id)
-        .query(`
-          SELECT * FROM ASSET_REQUISITIONS
-          WHERE requisition_id = @requisition_id
-        `);
+      // const reqResult = await transaction.request()
+      //   .input('requisition_id', sql.UniqueIdentifier, requisition_id)
+      //   .query(`
+      //     SELECT * FROM ASSET_REQUISITIONS
+      //     WHERE requisition_id = @requisition_id
+      //   `);
+
+      // 1. Check requisition exists and load complete details
+    const reqResult = await transaction.request()
+      .input('requisition_id', sql.UniqueIdentifier, requisition_id)
+      .query(`
+          SELECT
+              r.*,
+              c.name AS category_name,
+              subcat.name AS subcategory_name,
+              p.name AS product_name,
+              p.model AS product_model
+          FROM ASSET_REQUISITIONS r
+          LEFT JOIN categories c
+              ON r.asset_category_id = c.id
+          LEFT JOIN categories subcat
+              ON r.product_type_id = subcat.id
+          LEFT JOIN products p
+              ON r.requested_product_id = p.id
+          WHERE r.requisition_id = @requisition_id
+      `);
 
       if (reqResult.recordset.length === 0) {
         await transaction.rollback();
