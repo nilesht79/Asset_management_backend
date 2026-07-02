@@ -88,6 +88,7 @@ class RequisitionNotificationService {
         category_name,
         subcategory_name,
         quantity,
+        redirectPage: '/approvals/department-head',
         action: 'A new asset requisition requires your approval.',
         status: 'Pending Your Approval'
       });
@@ -139,7 +140,8 @@ class RequisitionNotificationService {
             requisition_id,
             requisition_number,
             approved_by: `${approver.firstName} ${approver.lastName}`,
-            stage: 'pending_it_head'
+            stage: 'pending_it_head',
+            redirectPage: '/requisitions/my-requisitions'
           }
         });
 
@@ -152,6 +154,7 @@ class RequisitionNotificationService {
           department_name,
           purpose,
           urgency,
+          redirectPage: '/approvals/it-head'
           action: `Your requisition has been approved by ${approver.firstName} ${approver.lastName} (Department Head).`,
           status: 'Pending IT Head Approval'
         });
@@ -195,6 +198,7 @@ class RequisitionNotificationService {
           category_name,
           subcategory_name,
           quantity,
+          redirectPage
           action: 'This requisition has been approved by the Department Head and now requires your approval.',
           status: 'Pending Your Approval'
         });
@@ -342,7 +346,8 @@ class RequisitionNotificationService {
             department_name,
             purpose,
             urgency,
-            action_required: 'assign_asset'
+            action_required: 'assign_asset',
+            redirectPage: '/assignments/asset-assignment'
           }
         });
 
@@ -356,7 +361,8 @@ class RequisitionNotificationService {
           purpose,
           urgency,
           action: 'This requisition has been fully approved and requires asset assignment.',
-          status: 'Ready for Asset Assignment'
+          status: 'Ready for Asset Assignment',
+          redirectPage: '/assignments/asset-assignment'
         });
       }
 
@@ -792,8 +798,12 @@ class RequisitionNotificationService {
         status
       } = emailData;
 
+//       const loginUrl =
+// "https://itsm.cidcoindia.com/login?redirect=/approvals/department-head";
       const loginUrl =
-"https://itsm.cidcoindia.com/login?redirect=/approvals/department-head";
+`https://itsm.cidcoindia.com/login?redirect=${encodeURIComponent(
+    redirectPage || "/dashboard"
+)}`;
 
 //       const body = `
 // ASSET REQUISITION NOTIFICATION
