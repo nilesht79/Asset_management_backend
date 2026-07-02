@@ -108,9 +108,24 @@ router.put('/:id/dept-head-approve',
     const pool = await connectDB();
 
     // Get requisition
+    // const reqResult = await pool.request()
+    //   .input('id', sql.UniqueIdentifier, id)
+    //   .query(`SELECT * FROM ASSET_REQUISITIONS WHERE requisition_id = @id`);
+
     const reqResult = await pool.request()
-      .input('id', sql.UniqueIdentifier, id)
-      .query(`SELECT * FROM ASSET_REQUISITIONS WHERE requisition_id = @id`);
+  .input('id', sql.UniqueIdentifier, id)
+  .query(`
+    SELECT
+      r.*,
+      cat.name AS category_name,
+      subcat.name AS subcategory_name
+    FROM ASSET_REQUISITIONS r
+    LEFT JOIN categories cat
+      ON r.asset_category_id = cat.id
+    LEFT JOIN categories subcat
+      ON r.product_type_id = subcat.id
+    WHERE r.requisition_id = @id
+  `);
 
     if (reqResult.recordset.length === 0) {
       return sendNotFound(res, 'Requisition not found');
@@ -421,9 +436,25 @@ router.put('/:id/it-head-approve',
     const pool = await connectDB();
 
     // Get requisition
+    // const reqResult = await pool.request()
+    //   .input('id', sql.UniqueIdentifier, id)
+    //   .query(`SELECT * FROM ASSET_REQUISITIONS WHERE requisition_id = @id`);
+
     const reqResult = await pool.request()
-      .input('id', sql.UniqueIdentifier, id)
-      .query(`SELECT * FROM ASSET_REQUISITIONS WHERE requisition_id = @id`);
+  .input('id', sql.UniqueIdentifier, id)
+  .query(`
+    SELECT
+      r.*,
+      cat.name AS category_name,
+      subcat.name AS subcategory_name
+    FROM ASSET_REQUISITIONS r
+    LEFT JOIN categories cat
+      ON r.asset_category_id = cat.id
+    LEFT JOIN categories subcat
+      ON r.product_type_id = subcat.id
+    WHERE r.requisition_id = @id
+  `);
+    
 
     if (reqResult.recordset.length === 0) {
       return sendNotFound(res, 'Requisition not found');
