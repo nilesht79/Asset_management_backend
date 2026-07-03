@@ -534,9 +534,18 @@ class GatePassPDF {
 
     // Total count
     y += 5;
-    const totalText = assets.length > displayAssets.length
-      ? `Total Assets: ${assets.length} (showing ${displayAssets.length})`
-      : `Total Assets: ${sno}`;
+    // const totalText = assets.length > displayAssets.length
+    //   ? `Total Assets: ${assets.length} (showing ${displayAssets.length})`
+    //   : `Total Assets: ${sno}`;
+
+    let totalAssets = sno;
+
+    // For "Proceed Without Asset" gate pass
+    if (totalAssets === 0 && gatePass && gatePass.remarks) {
+      totalAssets = (gatePass.remarks.match(/^\d+:/gm) || []).length;
+    }
+    
+    const totalText = `Total Assets: ${totalAssets}`;
     doc.font('Helvetica-Bold')
       .fontSize(9)
       .fillColor(this.colors.primary)
