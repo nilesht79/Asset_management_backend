@@ -552,37 +552,67 @@ class GatePassPDF {
   /**
    * Render remarks section
    */
+  // static renderRemarks(doc, remarks, margin, y, pageWidth) {
+  //   doc.font('Helvetica-Bold')
+  //     .fontSize(10)
+  //     .fillColor(this.colors.primary)
+  //     .text('Remarks:', margin, y, { lineBreak: false });
+
+  //   y += 15;
+
+  //   doc.rect(margin, y, pageWidth, 40)
+  //     .stroke(this.colors.border);
+
+  //   // Truncate remarks to prevent overflow
+  //   const truncatedRemarks = remarks.length > 150 ? remarks.substring(0, 150) + '...' : remarks;
+
+  //   // Use save/restore to clip text within bounds
+  //   doc.save();
+  //   doc.rect(margin + 5, y + 5, pageWidth - 10, 32).clip();
+  //   doc.font('Helvetica')
+  //     .fontSize(9)
+  //     .fillColor(this.colors.black)
+  //     .text(truncatedRemarks, margin + 10, y + 8, {
+  //       width: pageWidth - 20
+  //     });
+  //   doc.restore();
+
+  //   // Reset cursor position
+  //   doc.x = margin;
+  //   doc.y = y + 50;
+
+  //   return y + 50;
+  // }
+
   static renderRemarks(doc, remarks, margin, y, pageWidth) {
-    doc.font('Helvetica-Bold')
-      .fontSize(10)
-      .fillColor(this.colors.primary)
-      .text('Remarks:', margin, y, { lineBreak: false });
+  doc.font('Helvetica-Bold')
+    .fontSize(10)
+    .fillColor(this.colors.primary)
+    .text('Remarks:', margin, y);
 
-    y += 15;
+  y += 15;
 
-    doc.rect(margin, y, pageWidth, 40)
-      .stroke(this.colors.border);
+  // Calculate required height
+  const remarksHeight = doc.heightOfString(remarks || '', {
+    width: pageWidth - 20
+  });
 
-    // Truncate remarks to prevent overflow
-    const truncatedRemarks = remarks.length > 150 ? remarks.substring(0, 150) + '...' : remarks;
+  const boxHeight = Math.max(40, remarksHeight + 16);
 
-    // Use save/restore to clip text within bounds
-    doc.save();
-    doc.rect(margin + 5, y + 5, pageWidth - 10, 32).clip();
-    doc.font('Helvetica')
-      .fontSize(9)
-      .fillColor(this.colors.black)
-      .text(truncatedRemarks, margin + 10, y + 8, {
-        width: pageWidth - 20
-      });
-    doc.restore();
+  // Draw remarks box
+  doc.rect(margin, y, pageWidth, boxHeight)
+    .stroke(this.colors.border);
 
-    // Reset cursor position
-    doc.x = margin;
-    doc.y = y + 50;
+  // Print complete remarks (NO truncation)
+  doc.font('Helvetica')
+    .fontSize(9)
+    .fillColor(this.colors.black)
+    .text(remarks || '-', margin + 10, y + 8, {
+      width: pageWidth - 20
+    });
 
-    return y + 50;
-  }
+  return y + boxHeight + 10;
+}
 
   /**
    * Render signatures section
