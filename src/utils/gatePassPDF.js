@@ -131,7 +131,8 @@ class GatePassPDF {
     y = this.renderFromToSection(doc, gatePass, margin, y, pageWidth);
 
     // ===== ASSETS TABLE =====
-    y = this.renderAssetsTable(doc, gatePass.assets || [], margin, y, pageWidth, maxY);
+    // y = this.renderAssetsTable(doc, gatePass.assets || [], margin, y, pageWidth, maxY);
+    y = this.renderAssetsTable(doc, gatePass, margin, y, pageWidth, maxY);
 
     // ===== REMARKS =====
     if (gatePass.remarks && y < maxY - 60) {
@@ -417,8 +418,10 @@ class GatePassPDF {
   /**
    * Render assets table
    */
-  static renderAssetsTable(doc, assets, margin, y, pageWidth, maxY) {
+  // static renderAssetsTable(doc, assets, margin, y, pageWidth, maxY) {
+  static renderAssetsTable(doc, gatePass, margin, y, pageWidth, maxY) {
     // Section header
+    const assets = gatePass.assets || [];
     doc.font('Helvetica-Bold')
       .fontSize(11)
       .fillColor(this.colors.primary)
