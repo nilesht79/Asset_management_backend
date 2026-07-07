@@ -229,6 +229,84 @@ router.get('/assets/search',
 );
 
 /**
+ * GET /api/v1/gate-passes/users/:userId/assets
+ * Get assets assigned to selected user
+ */
+router.get(
+  '/users/:userId/assets',
+  requireRole([
+    USER_ROLES.ADMIN,
+    USER_ROLES.SUPERADMIN,
+    USER_ROLES.COORDINATOR,
+    USER_ROLES.IT_HEAD
+  ]),
+  asyncHandler(async (req, res) => {
+
+    const { userId } = req.params;
+
+    const pool = await connectDB();
+
+    const result = await pool.request()
+      .input('userId', sql.UniqueIdentifier, userId)
+      .query(`
+        SELECT
+            a.id,
+            a.asset_tag,
+            a.serial_number,
+            a.status,
+            a.condition_status,
+            a.asset_type,
+            a.parent_asset_id,
+
+            p.name as product_name,
+            p.model,
+
+            oem.name as oem_name,
+            cat.name as category_name,
+
+            u.first_name + ' ' + u.last_name as assigned_to_name,
+
+            l.id as location_id,
+            l.name as location_name,
+
+            (
+                SELECT COUNT(*)
+                FROM ASSETS
+                WHERE parent_asset_id = a.id
+            ) as component_count
+
+        FROM ASSETS a
+
+        LEFT JOIN products p
+            ON a.product_id = p.id
+
+        LEFT JOIN oems oem
+            ON p.oem_id = oem.id
+
+        LEFT JOIN categories cat
+            ON p.category_id = cat.id
+
+        LEFT JOIN USER_MASTER u
+            ON a.assigned_to = u.user_id
+
+        LEFT JOIN locations l
+            ON u.location_id = l.id
+
+        WHERE
+            a.assigned_to = @userId
+            AND a.is_active = 1
+            AND a.status NOT IN ('disposed','scrapped')
+
+        ORDER BY a.asset_tag
+      `);
+
+    sendSuccess(res, result.recordset);
+
+  })
+);
+
+
+/**
  * GET /api/v1/gate-passes/assets/:assetId/with-components
  * Get asset with its components (for parent assets)
  */
