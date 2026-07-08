@@ -131,15 +131,46 @@ router.get('/',
       params.push({ name: 'conditionStatus', type: sql.VarChar(20), value: condition_status });
     }
 
-    if (location_id) {
-      whereClause += ' AND u.location_id = @locationId';
-      params.push({ name: 'locationId', type: sql.UniqueIdentifier, value: location_id });
-    }
+    // if (location_id) {
+    //   whereClause += ' AND u.location_id = @locationId';
+    //   params.push({ name: 'locationId', type: sql.UniqueIdentifier, value: location_id });
+    // }
+
+     if (location_id) {
+        whereClause += `
+          AND COALESCE(
+            parent.location_id,
+            a.location_id,
+            u.location_id
+          ) = @locationId
+        `;
+
+        params.push({
+          name: 'locationId',
+          type: sql.UniqueIdentifier,
+          value: location_id
+        });
+      }
+
+    // if (assigned_to) {
+    //   whereClause += ' AND a.assigned_to = @assignedTo';
+    //   params.push({ name: 'assignedTo', type: sql.UniqueIdentifier, value: assigned_to });
+    // }
 
     if (assigned_to) {
-      whereClause += ' AND a.assigned_to = @assignedTo';
-      params.push({ name: 'assignedTo', type: sql.UniqueIdentifier, value: assigned_to });
-    }
+  whereClause += `
+    AND COALESCE(
+      parent.assigned_to,
+      a.assigned_to
+    ) = @assignedTo
+  `;
+
+  params.push({
+    name: 'assignedTo',
+    type: sql.UniqueIdentifier,
+    value: assigned_to
+  });
+}
 
     if (product_id) {
       whereClause += ' AND a.product_id = @productId';
@@ -207,6 +238,18 @@ if (board_id) {
     const countRequest = pool.request();
     params.forEach(param => countRequest.input(param.name, param.type, param.value));
 
+    // const countResult = await countRequest.query(`
+    //   SELECT COUNT(*) as total
+    //   FROM assets a
+    //   INNER JOIN products p ON a.product_id = p.id
+    //   LEFT JOIN categories c ON p.category_id = c.id
+    //   LEFT JOIN product_types pt ON p.type_id = pt.id
+    //   LEFT JOIN oems o ON p.oem_id = o.id
+    //   LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
+    //   LEFT JOIN DEPARTMENT_MASTER dept ON u.department_id = dept.department_id
+    //   WHERE ${whereClause}
+    // `);
+
     const countResult = await countRequest.query(`
       SELECT COUNT(*) as total
       FROM assets a
@@ -214,8 +257,18 @@ if (board_id) {
       LEFT JOIN categories c ON p.category_id = c.id
       LEFT JOIN product_types pt ON p.type_id = pt.id
       LEFT JOIN oems o ON p.oem_id = o.id
-      LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
-      LEFT JOIN DEPARTMENT_MASTER dept ON u.department_id = dept.department_id
+      LEFT JOIN assets parent
+      ON a.parent_asset_id = parent.id
+
+      LEFT JOIN USER_MASTER u
+      ON COALESCE(parent.assigned_to, a.assigned_to) = u.user_id
+
+      LEFT JOIN DEPARTMENT_MASTER dept
+      ON COALESCE(
+          parent.department_id,
+          a.department_id,
+          u.department_id
+      ) = dept.department_id
       WHERE ${whereClause}
     `);
 
@@ -244,8 +297,8 @@ SELECT
   subcat.id as subcategory_id, subcat.name as subcategory_name,
   o.id as oem_id, o.name as oem_name,
   v.id as vendor_id, v.name as vendor_name, v.code as vendor_code,
-   COALESCE(a.location_id, u.location_id) as location_id,
-  COALESCE(a.department_id, u.department_id) as department_id,
+ COALESCE(parent.location_id, a.location_id, u.location_id) as location_id,
+COALESCE(parent.department_id, a.department_id, u.department_id) as department_id,
   u.first_name + ' ' + u.last_name as assigned_user_name,
   u.email as assigned_user_email,
   u.employee_id as assigned_employee_code,
@@ -268,11 +321,30 @@ LEFT JOIN product_types pt ON p.type_id = pt.id
 LEFT JOIN categories subcat ON p.subcategory_id = subcat.id
 LEFT JOIN oems o ON p.oem_id = o.id
 LEFT JOIN vendors v ON a.vendor_id = v.id
-LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
-LEFT JOIN DEPARTMENT_MASTER d 
-ON COALESCE(a.department_id, u.department_id) = d.department_id
-LEFT JOIN locations l 
-ON COALESCE(a.location_id, u.location_id) = l.id
+
+-- Parent Asset
+LEFT JOIN assets parent
+ON a.parent_asset_id = parent.id
+
+-- Assigned User
+LEFT JOIN USER_MASTER u
+ON COALESCE(parent.assigned_to, a.assigned_to) = u.user_id
+
+-- Department
+LEFT JOIN DEPARTMENT_MASTER d
+ON COALESCE(
+    parent.department_id,
+    a.department_id,
+    u.department_id
+) = d.department_id
+
+-- Location
+LEFT JOIN locations l
+ON COALESCE(
+    parent.location_id,
+    a.location_id,
+    u.location_id
+) = l.id
 WHERE ${whereClause}
 ORDER BY ${safeSortBy} ${safeSortOrder}
 OFFSET @offset ROWS
@@ -335,11 +407,30 @@ finalQuery = finalQuery.replace('@limit', limit);
       LEFT JOIN categories subcat ON p.subcategory_id = subcat.id
       LEFT JOIN oems o ON p.oem_id = o.id
       LEFT JOIN vendors v ON a.vendor_id = v.id
-      LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
-      LEFT JOIN DEPARTMENT_MASTER d 
-      ON COALESCE(a.department_id, u.department_id) = d.department_id
-      LEFT JOIN locations l 
-      ON COALESCE(a.location_id, u.location_id) = l.id
+
+-- Parent Asset
+LEFT JOIN assets parent
+ON a.parent_asset_id = parent.id
+
+-- Assigned User
+LEFT JOIN USER_MASTER u
+ON COALESCE(parent.assigned_to, a.assigned_to) = u.user_id
+
+-- Department
+LEFT JOIN DEPARTMENT_MASTER d
+ON COALESCE(
+    parent.department_id,
+    a.department_id,
+    u.department_id
+) = d.department_id
+
+-- Location
+LEFT JOIN locations l
+ON COALESCE(
+    parent.location_id,
+    a.location_id,
+    u.location_id
+) = l.id
       WHERE ${whereClause}
       ORDER BY ${safeSortBy} ${safeSortOrder}
       OFFSET @offset ROWS
@@ -748,15 +839,46 @@ router.get('/export',
       params.push({ name: 'conditionStatus', type: sql.VarChar(20), value: condition_status });
     }
 
-    if (location_id) {
-      whereClause += ' AND u.location_id = @locationId';
-      params.push({ name: 'locationId', type: sql.UniqueIdentifier, value: location_id });
-    }
+    // if (location_id) {
+    //   whereClause += ' AND u.location_id = @locationId';
+    //   params.push({ name: 'locationId', type: sql.UniqueIdentifier, value: location_id });
+    // }
+
+     if (location_id) {
+        whereClause += `
+          AND COALESCE(
+            parent.location_id,
+            a.location_id,
+            u.location_id
+          ) = @locationId
+        `;
+
+        params.push({
+          name: 'locationId',
+          type: sql.UniqueIdentifier,
+          value: location_id
+        });
+      }
+
+    // if (assigned_to) {
+    //   whereClause += ' AND a.assigned_to = @assignedTo';
+    //   params.push({ name: 'assignedTo', type: sql.UniqueIdentifier, value: assigned_to });
+    // }
 
     if (assigned_to) {
-      whereClause += ' AND a.assigned_to = @assignedTo';
-      params.push({ name: 'assignedTo', type: sql.UniqueIdentifier, value: assigned_to });
-    }
+  whereClause += `
+    AND COALESCE(
+      parent.assigned_to,
+      a.assigned_to
+    ) = @assignedTo
+  `;
+
+  params.push({
+    name: 'assignedTo',
+    type: sql.UniqueIdentifier,
+    value: assigned_to
+  });
+}
 
     if (product_id) {
       whereClause += ' AND a.product_id = @productId';
@@ -883,12 +1005,32 @@ params.forEach(p => {
       LEFT JOIN categories c ON p.category_id = c.id
       LEFT JOIN categories subcat ON p.subcategory_id = subcat.id
       LEFT JOIN oems o ON p.oem_id = o.id
-      LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
-      LEFT JOIN locations l 
-      ON COALESCE(a.location_id, u.location_id) = l.id
-      LEFT JOIN DEPARTMENT_MASTER d 
-      ON COALESCE(a.department_id, u.department_id) = d.department_id
-      LEFT JOIN assets parent ON a.parent_asset_id = parent.id
+      
+LEFT JOIN vendors v ON a.vendor_id = v.id
+
+-- Parent Asset
+LEFT JOIN assets parent
+ON a.parent_asset_id = parent.id
+
+-- Assigned User
+LEFT JOIN USER_MASTER u
+ON COALESCE(parent.assigned_to, a.assigned_to) = u.user_id
+
+-- Department
+LEFT JOIN DEPARTMENT_MASTER d
+ON COALESCE(
+    parent.department_id,
+    a.department_id,
+    u.department_id
+) = d.department_id
+
+-- Location
+LEFT JOIN locations l
+ON COALESCE(
+    parent.location_id,
+    a.location_id,
+    u.location_id
+) = l.id
       WHERE ${whereClause}
       ORDER BY a.created_at DESC
     `);
@@ -983,10 +1125,29 @@ router.get('/deleted',
     const countRequest = pool.request();
     params.forEach(param => countRequest.input(param.name, param.type, param.value));
 
+    // const countResult = await countRequest.query(`
+    //   SELECT COUNT(*) as total
+    //   FROM assets a
+    //   INNER JOIN products p ON a.product_id = p.id
+    //   WHERE ${whereClause}
+    // `);
+
+
     const countResult = await countRequest.query(`
       SELECT COUNT(*) as total
       FROM assets a
-      INNER JOIN products p ON a.product_id = p.id
+      LEFT JOIN assets parent
+      ON a.parent_asset_id = parent.id
+
+      LEFT JOIN USER_MASTER u
+      ON COALESCE(parent.assigned_to, a.assigned_to) = u.user_id
+
+      LEFT JOIN DEPARTMENT_MASTER dept
+      ON COALESCE(
+          parent.department_id,
+          a.department_id,
+          u.department_id
+      ) = dept.department_id
       WHERE ${whereClause}
     `);
 
@@ -1495,10 +1656,19 @@ router.get('/dropdown',
       request.input('categoryId', sql.UniqueIdentifier, category_id);
     }
 
-    if (location_id) {
-      query += ' AND u.location_id = @locationId';
-      request.input('locationId', sql.UniqueIdentifier, location_id);
-    }
+    // if (location_id) {
+    //   query += ' AND u.location_id = @locationId';
+    //   request.input('locationId', sql.UniqueIdentifier, location_id);
+    // }
+
+
+     if (location_id) {
+  query += `
+    AND COALESCE(a.location_id, u.location_id) = @locationId
+  `;
+
+  request.input('locationId', sql.UniqueIdentifier, location_id);
+}
 
     // NEW: Component Installation Specific Filters
     if (exclude_standby === 'true') {
