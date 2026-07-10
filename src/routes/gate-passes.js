@@ -574,6 +574,7 @@ router.post('/',
         authorizerName = authResult.recordset[0]?.name;
       }
 
+        console.log("Saving Floor:", recipientInfo.floor);
       // Insert gate pass
       await transaction.request()
         .input('id', sql.UniqueIdentifier, gatePassId)
@@ -603,7 +604,6 @@ router.post('/',
         .input('created_by', sql.UniqueIdentifier, req.user.id)
         .input('created_by_name', sql.NVarChar(200), creatorName)
         .input('carrier_name', sql.NVarChar(200), carrier_name || null)
-        console.log("Saving Floor:", recipientInfo.floor);
         .query(`
           INSERT INTO GATE_PASSES (
             id, gate_pass_number, gate_pass_type, purpose,
