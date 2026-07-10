@@ -349,7 +349,7 @@ class GatePassPDF {
 
     // TO Box
     const toX = margin + halfWidth + 20;
-    doc.rect(toX, y, halfWidth, 80)
+    doc.rect(toX, y, halfWidth, 95)
       .stroke(this.colors.border);
 
     doc.font('Helvetica-Bold')
@@ -400,19 +400,36 @@ class GatePassPDF {
           .fillColor(this.colors.gray)
           .text(`Emp ID: ${gatePass.recipient_employee_id}`, toX + 10, y + 42, { lineBreak: false });
       }
+      // if (gatePass.recipient_department) {
+      //   doc.text(`Dept: ${gatePass.recipient_department}`, toX + 10, y + 54, { lineBreak: false });
+      // }
+      // if (gatePass.recipient_location) {
+      //   doc.text(`Location: ${gatePass.recipient_location}`, toX + 10, y + 66, { lineBreak: false });
+      // }
       if (gatePass.recipient_department) {
-        doc.text(`Dept: ${gatePass.recipient_department}`, toX + 10, y + 54, { lineBreak: false });
-      }
-      if (gatePass.recipient_location) {
-        doc.text(`Location: ${gatePass.recipient_location}`, toX + 10, y + 66, { lineBreak: false });
-      }
+            doc.text(`Dept: ${gatePass.recipient_department}`, toX + 10, y + 54, {
+              lineBreak: false
+            });
+          }
+          
+          if (gatePass.recipient_location) {
+            doc.text(`Location: ${gatePass.recipient_location}`, toX + 10, y + 66, {
+              lineBreak: false
+            });
+          }
+          
+          if (gatePass.recipient_floor) {
+            doc.text(`Floor: ${gatePass.recipient_floor}`, toX + 10, y + 78, {
+              lineBreak: false
+            });
+          }
     }
 
     // Reset cursor position
     doc.x = margin;
-    doc.y = y + 95;
+    doc.y = y + 110;
 
-    return y + 95;
+    return y + 110;
   }
 
   /**
