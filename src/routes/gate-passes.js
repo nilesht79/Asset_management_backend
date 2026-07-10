@@ -505,32 +505,53 @@ router.post('/',
         //     WHERE u.user_id = @user_id
         //   `);
 
-        const recipientResult = await transaction.request()
-          .input('user_id', sql.UniqueIdentifier, recipient_user_id)
-          .query(`
-            SELECT TOP 1
-              u.first_name + ' ' + u.last_name AS name,
-              u.employee_id,
-              u.email,
+        // const recipientResult = await transaction.request()
+        //   .input('user_id', sql.UniqueIdentifier, recipient_user_id)
+        //   .query(`
+        //     SELECT TOP 1
+        //       u.first_name + ' ' + u.last_name AS name,
+        //       u.employee_id,
+        //       u.email,
           
-              dm.department_name,
-              l.name AS location_name,
-              l.floor AS floor_name
+        //       dm.department_name,
+        //       l.name AS location_name,
+        //       l.floor AS floor_name
           
-          FROM USER_MASTER u
+        //   FROM USER_MASTER u
           
-          LEFT JOIN ASSETS a
-              ON a.assigned_to = u.user_id
+        //   LEFT JOIN ASSETS a
+        //       ON a.assigned_to = u.user_id
           
-          LEFT JOIN DEPARTMENT_MASTER dm
-              ON a.department_id = dm.department_id
+        //   LEFT JOIN DEPARTMENT_MASTER dm
+        //       ON a.department_id = dm.department_id
           
-          LEFT JOIN locations l
-              ON a.location_id = l.id
+        //   LEFT JOIN locations l
+        //       ON a.location_id = l.id
 
-              WHERE u.user_id = @user_id
-              ORDER BY a.updated_at DESC
-          `);
+        //       WHERE u.user_id = @user_id
+        //       ORDER BY a.updated_at DESC
+        //   `);
+
+        const recipientResult = await transaction.request()
+  .input('user_id', sql.UniqueIdentifier, recipient_user_id)
+  .input('asset_id', sql.UniqueIdentifier, assets[0].asset_id)
+  .query(`
+    SELECT
+      u.first_name + ' ' + u.last_name AS name,
+      u.employee_id,
+      u.email,
+      dm.department_name,
+      l.name AS location_name,
+      l.floor AS floor_name
+    FROM USER_MASTER u
+    INNER JOIN ASSETS a
+      ON a.id = @asset_id
+    LEFT JOIN DEPARTMENT_MASTER dm
+      ON a.department_id = dm.department_id
+    LEFT JOIN locations l
+      ON a.location_id = l.id
+    WHERE u.user_id = @user_id
+  `);
 
         
         recipientInfo = recipientResult.recordset[0] || {};
