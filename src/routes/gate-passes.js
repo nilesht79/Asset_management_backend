@@ -535,6 +535,7 @@ router.post('/',
         
         recipientInfo = recipientResult.recordset[0] || {};
         recipientInfo.floor = recipientInfo.floor_name;
+        console.log("Recipient Query Result:", recipientResult.recordset[0]);
         console.log("Recipient Info:", recipientInfo);
         
         // Use asset location instead of user location
@@ -581,6 +582,7 @@ router.post('/',
         .input('created_by', sql.UniqueIdentifier, req.user.id)
         .input('created_by_name', sql.NVarChar(200), creatorName)
         .input('carrier_name', sql.NVarChar(200), carrier_name || null)
+        console.log("Saving Floor:", recipientInfo.floor);
         .query(`
           INSERT INTO GATE_PASSES (
             id, gate_pass_number, gate_pass_type, purpose,
