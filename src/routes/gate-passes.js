@@ -535,6 +535,8 @@ router.post('/',
         
         recipientInfo = recipientResult.recordset[0] || {};
         recipientInfo.floor = recipientInfo.floor_name;
+        console.log("Recipient Info:", recipientInfo);
+        
         // Use asset location instead of user location
           if (fromLocation.location_name) {
             recipientInfo.location_name = fromLocation.location_name;
