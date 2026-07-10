@@ -314,7 +314,7 @@ class GatePassPDF {
     const halfWidth = (pageWidth - 20) / 2;
 
     // FROM Box
-    doc.rect(margin, y, halfWidth, 80)
+    doc.rect(margin, y, halfWidth, 95)
       .stroke(this.colors.border);
 
     doc.font('Helvetica-Bold')
