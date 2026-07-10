@@ -490,21 +490,51 @@ router.post('/',
       // Get recipient info if end_user
       let recipientInfo = {};
       if (gate_pass_type === 'end_user' && recipient_user_id) {
+        // const recipientResult = await transaction.request()
+        //   .input('user_id', sql.UniqueIdentifier, recipient_user_id)
+        //   .query(`
+        //     SELECT
+        //       u.first_name + ' ' + u.last_name as name,
+        //       u.employee_id,
+        //       u.email,
+        //       d.department_name,
+        //       l.name as location_name
+        //     FROM USER_MASTER u
+        //     LEFT JOIN DEPARTMENT_MASTER d ON u.department_id = d.department_id
+        //     LEFT JOIN locations l ON u.location_id = l.id
+        //     WHERE u.user_id = @user_id
+        //   `);
+
         const recipientResult = await transaction.request()
           .input('user_id', sql.UniqueIdentifier, recipient_user_id)
           .query(`
-            SELECT
-              u.first_name + ' ' + u.last_name as name,
+            SELECT TOP 1
+              u.first_name + ' ' + u.last_name AS name,
               u.employee_id,
               u.email,
-              d.department_name,
-              l.name as location_name
-            FROM USER_MASTER u
-            LEFT JOIN DEPARTMENT_MASTER d ON u.department_id = d.department_id
-            LEFT JOIN locations l ON u.location_id = l.id
-            WHERE u.user_id = @user_id
+          
+              dm.department_name,
+              l.name AS location_name,
+              l.floor AS floor_name
+          
+          FROM USER_MASTER u
+          
+          LEFT JOIN ASSETS a
+              ON a.assigned_to = u.user_id
+          
+          LEFT JOIN DEPARTMENT_MASTER dm
+              ON a.department_id = dm.department_id
+          
+          LEFT JOIN locations l
+              ON a.location_id = l.id
+
+              WHERE u.user_id = @user_id
+              ORDER BY a.updated_at DESC
           `);
+
+        
         recipientInfo = recipientResult.recordset[0] || {};
+        recipientInfo.floor = recipientInfo.floor_name;
         // Use asset location instead of user location
           if (fromLocation.location_name) {
             recipientInfo.location_name = fromLocation.location_name;
@@ -529,6 +559,7 @@ router.post('/',
         .input('from_location_id', sql.UniqueIdentifier, fromLocation.location_id || null)
         .input('from_location_name', sql.NVarChar(200), fromLocation.location_name || null)
         .input('from_location_address', sql.NVarChar(500), fromLocation.location_address || null)
+        .input('recipient_floor',sql.NVarChar(100),recipientInfo.floor || null)
         .input('vendor_id', sql.UniqueIdentifier, vendor_id || null)
         .input('vendor_name', sql.NVarChar(200), vendorName)
         .input('destination_address', sql.NVarChar(500), destination_address || null)
@@ -553,14 +584,14 @@ router.post('/',
             id, gate_pass_number, gate_pass_type, purpose,
             from_location_id, from_location_name, from_location_address,
             vendor_id, vendor_name, destination_address, service_description, expected_return_date,
-            recipient_user_id, recipient_name, recipient_employee_id, recipient_email, recipient_department, recipient_location,
+            recipient_user_id, recipient_name, recipient_employee_id, recipient_email, recipient_department, recipient_location,recipient_floor,
             authorized_by, authorized_by_name, issue_date, valid_until, remarks,
             created_by, created_by_name, carrier_name
           ) VALUES (
             @id, @gate_pass_number, @gate_pass_type, @purpose,
             @from_location_id, @from_location_name, @from_location_address,
             @vendor_id, @vendor_name, @destination_address, @service_description, @expected_return_date,
-            @recipient_user_id, @recipient_name, @recipient_employee_id, @recipient_email, @recipient_department, @recipient_location,
+            @recipient_user_id, @recipient_name, @recipient_employee_id, @recipient_email, @recipient_department, @recipient_location,@recipient_floor,
             @authorized_by, @authorized_by_name, @issue_date, @valid_until, @remarks,
             @created_by, @created_by_name, @carrier_name
           )
