@@ -677,12 +677,12 @@ const now =
       }
 
       if (startDate) {
-        whereConditions.push('t.created_at >= @dateFrom');
+        whereConditions.push('t.resolved_at >= @dateFrom');
         request.input('dateFrom', sql.DateTime, startDate);
       }
 
       if (endDate) {
-        whereConditions.push('t.created_at <= @dateTo');
+        whereConditions.push('t.resolved_at <= @dateTo');
         request.input('dateTo', sql.DateTime, endDate);
       }
 
@@ -731,7 +731,7 @@ const now =
 
       switch (filters.frequency) {
         case 'daily':
-          periodSelect = "CONVERT(VARCHAR(10), t.created_at,120) AS period";
+          periodSelect = "CONVERT(VARCHAR(10), t.resolved_at,120) AS period";
           groupByClause = "GROUP BY CONVERT(VARCHAR(10), t.created_at, 120)";
           break;
         case 'weekly':
@@ -757,8 +757,7 @@ const now =
           ${periodSelect},
           COUNT(DISTINCT t.ticket_id) AS total_tickets,
           COUNT(DISTINCT CASE
-    WHEN tst.final_status IS NULL
-         OR tst.final_status <> 'breached'
+    WHEN tst.final_status IN ('on_track','warning','critical')
     THEN t.ticket_id
 END) AS resolved_within_sla,
           COUNT(DISTINCT CASE
@@ -768,7 +767,7 @@ END) AS resolved_breached,
           CAST(
     (
         COUNT(DISTINCT CASE
-            WHEN tst.final_status <> 'breached'
+            WHEN tst.final_status IN ('on_track','warning','critical')
             THEN t.ticket_id
         END) * 100.0
     ) / NULLIF(COUNT(DISTINCT t.ticket_id), 0)
@@ -803,8 +802,7 @@ END) AS resolved_breached,
         SELECT
           COUNT(DISTINCT t.ticket_id) AS total_tickets,
           COUNT(DISTINCT CASE
-    WHEN tst.final_status IS NULL
-         OR tst.final_status <> 'breached'
+    WHEN tst.final_status IN ('on_track','warning','critical')
     THEN t.ticket_id
 END) AS resolved_within_sla,
           COUNT(DISTINCT CASE
@@ -814,7 +812,7 @@ END) AS resolved_breached,
           CAST(
     (
         COUNT(DISTINCT CASE
-            WHEN tst.final_status <> 'breached'
+            WHEN tst.final_status IN ('on_track','warning','critical')
             THEN t.ticket_id
         END) * 100.0
     ) / NULLIF(COUNT(DISTINCT t.ticket_id), 0)
@@ -847,14 +845,13 @@ END) AS resolved_breached,
           l.name AS location_name,
           COUNT(DISTINCT t.ticket_id) AS total_tickets,
           COUNT(DISTINCT CASE
-    WHEN tst.final_status IS NULL
-         OR tst.final_status <> 'breached'
+   WHEN tst.final_status IN ('on_track','warning','critical')
     THEN t.ticket_id
 END) AS resolved_within_sla,
           CAST(
     (
         COUNT(DISTINCT CASE
-            WHEN tst.final_status <> 'breached'
+            WHEN tst.final_status IN ('on_track','warning','critical')
             THEN t.ticket_id
         END) * 100.0
     ) / NULLIF(COUNT(DISTINCT t.ticket_id), 0)
@@ -889,14 +886,13 @@ END) AS resolved_within_sla,
           d.department_name,
           COUNT(DISTINCT t.ticket_id) AS total_tickets,
           COUNT(DISTINCT CASE
-    WHEN tst.final_status IS NULL
-         OR tst.final_status <> 'breached'
+   WHEN tst.final_status IN ('on_track','warning','critical')
     THEN t.ticket_id
 END) AS resolved_within_sla,
          CAST(
     (
         COUNT(DISTINCT CASE
-            WHEN tst.final_status <> 'breached'
+            WHEN tst.final_status IN ('on_track','warning','critical')
             THEN t.ticket_id
         END) * 100.0
     ) / NULLIF(COUNT(DISTINCT t.ticket_id), 0)
@@ -939,7 +935,13 @@ END) AS resolved_within_sla,
           tst.business_elapsed_minutes,
           sr.rule_name,
           sr.max_tat_minutes,
-          CASE WHEN tst.final_status != 'breached' THEN 1 ELSE 0 END AS met_sla,
+          CASE
+          WHEN tst.final_status IN ('on_track','warning','critical')
+          THEN 1
+          WHEN tst.final_status='breached'
+          THEN 0
+          ELSE NULL
+          END AS met_sla,
           l.name AS location_name,
           d.department_name,
           u.first_name + ' ' + u.last_name AS engineer_name
@@ -955,7 +957,7 @@ END) AS resolved_within_sla,
         LEFT JOIN assets a ON ta.asset_id = a.id
         LEFT JOIN products p ON a.product_id = p.id
         ${whereClause}
-        ORDER BY t.created_at DESC
+        ORDER BY t.resolved_at DESC
       `;
 
       const detailResult = await detailRequest.query(detailQuery);
