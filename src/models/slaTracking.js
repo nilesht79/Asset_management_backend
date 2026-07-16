@@ -711,6 +711,16 @@ const now =
         request.input('productModel', sql.NVarChar, `%${filters.product_model}%`);
       }
 
+      if (filters.met_sla !== undefined && filters.met_sla !== null && filters.met_sla !== '') {
+
+          if (Number(filters.met_sla) === 1) {
+              whereConditions.push("tst.final_status = 'resolved'");
+          } else {
+              whereConditions.push("tst.final_status = 'breached'");
+          }
+
+      }
+
       const whereClause = whereConditions.length > 0
         ? 'WHERE ' + whereConditions.join(' AND ')
         : '';
