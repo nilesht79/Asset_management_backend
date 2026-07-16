@@ -714,11 +714,11 @@ const now =
       if (filters.met_sla !== undefined && filters.met_sla !== null && filters.met_sla !== '') {
 
           if (Number(filters.met_sla) === 1) {
-              whereConditions.push("tst.final_status = 'resolved'");
+              whereConditions.push("tst.final_status IN ('on_track','warning','critical')");
           } else {
               whereConditions.push("tst.final_status = 'breached'");
           }
-
+      
       }
 
       const whereClause = whereConditions.length > 0
