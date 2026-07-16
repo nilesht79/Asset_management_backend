@@ -40,27 +40,47 @@ const hashToken = (token) => {
  * Request a password reset link
  */
 router.post('/forgot-password', asyncHandler(async (req, res) => {
-  const { email } = req.body;
+  // const { email } = req.body;
+  const { employeeId, email } = req.body;
 
-  if (!email) {
-    return sendError(res, 'Email is required', 400);
-  }
+  // if (!email) {
+  //   return sendError(res, 'Email is required', 400);
+  // }
+  if (!employeeId || !email) {
+  return sendError(res, 'Employee ID and Email are required', 400);
+}
 
   const pool = await connectDB();
 
   // Find user by email (case-insensitive)
+  // const userResult = await pool.request()
+  //   .input('email', sql.VarChar(255), email.toLowerCase().trim())
+  //   .query(`
+  //     SELECT user_id, email, first_name, last_name, is_active
+  //     FROM USER_MASTER
+  //     WHERE LOWER(email) = @email
+  //   `);
+
   const userResult = await pool.request()
-    .input('email', sql.VarChar(255), email.toLowerCase().trim())
-    .query(`
-      SELECT user_id, email, first_name, last_name, is_active
+  .input('employeeId', sql.VarChar(50), employeeId)
+  .input('email', sql.VarChar(255), email.toLowerCase().trim())
+  .query(`
+      SELECT
+          user_id,
+          employee_id,
+          email,
+          first_name,
+          last_name,
+          is_active
       FROM USER_MASTER
-      WHERE LOWER(email) = @email
-    `);
+      WHERE employee_id = @employeeId
+      AND LOWER(email) = @email
+  `);
 
   // Always return success to prevent email enumeration attacks
   // Even if user doesn't exist, we return success
   if (userResult.recordset.length === 0) {
-    console.log(`Password reset requested for non-existent email: ${email}`);
+    console.log(`Password reset request failed. Employee ID: ${employeeId}, Email: ${email}`);
     return sendSuccess(res, null, 'If an account with that email exists, a password reset link has been sent.');
   }
 
