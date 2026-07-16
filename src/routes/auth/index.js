@@ -182,4 +182,25 @@ router.put('/profile',
   })
 );
 
+router.get('/employee-email/:employeeId', asyncHandler(async (req, res) => {
+
+    const pool = await connectDB();
+
+    const result = await pool.request()
+        .input('employeeId', sql.VarChar(50), req.params.employeeId)
+        .query(`
+            SELECT employee_id,email
+            FROM USER_MASTER
+            WHERE employee_id=@employeeId
+            AND is_active=1
+        `);
+
+    if (result.recordset.length === 0) {
+        return sendNotFound(res, 'Employee not found');
+    }
+
+    sendSuccess(res, result.recordset[0]);
+
+}));
+
 module.exports = router;
