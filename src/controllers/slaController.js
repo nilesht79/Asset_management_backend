@@ -829,7 +829,8 @@ class SlaController {
         asset_category_id,
         oem_id,
         product_model,
-        frequency
+        frequency,
+        met_sla
       } = req.query;
 
       // Validate required date range
@@ -848,7 +849,8 @@ class SlaController {
         asset_category_id,
         oem_id,
         product_model,
-        frequency
+        frequency,
+        met_sla
       };
 
       const report = await SlaTrackingModel.getSlaComplianceReport(filters);
@@ -881,7 +883,8 @@ class SlaController {
         asset_category_id,
         oem_id,
         product_model,
-        frequency
+        frequency,
+        met_sla
       } = req.query;
 
       // Validate required date range
@@ -900,7 +903,8 @@ class SlaController {
         asset_category_id,
         oem_id,
         product_model,
-        frequency
+        frequency,
+        met_sla
       };
 
       const report = await SlaTrackingModel.getSlaComplianceReport(filters);
