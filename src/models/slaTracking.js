@@ -782,7 +782,7 @@ END) AS resolved_breached,
           MIN(tst.business_elapsed_minutes) AS min_resolution_minutes,
           MAX(tst.business_elapsed_minutes) AS max_resolution_minutes
         FROM TICKETS t
-        LEFT JOIN TICKET_SLA_TRACKING tst ON tst.ticket_id = t.ticket_id
+        INNER JOIN TICKET_SLA_TRACKING tst ON tst.ticket_id = t.ticket_id
         LEFT JOIN TICKET_ASSETS ta ON t.ticket_id = ta.ticket_id
         LEFT JOIN assets a ON ta.asset_id = a.id
         LEFT JOIN products p ON a.product_id = p.id
@@ -826,11 +826,22 @@ END) AS resolved_breached,
 ) AS compliance_rate,
           AVG(tst.business_elapsed_minutes) AS avg_resolution_minutes
         FROM TICKETS t
-        LEFT JOIN TICKET_SLA_TRACKING tst ON tst.ticket_id = t.ticket_id
-        LEFT JOIN TICKET_ASSETS ta ON t.ticket_id = ta.ticket_id
-        LEFT JOIN assets a ON ta.asset_id = a.id
-        LEFT JOIN products p ON a.product_id = p.id
-        ${whereClause}
+          INNER JOIN TICKET_SLA_TRACKING tst
+              ON tst.ticket_id=t.ticket_id
+          
+          LEFT JOIN TICKET_ASSETS ta
+              ON ta.ticket_id=t.ticket_id
+          
+          LEFT JOIN assets a
+              ON ta.asset_id=a.id
+          
+          LEFT JOIN products p
+              ON a.product_id=p.id
+          
+          LEFT JOIN categories psc
+              ON p.subcategory_id=psc.id
+          
+          ${whereClause}
       `;
 
       const summaryResult = await summaryRequest.query(summaryQuery);
@@ -865,7 +876,7 @@ END) AS resolved_within_sla,
     AS DECIMAL(5,2)
 ) AS compliance_rate
         FROM TICKETS t
-        LEFT JOIN TICKET_SLA_TRACKING tst ON tst.ticket_id = t.ticket_id
+        INNER JOIN TICKET_SLA_TRACKING tst ON tst.ticket_id = t.ticket_id
         LEFT JOIN locations l ON t.location_id = l.id
         LEFT JOIN TICKET_ASSETS ta ON t.ticket_id = ta.ticket_id
         LEFT JOIN assets a ON ta.asset_id = a.id
@@ -907,7 +918,7 @@ END) AS resolved_within_sla,
     AS DECIMAL(5,2)
 ) AS compliance_rate
         FROM TICKETS t
-        LEFT JOIN TICKET_SLA_TRACKING tst ON tst.ticket_id = t.ticket_id
+        INNER JOIN TICKET_SLA_TRACKING tst ON tst.ticket_id = t.ticket_id
         LEFT JOIN DEPARTMENT_MASTER d ON t.department_id = d.department_id
         LEFT JOIN TICKET_ASSETS ta ON t.ticket_id = ta.ticket_id
         LEFT JOIN assets a ON ta.asset_id = a.id
@@ -1051,7 +1062,7 @@ const subCategoryResult = await subCategoryRequest.query(subCategoryQuery);
           ISNULL(psc.name, 'Others') AS sub_category_name,
           u.first_name + ' ' + u.last_name AS engineer_name
         FROM TICKETS t
-        LEFT JOIN TICKET_SLA_TRACKING tst
+        INNER JOIN TICKET_SLA_TRACKING tst
           ON tst.ticket_id = t.ticket_id
         LEFT JOIN SLA_RULES sr
           ON sr.rule_id = tst.sla_rule_id
