@@ -126,20 +126,23 @@ class TicketModel {
       // return result.recordset[0];
       const ticket = result.recordset[0];
 
-      try {
-        await SlaTrackingModel.initializeTracking(ticket.ticket_id, {
-            priority: ticket.priority,
-            category: ticket.category,
-            department_id: ticket.department_id,
-            location_id: ticket.location_id,
-            ticket_type: ticket.ticket_type,
-            service_type: ticket.service_type
-        });
+
+      return result.recordset[0];
+
+      // try {
+      //   await SlaTrackingModel.initializeTracking(ticket.ticket_id, {
+      //       priority: ticket.priority,
+      //       category: ticket.category,
+      //       department_id: ticket.department_id,
+      //       location_id: ticket.location_id,
+      //       ticket_type: ticket.ticket_type,
+      //       service_type: ticket.service_type
+      //   });
       
-        console.log(`SLA initialized for ${ticket.ticket_number}`);
-      } catch (err) {
-        console.error("SLA initialization failed:", err.message);
-      }
+      //   console.log(`SLA initialized for ${ticket.ticket_number}`);
+      // } catch (err) {
+      //   console.error("SLA initialization failed:", err.message);
+      // }
       
       return ticket;
     } catch (error) {
@@ -2213,6 +2216,15 @@ class TicketModel {
               .query(`SELECT asset_id FROM TICKET_ASSETS WHERE ticket_id = @ticketId`);
 
             const assetIds = assetsResult.recordset.map(a => a.asset_id);
+
+            const existingTracking = await SlaTrackingModel.getTracking(ticket.ticket_id);
+
+          if (!existingTracking) {
+              await SlaTrackingModel.initializeTracking(
+                  ticket.ticket_id,
+                  ticketContext
+              );
+          }
 
             // Re-initialize SLA tracking
             await SlaTrackingModel.initializeTracking(ticketId, {
