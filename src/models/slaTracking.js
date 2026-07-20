@@ -930,7 +930,16 @@ END) AS resolved_within_sla,
 
 
         const subCategoryQuery = `
-      SELECT
+WITH TicketAsset AS
+(
+    SELECT
+        ticket_id,
+        MIN(asset_id) AS asset_id
+    FROM TICKET_ASSETS
+    GROUP BY ticket_id
+)
+
+SELECT
     psc.id AS sub_category_id,
 
     CASE
@@ -959,12 +968,13 @@ END) AS resolved_within_sla,
         /
         NULLIF(COUNT(DISTINCT t.ticket_id),0)
     AS DECIMAL(5,2)) AS compliance_rate
-      
+
       FROM TICKETS t
+      
       INNER JOIN TICKET_SLA_TRACKING tst
           ON tst.ticket_id = t.ticket_id
       
-      LEFT JOIN TICKET_ASSETS ta
+      LEFT JOIN TicketAsset ta
           ON ta.ticket_id = t.ticket_id
       
       LEFT JOIN assets a
@@ -979,17 +989,15 @@ END) AS resolved_within_sla,
       ${whereClause}
       
       GROUP BY
-      psc.id,
-      CASE
-          WHEN psc.name IS NULL OR LTRIM(RTRIM(psc.name)) = ''
-          THEN 'Others'
-          ELSE psc.name
-      END
+          psc.id,
+          CASE
+              WHEN psc.name IS NULL OR LTRIM(RTRIM(psc.name)) = ''
+              THEN 'Others'
+              ELSE psc.name
+          END
       
-      ORDER BY
-      sub_category_name
+      ORDER BY sub_category_name
       `;
-
   
       const deptBreakdown = await deptRequest.query(deptBreakdownQuery);
 
