@@ -677,14 +677,14 @@ const now =
       }
 
       if (startDate) {
-        whereConditions.push('t.resolved_at >= @dateFrom');
-        request.input('dateFrom', sql.DateTime, startDate);
-      }
-
-      if (endDate) {
-        whereConditions.push('t.resolved_at <= @dateTo');
-        request.input('dateTo', sql.DateTime, endDate);
-      }
+            whereConditions.push('t.created_at >= @dateFrom');
+            request.input('dateFrom', sql.DateTime, startDate);
+        }
+        
+        if (endDate) {
+            whereConditions.push('t.created_at <= @dateTo');
+            request.input('dateTo', sql.DateTime, endDate);
+        }
 
       if (filters.location_id) {
         whereConditions.push('t.location_id = @locationId');
@@ -736,8 +736,8 @@ const now =
 
       switch (filters.frequency) {
         case 'daily':
-          periodSelect = "CONVERT(VARCHAR(10), t.resolved_at,120) AS period";
-          groupByClause = "GROUP BY CONVERT(VARCHAR(10), t.created_at, 120)";
+          periodSelect = "CONVERT(VARCHAR(10), t.created_at,120) AS period";
+          groupByClause = "GROUP BY CONVERT(VARCHAR(10), t.created_at,120)";
           break;
         case 'weekly':
           periodSelect = "CONCAT(YEAR(t.created_at), '-W', RIGHT('0' + CAST(DATEPART(WEEK, t.created_at) AS VARCHAR), 2)) AS period";
@@ -1045,7 +1045,7 @@ const subCategoryResult = await subCategoryRequest.query(subCategoryQuery);
         LEFT JOIN categories pc ON p.category_id = pc.id
         LEFT JOIN categories psc ON p.subcategory_id = psc.id
         ${whereClause}
-        ORDER BY t.resolved_at DESC
+        ORDER BY t.created_at DESC
       `;
 
       const detailResult = await detailRequest.query(detailQuery);
