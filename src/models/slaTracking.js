@@ -758,6 +758,14 @@ const now =
 
       // Main compliance query with period breakdown
       const complianceQuery = `
+        WITH TicketAsset AS
+        (
+            SELECT
+                ticket_id,
+                MIN(asset_id) AS asset_id
+            FROM TICKET_ASSETS
+            GROUP BY ticket_id
+        )
         SELECT
           ${periodSelect},
           COUNT(DISTINCT t.ticket_id) AS total_tickets,
@@ -783,9 +791,14 @@ END) AS resolved_breached,
           MAX(tst.business_elapsed_minutes) AS max_resolution_minutes
         FROM TICKETS t
         INNER JOIN TICKET_SLA_TRACKING tst ON tst.ticket_id = t.ticket_id
-        LEFT JOIN TICKET_ASSETS ta ON t.ticket_id = ta.ticket_id
-        LEFT JOIN assets a ON ta.asset_id = a.id
-        LEFT JOIN products p ON a.product_id = p.id
+        LEFT JOIN TicketAsset ta
+          ON ta.ticket_id = t.ticket_id
+      
+      LEFT JOIN assets a
+          ON a.id = ta.asset_id
+      
+      LEFT JOIN products p
+          ON p.id = a.product_id
         ${whereClause}
         ${groupByClause}
         ORDER BY period
@@ -805,6 +818,14 @@ END) AS resolved_breached,
       if (filters.product_model) summaryRequest.input('productModel', sql.NVarChar, `%${filters.product_model}%`);
 
       const summaryQuery = `
+      WITH TicketAsset AS
+      (
+          SELECT
+              ticket_id,
+              MIN(asset_id) AS asset_id
+          FROM TICKET_ASSETS
+          GROUP BY ticket_id
+      )
         SELECT
           COUNT(DISTINCT t.ticket_id) AS total_tickets,
           COUNT(DISTINCT CASE
@@ -827,19 +848,19 @@ END) AS resolved_breached,
           AVG(tst.business_elapsed_minutes) AS avg_resolution_minutes
         FROM TICKETS t
           INNER JOIN TICKET_SLA_TRACKING tst
-              ON tst.ticket_id=t.ticket_id
-          
-          LEFT JOIN TICKET_ASSETS ta
-              ON ta.ticket_id=t.ticket_id
-          
-          LEFT JOIN assets a
-              ON ta.asset_id=a.id
-          
-          LEFT JOIN products p
-              ON a.product_id=p.id
-          
-          LEFT JOIN categories psc
-              ON p.subcategory_id=psc.id
+    ON tst.ticket_id = t.ticket_id
+
+    LEFT JOIN TicketAsset ta
+        ON ta.ticket_id = t.ticket_id
+    
+    LEFT JOIN assets a
+        ON a.id = ta.asset_id
+    
+    LEFT JOIN products p
+        ON p.id = a.product_id
+    
+    LEFT JOIN categories psc
+        ON p.subcategory_id = psc.id
           
           ${whereClause}
       `;
@@ -858,6 +879,14 @@ END) AS resolved_breached,
       if (filters.product_model) locationRequest.input('productModel', sql.NVarChar, `%${filters.product_model}%`);
 
       const locationBreakdownQuery = `
+        WITH TicketAsset AS
+        (
+            SELECT
+                ticket_id,
+                MIN(asset_id) AS asset_id
+            FROM TICKET_ASSETS
+            GROUP BY ticket_id
+        )
         SELECT
           l.id AS location_id,
           l.name AS location_name,
@@ -878,9 +907,14 @@ END) AS resolved_within_sla,
         FROM TICKETS t
         INNER JOIN TICKET_SLA_TRACKING tst ON tst.ticket_id = t.ticket_id
         LEFT JOIN locations l ON t.location_id = l.id
-        LEFT JOIN TICKET_ASSETS ta ON t.ticket_id = ta.ticket_id
-        LEFT JOIN assets a ON ta.asset_id = a.id
-        LEFT JOIN products p ON a.product_id = p.id
+        LEFT JOIN TicketAsset ta
+          ON ta.ticket_id = t.ticket_id
+
+        LEFT JOIN assets a
+            ON a.id = ta.asset_id
+        
+        LEFT JOIN products p
+            ON p.id = a.product_id
         ${whereClause}
         GROUP BY l.id, l.name
         ORDER BY total_tickets DESC
@@ -900,6 +934,14 @@ END) AS resolved_within_sla,
       if (filters.product_model) deptRequest.input('productModel', sql.NVarChar, `%${filters.product_model}%`);
 
       const deptBreakdownQuery = `
+      WITH TicketAsset AS
+      (
+          SELECT
+              ticket_id,
+              MIN(asset_id) AS asset_id
+          FROM TICKET_ASSETS
+          GROUP BY ticket_id
+      )
         SELECT
           d.department_id,
           d.department_name,
@@ -920,9 +962,14 @@ END) AS resolved_within_sla,
         FROM TICKETS t
         INNER JOIN TICKET_SLA_TRACKING tst ON tst.ticket_id = t.ticket_id
         LEFT JOIN DEPARTMENT_MASTER d ON t.department_id = d.department_id
-        LEFT JOIN TICKET_ASSETS ta ON t.ticket_id = ta.ticket_id
-        LEFT JOIN assets a ON ta.asset_id = a.id
-        LEFT JOIN products p ON a.product_id = p.id
+        LEFT JOIN TicketAsset ta
+            ON ta.ticket_id = t.ticket_id
+        
+        LEFT JOIN assets a
+            ON a.id = ta.asset_id
+        
+        LEFT JOIN products p
+            ON p.id = a.product_id
         ${whereClause}
         GROUP BY d.department_id, d.department_name
         ORDER BY total_tickets DESC
@@ -1044,6 +1091,14 @@ const subCategoryResult = await subCategoryRequest.query(subCategoryQuery);
       if (filters.product_model) detailRequest.input('productModel', sql.NVarChar, `%${filters.product_model}%`);
 
       const detailQuery = `
+      WITH TicketAsset AS
+        (
+            SELECT
+                ticket_id,
+                MIN(asset_id) AS asset_id
+            FROM TICKET_ASSETS
+            GROUP BY ticket_id
+        )
         SELECT
           t.ticket_id,
           t.ticket_number,
@@ -1077,9 +1132,9 @@ const subCategoryResult = await subCategoryRequest.query(subCategoryQuery);
         LEFT JOIN locations l ON t.location_id = l.id
         LEFT JOIN DEPARTMENT_MASTER d ON t.department_id = d.department_id
         LEFT JOIN USER_MASTER u ON t.assigned_to_engineer_id = u.user_id
-        LEFT JOIN TICKET_ASSETS ta ON t.ticket_id = ta.ticket_id
-        LEFT JOIN assets a ON ta.asset_id = a.id
-        LEFT JOIN products p ON a.product_id = p.id
+        LEFT JOIN TicketAsset ta ON ta.ticket_id = t.ticket_id
+        LEFT JOIN assets a ON a.id = ta.asset_id
+       LEFT JOIN products p ON p.id = a.product_id
         LEFT JOIN categories pc ON p.category_id = pc.id
         LEFT JOIN categories psc ON p.subcategory_id = psc.id
         ${whereClause}
