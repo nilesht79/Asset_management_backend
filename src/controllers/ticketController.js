@@ -1122,16 +1122,49 @@ Helpdesk
       }
 
       // Close ticket
+      // await TicketModel.closeTicket(id, resolution_notes);
+
+      // // Stop SLA tracking
+      // try {
+      //   const slaResult = await SlaTrackingModel.stopTracking(id, null);
+      //   if (slaResult) {
+      //     console.log(`SLA tracking stopped for ticket ${existingTicket.ticket_number} - final status: ${slaResult.final_status}`);
+      //   }
+      // } catch (slaError) {
+      //   console.error('Failed to stop SLA tracking:', slaError.message);
+      // }
+
       await TicketModel.closeTicket(id, resolution_notes);
 
-      // Stop SLA tracking
       try {
-        const slaResult = await SlaTrackingModel.stopTracking(id, null);
-        if (slaResult) {
-          console.log(`SLA tracking stopped for ticket ${existingTicket.ticket_number} - final status: ${slaResult.final_status}`);
-        }
-      } catch (slaError) {
-        console.error('Failed to stop SLA tracking:', slaError.message);
+      
+          let tracking = await SlaTrackingModel.getTracking(id);
+      
+          if (!tracking) {
+      
+              const fullTicket = await TicketModel.getTicketById(id);
+      
+              const ticketContext = {
+                  ticket_id: fullTicket.ticket_id,
+                  ticket_type: fullTicket.ticket_type,
+                  service_type: fullTicket.service_type,
+                  ticket_channel: 'portal',
+                  priority: fullTicket.priority,
+                  user_id: fullTicket.created_by_user_id,
+                  asset_ids: []
+              };
+      
+              await SlaTrackingModel.initializeTracking(
+                  fullTicket.ticket_id,
+                  ticketContext
+              );
+          }
+      
+          await SlaTrackingModel.stopTracking(id, null);
+      
+      }
+      catch(err){
+          console.log(err);
       }
 
       // Fetch updated ticket
