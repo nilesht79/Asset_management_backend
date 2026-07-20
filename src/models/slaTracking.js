@@ -944,12 +944,12 @@ END) AS resolved_within_sla,
           AS DECIMAL(5,2)) AS compliance_rate
       
       FROM TICKETS t
-      LEFT JOIN TICKET_SLA_TRACKING tst ON tst.ticket_id=t.ticket_id
-      LEFT JOIN TICKET_ASSETS ta ON ta.ticket_id=t.ticket_id
-      LEFT JOIN assets a ON ta.asset_id=a.id
-      LEFT JOIN products p ON a.product_id=p.id
-      LEFT JOIN categories psc ON p.subcategory_id=psc.id
-      
+      INNER JOIN TICKET_SLA_TRACKING tst ON tst.ticket_id = t.ticket_id
+      INNER JOIN TICKET_ASSETS ta ON ta.ticket_id = t.ticket_id
+      INNER JOIN assets a  ON a.id = ta.asset_id
+      INNER JOIN products p ON p.id = a.product_id
+      INNER JOIN categories psc ON p.subcategory_id = psc.id
+
       ${whereClause}
       
       GROUP BY
