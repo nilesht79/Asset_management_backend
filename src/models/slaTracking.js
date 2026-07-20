@@ -18,13 +18,22 @@ class SlaTrackingModel {
       const pool = await connectDB();
 
       // Check if tracking already exists
-      const existingResult = await pool.request()
-        .input('ticketId', sql.UniqueIdentifier, ticketId)
-        .query('SELECT tracking_id FROM TICKET_SLA_TRACKING WHERE ticket_id = @ticketId');
+const existingResult = await pool.request()
+    .input('ticketId', sql.UniqueIdentifier, ticketId)
+    .query(`
+        SELECT tracking_id
+        FROM TICKET_SLA_TRACKING
+        WHERE ticket_id = @ticketId
+    `);
 
-      if (existingResult.recordset.length > 0) {
-        throw new Error('SLA tracking already exists for this ticket');
-      }
+if (existingResult.recordset.length > 0) {
+    console.log(`SLA already exists for ticket ${ticketId}`);
+
+    return {
+        tracking: existingResult.recordset[0],
+        alreadyExists: true
+    };
+}
 
       // Find matching SLA rule
       // const matchResult = await slaMatchingEngine.findMatchingRule(ticketContext);
