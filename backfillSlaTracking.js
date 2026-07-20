@@ -1,5 +1,5 @@
-const { connectDB, sql } = require('./src/config/database');
-const SlaTrackingModel = require('./src/models/slaTracking');
+const { connectDB, sql } = require("./src/config/database");
+const SlaTrackingModel = require("./src/models/slaTracking");
 
 async function backfillMissingSla() {
     const pool = await connectDB();
@@ -9,10 +9,9 @@ async function backfillMissingSla() {
             t.ticket_id,
             t.ticket_number,
             t.priority,
-            t.category,
             t.ticket_type,
-            t.channel,
-            t.created_by,
+            t.ticket_channel,
+            t.created_by_user_id,
             t.created_at,
             t.resolved_at
         FROM TICKETS t
@@ -22,20 +21,36 @@ async function backfillMissingSla() {
             t.status = 'closed'
             AND t.resolved_at IS NOT NULL
             AND s.ticket_id IS NULL
+        ORDER BY t.created_at
     `);
 
-    console.log(`Found ${result.recordset.length} missing tickets.`);
+    console.log(`Found ${result.recordset.length} missing tickets`);
 
     for (const ticket of result.recordset) {
+
         try {
 
+            // Get linked assets
+            const assetResult = await pool.request()
+                .input("ticketId", sql.UniqueIdentifier, ticket.ticket_id)
+                .query(`
+                    SELECT asset_id
+                    FROM TICKET_ASSETS
+                    WHERE ticket_id = @ticketId
+                `);
+
+            const assetIds = assetResult.recordset.map(r => r.asset_id);
+
             const ticketContext = {
-                priority: ticket.priority,
-                category: ticket.category,
+                ticket_id: ticket.ticket_id,
                 ticket_type: ticket.ticket_type,
-                channel: ticket.channel,
-                created_by: ticket.created_by
+                ticket_channel: ticket.ticket_channel,
+                priority: ticket.priority,
+                user_id: ticket.created_by_user_id,
+                asset_ids: assetIds
             };
+
+            console.log(`Processing ${ticket.ticket_number}...`);
 
             await SlaTrackingModel.initializeTracking(
                 ticket.ticket_id,
@@ -47,16 +62,22 @@ async function backfillMissingSla() {
                 null
             );
 
-            console.log(`✔ ${ticket.ticket_number}`);
-        }
-        catch (err) {
-            console.log(`✖ ${ticket.ticket_number}`);
+            console.log(`SUCCESS : ${ticket.ticket_number}`);
+
+        } catch (err) {
+
+            console.log(`FAILED : ${ticket.ticket_number}`);
             console.log(err.message);
+
         }
     }
 
-    console.log("Done");
+    console.log("Completed");
+
     process.exit(0);
 }
 
-backfillMissingSla().catch(console.error);
+backfillMissingSla().catch(err => {
+    console.error(err);
+    process.exit(1);
+});
