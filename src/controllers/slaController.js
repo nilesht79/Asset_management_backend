@@ -1015,6 +1015,7 @@ class SlaController {
           { header: 'Ticket #', key: 'ticket_number', width: 15 },
           { header: 'Title', key: 'title', width: 30 },
           { header: 'Category', key: 'category', width: 15 },
+          { header: 'Sub Category', key: 'sub_category_name', width: 25 },
           { header: 'Priority', key: 'priority', width: 12 },
           { header: 'Location', key: 'location_name', width: 20 },
           { header: 'Department', key: 'department_name', width: 20 },
