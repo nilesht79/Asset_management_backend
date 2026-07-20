@@ -665,7 +665,7 @@ const now =
 
       // Build WHERE clause
       // let whereConditions = ['tst.resolved_at IS NOT NULL'];
-      let whereConditions = ["1=1"];
+      let whereConditions = [ "t.status = 'closed'", "t.resolved_at IS NOT NULL" ];
 
       // Pre-calculate dates for consistent use across all queries
       const startDate = filters.date_from ? new Date(filters.date_from) : null;
@@ -677,14 +677,14 @@ const now =
       }
 
       if (startDate) {
-            whereConditions.push('t.created_at >= @dateFrom');
-            request.input('dateFrom', sql.DateTime, startDate);
-        }
-        
-        if (endDate) {
-            whereConditions.push('t.created_at <= @dateTo');
-            request.input('dateTo', sql.DateTime, endDate);
-        }
+          whereConditions.push('t.resolved_at >= @dateFrom');
+          request.input('dateFrom', sql.DateTime, startDate);
+      }
+      
+      if (endDate) {
+          whereConditions.push('t.resolved_at <= @dateTo');
+          request.input('dateTo', sql.DateTime, endDate);
+      }
 
       if (filters.location_id) {
         whereConditions.push('t.location_id = @locationId');
@@ -736,20 +736,20 @@ const now =
 
       switch (filters.frequency) {
         case 'daily':
-          periodSelect = "CONVERT(VARCHAR(10), t.created_at,120) AS period";
-          groupByClause = "GROUP BY CONVERT(VARCHAR(10), t.created_at,120)";
+          periodSelect = "CONVERT(VARCHAR(10), t.resolved_at,120) AS period";
+          groupByClause = "GROUP BY CONVERT(VARCHAR(10), t.resolved_at,120)";
           break;
         case 'weekly':
-          periodSelect = "CONCAT(YEAR(t.created_at), '-W', RIGHT('0' + CAST(DATEPART(WEEK, t.created_at) AS VARCHAR), 2)) AS period";
-          groupByClause = "GROUP BY YEAR(t.created_at), DATEPART(WEEK, t.created_at)";
+          periodSelect = "CONCAT(YEAR(t.resolved_at), '-W', RIGHT('0' + CAST(DATEPART(WEEK, t.resolved_at) AS VARCHAR), 2)) AS period";
+          groupByClause = "GROUP BY YEAR(t.resolved_at), DATEPART(WEEK, t.resolved_at)";
           break;
         case 'monthly':
-          periodSelect = "CONCAT(YEAR(t.created_at), '-', RIGHT('0' + CAST(MONTH(t.created_at) AS VARCHAR), 2)) AS period";
-          groupByClause = "GROUP BY YEAR(t.created_at), MONTH(t.created_at)";
+          periodSelect = "CONCAT(YEAR(t.resolved_at), '-', RIGHT('0' + CAST(MONTH(t.resolved_at) AS VARCHAR), 2)) AS period";
+          groupByClause = "GROUP BY YEAR(t.resolved_at), MONTH(t.resolved_at)";
           break;
         case 'quarterly':
-          periodSelect = "CONCAT(YEAR(t.created_at), '-Q', DATEPART(QUARTER, t.created_at)) AS period";
-          groupByClause = "GROUP BY YEAR(t.created_at), DATEPART(QUARTER, t.created_at)";
+          periodSelect = "CONCAT(YEAR(t.resolved_at), '-Q', DATEPART(QUARTER, t.resolved_at)) AS period";
+          groupByClause = "GROUP BY YEAR(t.resolved_at), DATEPART(QUARTER, t.resolved_at)";
           break;
         default:
           periodSelect = "'Total' AS period";
@@ -1107,7 +1107,7 @@ const subCategoryResult = await subCategoryRequest.query(subCategoryQuery);
           t.priority,
           t.status,
           tst.sla_start_time,
-          tst.resolved_at,
+          t.resolved_at,
           tst.final_status,
           tst.business_elapsed_minutes,
           sr.rule_name,
@@ -1138,7 +1138,7 @@ const subCategoryResult = await subCategoryRequest.query(subCategoryQuery);
         LEFT JOIN categories pc ON p.category_id = pc.id
         LEFT JOIN categories psc ON p.subcategory_id = psc.id
         ${whereClause}
-        ORDER BY t.created_at DESC
+        ORDER BY t.resolved_at DESC
       `;
 
       const detailResult = await detailRequest.query(detailQuery);
