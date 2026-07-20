@@ -921,7 +921,7 @@ END) AS resolved_within_sla,
         const subCategoryQuery = `
       SELECT
           psc.id AS sub_category_id,
-          psc.name AS sub_category_name,
+          ISNULL(psc.name, 'No Sub Category') AS sub_category_name
       
           COUNT(DISTINCT t.ticket_id) AS total_tickets,
       
@@ -945,16 +945,20 @@ END) AS resolved_within_sla,
       
       FROM TICKETS t
       INNER JOIN TICKET_SLA_TRACKING tst ON tst.ticket_id = t.ticket_id
-      INNER JOIN TICKET_ASSETS ta ON ta.ticket_id = t.ticket_id
-      INNER JOIN assets a  ON a.id = ta.asset_id
-      INNER JOIN products p ON p.id = a.product_id
-      INNER JOIN categories psc ON p.subcategory_id = psc.id
+      LEFT JOIN TICKET_ASSETS ta ON ta.ticket_id = t.ticket_id
+      LEFT JOIN assets a  ON a.id = ta.asset_id
+      LEFT JOIN products p ON p.id = a.product_id
+      LEFT JOIN categories psc ON p.subcategory_id = psc.id
 
       ${whereClause}
       
       GROUP BY
-          psc.id,
-          psc.name
+      psc.id,
+      CASE
+          WHEN psc.name IS NULL OR LTRIM(RTRIM(psc.name)) = ''
+          THEN 'Others'
+          ELSE psc.name
+      END
       
       ORDER BY
           psc.name
@@ -1029,7 +1033,7 @@ const subCategoryResult = await subCategoryRequest.query(subCategoryQuery);
           l.name AS location_name,
           d.department_name,
           pc.name AS category_name,
-          psc.name AS sub_category_name,
+          ISNULL(psc.name, 'Others') AS sub_category_name,
           u.first_name + ' ' + u.last_name AS engineer_name
         FROM TICKETS t
         LEFT JOIN TICKET_SLA_TRACKING tst
