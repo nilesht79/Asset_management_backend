@@ -920,36 +920,51 @@ END) AS resolved_within_sla,
 
         const subCategoryQuery = `
       SELECT
-          psc.id AS sub_category_id,
-          ISNULL(psc.name, 'No Sub Category') AS sub_category_name
-      
-          COUNT(DISTINCT t.ticket_id) AS total_tickets,
-      
-          COUNT(DISTINCT CASE
-              WHEN tst.final_status IN ('on_track','warning','critical')
-              THEN t.ticket_id
-          END) AS resolved_within_sla,
-      
-          COUNT(DISTINCT CASE
-              WHEN tst.final_status='breached'
-              THEN t.ticket_id
-          END) AS resolved_breached,
-      
-          CAST(
-              COUNT(DISTINCT CASE
-                  WHEN tst.final_status IN ('on_track','warning','critical')
-                  THEN t.ticket_id
-              END) * 100.0 /
-              NULLIF(COUNT(DISTINCT t.ticket_id),0)
-          AS DECIMAL(5,2)) AS compliance_rate
+    psc.id AS sub_category_id,
+
+    CASE
+        WHEN psc.name IS NULL OR LTRIM(RTRIM(psc.name)) = ''
+        THEN 'Others'
+        ELSE psc.name
+    END AS sub_category_name,
+
+    COUNT(DISTINCT t.ticket_id) AS total_tickets,
+
+    COUNT(DISTINCT CASE
+        WHEN tst.final_status IN ('on_track','warning','critical')
+        THEN t.ticket_id
+    END) AS resolved_within_sla,
+
+    COUNT(DISTINCT CASE
+        WHEN tst.final_status = 'breached'
+        THEN t.ticket_id
+    END) AS resolved_breached,
+
+    CAST(
+        COUNT(DISTINCT CASE
+            WHEN tst.final_status IN ('on_track','warning','critical')
+            THEN t.ticket_id
+        END) * 100.0
+        /
+        NULLIF(COUNT(DISTINCT t.ticket_id),0)
+    AS DECIMAL(5,2)) AS compliance_rate
       
       FROM TICKETS t
-      INNER JOIN TICKET_SLA_TRACKING tst ON tst.ticket_id = t.ticket_id
-      LEFT JOIN TICKET_ASSETS ta ON ta.ticket_id = t.ticket_id
-      LEFT JOIN assets a  ON a.id = ta.asset_id
-      LEFT JOIN products p ON p.id = a.product_id
-      LEFT JOIN categories psc ON p.subcategory_id = psc.id
-
+      INNER JOIN TICKET_SLA_TRACKING tst
+          ON tst.ticket_id = t.ticket_id
+      
+      LEFT JOIN TICKET_ASSETS ta
+          ON ta.ticket_id = t.ticket_id
+      
+      LEFT JOIN assets a
+          ON a.id = ta.asset_id
+      
+      LEFT JOIN products p
+          ON p.id = a.product_id
+      
+      LEFT JOIN categories psc
+          ON p.subcategory_id = psc.id
+      
       ${whereClause}
       
       GROUP BY
@@ -961,7 +976,7 @@ END) AS resolved_within_sla,
       END
       
       ORDER BY
-          psc.name
+      sub_category_name
       `;
 
   
