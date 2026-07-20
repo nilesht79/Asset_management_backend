@@ -917,7 +917,82 @@ END) AS resolved_within_sla,
         ORDER BY total_tickets DESC
       `;
 
+
+        const subCategoryQuery = `
+      SELECT
+          psc.id AS sub_category_id,
+          psc.name AS sub_category_name,
+      
+          COUNT(DISTINCT t.ticket_id) AS total_tickets,
+      
+          COUNT(DISTINCT CASE
+              WHEN tst.final_status IN ('on_track','warning','critical')
+              THEN t.ticket_id
+          END) AS resolved_within_sla,
+      
+          COUNT(DISTINCT CASE
+              WHEN tst.final_status='breached'
+              THEN t.ticket_id
+          END) AS resolved_breached,
+      
+          CAST(
+              COUNT(DISTINCT CASE
+                  WHEN tst.final_status IN ('on_track','warning','critical')
+                  THEN t.ticket_id
+              END) * 100.0 /
+              NULLIF(COUNT(DISTINCT t.ticket_id),0)
+          AS DECIMAL(5,2)) AS compliance_rate
+      
+      FROM TICKETS t
+      LEFT JOIN TICKET_SLA_TRACKING tst ON tst.ticket_id=t.ticket_id
+      LEFT JOIN TICKET_ASSETS ta ON ta.ticket_id=t.ticket_id
+      LEFT JOIN assets a ON ta.asset_id=a.id
+      LEFT JOIN products p ON a.product_id=p.id
+      LEFT JOIN categories psc ON p.subcategory_id=psc.id
+      
+      ${whereClause}
+      
+      GROUP BY
+          psc.id,
+          psc.name
+      
+      ORDER BY
+          psc.name
+      `;
+
+  
       const deptBreakdown = await deptRequest.query(deptBreakdownQuery);
+
+
+      const subCategoryRequest = pool.request();
+
+if (startDate)
+    subCategoryRequest.input('dateFrom', sql.DateTime, startDate);
+
+if (endDate)
+    subCategoryRequest.input('dateTo', sql.DateTime, endDate);
+
+if (filters.location_id)
+    subCategoryRequest.input('locationId', sql.UniqueIdentifier, filters.location_id);
+
+if (filters.department_id)
+    subCategoryRequest.input('departmentId', sql.UniqueIdentifier, filters.department_id);
+
+if (filters.asset_category_id)
+    subCategoryRequest.input('assetCategoryId', sql.UniqueIdentifier, filters.asset_category_id);
+
+if (filters.sub_category_id)
+    subCategoryRequest.input('subCategoryId', sql.UniqueIdentifier, filters.sub_category_id);
+
+if (filters.oem_id)
+    subCategoryRequest.input('oemId', sql.UniqueIdentifier, filters.oem_id);
+
+if (filters.product_model)
+    subCategoryRequest.input('productModel', sql.NVarChar, `%${filters.product_model}%`);
+
+const subCategoryResult = await subCategoryRequest.query(subCategoryQuery);
+
+      
 
       // Get detailed ticket list
       const detailRequest = pool.request();
@@ -987,6 +1062,7 @@ END) AS resolved_within_sla,
         by_location: locationBreakdown.recordset,
         by_department: deptBreakdown.recordset,
         details: detailResult.recordset,
+        by_sub_category: subCategoryResult.recordset,
         filters_applied: filters
       };
     } catch (error) {
