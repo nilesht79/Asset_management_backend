@@ -701,6 +701,11 @@ const now =
         request.input('assetCategoryId', sql.UniqueIdentifier, filters.asset_category_id);
       }
 
+      if (filters.sub_category_id) {
+        whereConditions.push('p.subcategory_id = @subCategoryId');
+        request.input('subCategoryId', sql.UniqueIdentifier, filters.sub_category_id);
+      }
+
       if (filters.oem_id) {
         whereConditions.push('p.oem_id = @oemId');
         request.input('oemId', sql.UniqueIdentifier, filters.oem_id);
@@ -795,6 +800,7 @@ END) AS resolved_breached,
       if (filters.location_id) summaryRequest.input('locationId', sql.UniqueIdentifier, filters.location_id);
       if (filters.department_id) summaryRequest.input('departmentId', sql.UniqueIdentifier, filters.department_id);
       if (filters.asset_category_id) summaryRequest.input('assetCategoryId', sql.UniqueIdentifier, filters.asset_category_id);
+      if (filters.sub_category_id) summaryRequest.input('subCategoryId', sql.UniqueIdentifier, filters.sub_category_id);
       if (filters.oem_id) summaryRequest.input('oemId', sql.UniqueIdentifier, filters.oem_id);
       if (filters.product_model) summaryRequest.input('productModel', sql.NVarChar, `%${filters.product_model}%`);
 
@@ -836,6 +842,7 @@ END) AS resolved_breached,
       if (filters.location_id) locationRequest.input('locationId', sql.UniqueIdentifier, filters.location_id);
       if (filters.department_id) locationRequest.input('departmentId', sql.UniqueIdentifier, filters.department_id);
       if (filters.asset_category_id) locationRequest.input('assetCategoryId', sql.UniqueIdentifier, filters.asset_category_id);
+      if (filters.sub_category_id) locationRequest.input('subCategoryId', sql.UniqueIdentifier, filters.sub_category_id);
       if (filters.oem_id) locationRequest.input('oemId', sql.UniqueIdentifier, filters.oem_id);
       if (filters.product_model) locationRequest.input('productModel', sql.NVarChar, `%${filters.product_model}%`);
 
@@ -877,6 +884,7 @@ END) AS resolved_within_sla,
       if (filters.location_id) deptRequest.input('locationId', sql.UniqueIdentifier, filters.location_id);
       if (filters.department_id) deptRequest.input('departmentId', sql.UniqueIdentifier, filters.department_id);
       if (filters.asset_category_id) deptRequest.input('assetCategoryId', sql.UniqueIdentifier, filters.asset_category_id);
+      if (filters.sub_category_id) deptRequest.input('subCategoryId', sql.UniqueIdentifier, filters.sub_category_id);
       if (filters.oem_id) deptRequest.input('oemId', sql.UniqueIdentifier, filters.oem_id);
       if (filters.product_model) deptRequest.input('productModel', sql.NVarChar, `%${filters.product_model}%`);
 
@@ -918,6 +926,7 @@ END) AS resolved_within_sla,
       if (filters.location_id) detailRequest.input('locationId', sql.UniqueIdentifier, filters.location_id);
       if (filters.department_id) detailRequest.input('departmentId', sql.UniqueIdentifier, filters.department_id);
       if (filters.asset_category_id) detailRequest.input('assetCategoryId', sql.UniqueIdentifier, filters.asset_category_id);
+      if (filters.sub_category_id) detailRequest.input('subCategoryId', sql.UniqueIdentifier, filters.sub_category_id);
       if (filters.oem_id) detailRequest.input('oemId', sql.UniqueIdentifier, filters.oem_id);
       if (filters.product_model) detailRequest.input('productModel', sql.NVarChar, `%${filters.product_model}%`);
 
@@ -944,6 +953,8 @@ END) AS resolved_within_sla,
           END AS met_sla,
           l.name AS location_name,
           d.department_name,
+          pc.name AS category_name,
+          psc.name AS sub_category_name,
           u.first_name + ' ' + u.last_name AS engineer_name
         FROM TICKETS t
         LEFT JOIN TICKET_SLA_TRACKING tst
@@ -956,6 +967,8 @@ END) AS resolved_within_sla,
         LEFT JOIN TICKET_ASSETS ta ON t.ticket_id = ta.ticket_id
         LEFT JOIN assets a ON ta.asset_id = a.id
         LEFT JOIN products p ON a.product_id = p.id
+        LEFT JOIN categories pc ON p.category_id = pc.id
+        LEFT JOIN categories psc ON p.subcategory_id = psc.id
         ${whereClause}
         ORDER BY t.resolved_at DESC
       `;
