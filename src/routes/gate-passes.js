@@ -100,10 +100,39 @@ router.get('/',
     }
 
     // Main query
+    // const query = `
+    //   SELECT
+    //     gp.id,
+    //     gp.gate_pass_number,
+    //     gp.gate_pass_type,
+    //     gp.purpose,
+    //     gp.from_location_name,
+    //     gp.vendor_name,
+    //     gp.destination_address,
+    //     gp.recipient_name,
+    //     gp.recipient_department,
+    //     gp.authorized_by_name,
+    //     gp.issue_date,
+    //     gp.valid_until,
+    //     gp.created_by_name,
+    //     gp.created_at,
+    //     gp.carrier_name,
+    //     (SELECT COUNT(*) FROM GATE_PASS_ASSETS WHERE gate_pass_id = gp.id) as asset_count
+    //   FROM GATE_PASSES gp
+    //   WHERE 1=1 ${filterConditions}
+    //   ORDER BY gp.created_at DESC
+    //   OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+    // `;
+
     const query = `
       SELECT
         gp.id,
         gp.gate_pass_number,
+
+        gpa.serial_number,
+        gpa.category_name,
+        gpa.model,
+
         gp.gate_pass_type,
         gp.purpose,
         gp.from_location_name,
@@ -117,11 +146,24 @@ router.get('/',
         gp.created_by_name,
         gp.created_at,
         gp.carrier_name,
-        (SELECT COUNT(*) FROM GATE_PASS_ASSETS WHERE gate_pass_id = gp.id) as asset_count
-      FROM GATE_PASSES gp
-      WHERE 1=1 ${filterConditions}
-      ORDER BY gp.created_at DESC
-      OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+
+        (
+            SELECT COUNT(*)
+            FROM GATE_PASS_ASSETS
+            WHERE gate_pass_id = gp.id
+        ) AS asset_count
+
+    FROM GATE_PASSES gp
+
+    OUTER APPLY (
+        SELECT TOP 1
+            serial_number,
+            category_name,
+            model
+        FROM GATE_PASS_ASSETS
+        WHERE gate_pass_id = gp.id
+        ORDER BY asset_tag
+    ) gpa
     `;
 
     request.input('offset', sql.Int, offset);
