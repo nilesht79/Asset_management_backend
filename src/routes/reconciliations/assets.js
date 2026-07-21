@@ -684,6 +684,7 @@ console.log("SYSTEM SNAPSHOT:", systemSnapshot);
 
     const record = recordData.recordset[0];
     const systemSnapshot = record.system_snapshot ? JSON.parse(record.system_snapshot) : {};
+    console.log("SYSTEM SNAPSHOT FROM DB:", systemSnapshot);
 
     // Use transaction for atomic operations
     const transaction = new sql.Transaction(pool);
