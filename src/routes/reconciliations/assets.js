@@ -617,7 +617,15 @@ router.put('/:assetId/reconcile',
       p.name as product_name,
       CONCAT(u.first_name, ' ', u.last_name) as assigned_user_name,
       d.department_name as department,
-      l.name as location_name
+      CONCAT(
+    l.name,
+    CASE
+        WHEN l.floor IS NOT NULL
+             AND LTRIM(RTRIM(CAST(l.floor AS VARCHAR(20)))) <> ''
+        THEN ' - Floor ' + CAST(l.floor AS VARCHAR(20))
+        ELSE ''
+    END
+) AS location_name
     FROM assets a
     LEFT JOIN products p ON a.product_id = p.id
     LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
