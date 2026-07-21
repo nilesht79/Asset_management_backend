@@ -296,21 +296,53 @@ class TicketModel {
           u3.first_name + ' ' + u3.last_name AS engineer_name,
           u3.email AS engineer_email,
           u3.employee_id AS engineer_employee_id,
-          -- Department & Location
+          -- Ticket Department & Location
           d.department_name AS department_name,
           l.name AS location_name,
           l.address AS location_address,
+          
+          -- Asset Department & Location
+          ad.department_name AS asset_department_name,
+          al.name AS asset_location_name,
+          al.address AS asset_location_address,
           -- Guest Information
           gt.guest_name,
           gt.guest_email,
           gt.guest_phone
         FROM TICKETS t
-        LEFT JOIN USER_MASTER u1 ON t.created_by_user_id = u1.user_id
-        LEFT JOIN USER_MASTER u2 ON t.created_by_coordinator_id = u2.user_id
-        LEFT JOIN USER_MASTER u3 ON t.assigned_to_engineer_id = u3.user_id
-        LEFT JOIN DEPARTMENT_MASTER d ON t.department_id = d.department_id
-        LEFT JOIN locations l ON t.location_id = l.id
-        LEFT JOIN GUEST_TICKETS gt ON t.ticket_id = gt.ticket_id
+        LEFT JOIN USER_MASTER u1
+    ON t.created_by_user_id = u1.user_id
+
+    LEFT JOIN USER_MASTER u2
+        ON t.created_by_coordinator_id = u2.user_id
+    
+    LEFT JOIN USER_MASTER u3
+        ON t.assigned_to_engineer_id = u3.user_id
+    
+    -- Ticket Department & Location
+    LEFT JOIN DEPARTMENT_MASTER d
+        ON t.department_id = d.department_id
+    
+    LEFT JOIN locations l
+        ON t.location_id = l.id
+    
+    -- Linked Asset
+    LEFT JOIN ticket_assets ta
+        ON ta.ticket_id = t.ticket_id
+    
+    LEFT JOIN assets a
+        ON a.id = ta.asset_id
+    
+    -- Asset Department
+    LEFT JOIN DEPARTMENT_MASTER ad
+        ON ad.department_id = a.department_id
+    
+    -- Asset Location
+    LEFT JOIN locations al
+        ON al.id = a.location_id
+    
+    LEFT JOIN GUEST_TICKETS gt
+        ON gt.ticket_id = t.ticket_id
         WHERE t.ticket_id = @ticketId
       `;
 
