@@ -130,7 +130,7 @@ router.get('/',
         gp.gate_pass_number,
 
         gpa.serial_number,
-        gpa.category_name,
+        gpa.subcategory_name,
         gpa.model,
 
         gp.gate_pass_type,
@@ -157,12 +157,18 @@ router.get('/',
 
     OUTER APPLY (
         SELECT TOP 1
-            serial_number,
-            category_name,
-            model
-        FROM GATE_PASS_ASSETS
-        WHERE gate_pass_id = gp.id
-        ORDER BY asset_tag
+            gpa.serial_number,
+            gpa.model,
+            sc.name AS subcategory_name
+        FROM GATE_PASS_ASSETS gpa
+        LEFT JOIN ASSETS a
+            ON a.id = gpa.asset_id
+        LEFT JOIN products p
+            ON a.product_id = p.id
+        LEFT JOIN categories sc
+            ON p.subcategory_id = sc.id
+        WHERE gpa.gate_pass_id = gp.id
+        ORDER BY gpa.asset_tag
     ) gpa
     `;
 
