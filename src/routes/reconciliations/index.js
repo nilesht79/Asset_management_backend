@@ -421,15 +421,34 @@ router.put('/:id/start',
             //   location_name: asset.location_name,
             //   condition_status: asset.condition_status
             // };
+            // const snapshot = {
+            //   asset_tag: asset.asset_tag,
+            //   status: asset.status,
+            //   assigned_to: asset.assigned_to,
+            //   location_id: asset.location_id,
+            //   location_name: asset.location_name,
+            //   floor: asset.floor,
+            //   condition_status: asset.condition_status
+            // };
             const snapshot = {
-              asset_tag: asset.asset_tag,
-              status: asset.status,
-              assigned_to: asset.assigned_to,
-              location_id: asset.location_id,
-              location_name: asset.location_name,
-              floor: asset.floor,
-              condition_status: asset.condition_status
-            };
+            asset_tag: asset.asset_tag,
+            status: asset.status,
+            assigned_to: asset.assigned_to,
+            location_id: asset.location_id,
+          
+            location_name: asset.location_name
+              ? `${asset.location_name}${
+                  asset.floor !== null &&
+                  asset.floor !== undefined &&
+                  String(asset.floor).trim() !== ''
+                    ? ` - Floor ${asset.floor}`
+                    : ''
+                }`
+              : null,
+          
+            floor: asset.floor,
+            condition_status: asset.condition_status
+          };
             insertRequest.input(`systemSnapshot${index}`, sql.NVarChar(sql.MAX), JSON.stringify(snapshot));
           });
 
