@@ -365,7 +365,7 @@ router.get('/',
       LEFT JOIN categories c ON p.category_id = c.id
       LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
       LEFT JOIN DEPARTMENT_MASTER d ON u.department_id = d.department_id
-      LEFT JOIN locations l ON u.location_id = l.id
+      LEFT JOIN locations l ON a.location_id = l.id
       LEFT JOIN RECONCILIATION_RECORDS rr ON rr.asset_id = a.id AND rr.reconciliation_id = @reconciliationId
       LEFT JOIN USER_MASTER reconciler ON rr.reconciled_by = reconciler.user_id
       WHERE ${whereClause}
