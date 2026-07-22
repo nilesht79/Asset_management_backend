@@ -345,10 +345,19 @@ router.get('/',
         CONCAT(u.first_name, ' ', u.last_name) as assigned_user_name,
         u.email as assigned_user_email,
         d.department_name as department,
-        l.name as location_name,
-        l.building as location_building,
-        l.floor as location_floor,
-        l.address as location_address,
+        CONCAT(
+            l.name,
+            CASE
+                WHEN l.floor IS NOT NULL
+                     AND LTRIM(RTRIM(CAST(l.floor AS VARCHAR(20)))) <> ''
+                THEN ' - Floor ' + CAST(l.floor AS VARCHAR(20))
+                ELSE ''
+            END
+        ) AS location_name,
+        
+        l.building AS location_building,
+        l.floor AS location_floor,
+        l.address AS location_address,
         -- Reconciliation record data
         rr.id as reconciliation_record_id,
         rr.reconciliation_status,
