@@ -646,23 +646,57 @@ class AssetMovementModel {
         : '';
 
       // Fetch all matching records (no pagination for export)
+      // const result = await request.query(`
+      //   SELECT
+      //     asset_tag,
+      //     movement_type,
+      //     status,
+      //     movement_date,
+      //     assigned_to_name,
+      //     location_name,
+      //     previous_user_name,
+      //     previous_location_name,
+      //     reason,
+      //     notes,
+      //     performed_by_name,
+      //     parent_asset_tag
+      //   FROM ASSET_MOVEMENTS
+      //   ${whereClause}
+      //   ORDER BY movement_date DESC
+      // `);
+
       const result = await request.query(`
         SELECT
-          asset_tag,
-          movement_type,
-          status,
-          movement_date,
-          assigned_to_name,
-          location_name,
-          previous_user_name,
-          previous_location_name,
-          reason,
-          notes,
-          performed_by_name,
-          parent_asset_tag
-        FROM ASSET_MOVEMENTS
+            am.asset_tag,
+            a.serial_number,
+            c.name AS subcategory_name,
+        
+            am.movement_type,
+            am.status,
+            am.movement_date,
+            am.assigned_to_name,
+            am.location_name,
+            am.previous_user_name,
+            am.previous_location_name,
+            am.reason,
+            am.notes,
+            am.performed_by_name,
+            am.parent_asset_tag
+        
+        FROM ASSET_MOVEMENTS am
+        
+        LEFT JOIN ASSETS a
+            ON am.asset_id = a.id
+        
+        LEFT JOIN PRODUCTS p
+            ON a.product_id = p.id
+        
+        LEFT JOIN CATEGORIES c
+            ON p.subcategory_id = c.id
+        
         ${whereClause}
-        ORDER BY movement_date DESC
+        
+        ORDER BY am.movement_date DESC
       `);
 
       const movements = result.recordset;
@@ -675,19 +709,36 @@ class AssetMovementModel {
       worksheet.properties.defaultRowHeight = 20;
 
       // Define columns with headers
+      // worksheet.columns = [
+      //   { header: 'Date & Time', key: 'movement_date', width: 20 },
+      //   { header: 'Asset Tag', key: 'asset_tag', width: 15 },
+      //   { header: 'Movement Type', key: 'movement_type', width: 18 },
+      //   { header: 'Status', key: 'status', width: 12 },
+      //   { header: 'Assigned To', key: 'assigned_to_name', width: 20 },
+      //   { header: 'Location', key: 'location_name', width: 25 },
+      //   { header: 'Previous User', key: 'previous_user_name', width: 20 },
+      //   { header: 'Previous Location', key: 'previous_location_name', width: 25 },
+      //   { header: 'Reason', key: 'reason', width: 30 },
+      //   { header: 'Notes', key: 'notes', width: 30 },
+      //   { header: 'Performed By', key: 'performed_by_name', width: 20 },
+      //   { header: 'Parent Asset', key: 'parent_asset_tag', width: 15 }
+      // ];
+
       worksheet.columns = [
         { header: 'Date & Time', key: 'movement_date', width: 20 },
-        { header: 'Asset Tag', key: 'asset_tag', width: 15 },
+        { header: 'Asset Tag', key: 'asset_tag', width: 18 },
+        { header: 'Serial Number', key: 'serial_number', width: 22 },
+        { header: 'Sub Category', key: 'subcategory_name', width: 22 },
         { header: 'Movement Type', key: 'movement_type', width: 18 },
         { header: 'Status', key: 'status', width: 12 },
-        { header: 'Assigned To', key: 'assigned_to_name', width: 20 },
+        { header: 'Assigned To', key: 'assigned_to_name', width: 22 },
         { header: 'Location', key: 'location_name', width: 25 },
-        { header: 'Previous User', key: 'previous_user_name', width: 20 },
+        { header: 'Previous User', key: 'previous_user_name', width: 22 },
         { header: 'Previous Location', key: 'previous_location_name', width: 25 },
         { header: 'Reason', key: 'reason', width: 30 },
         { header: 'Notes', key: 'notes', width: 30 },
         { header: 'Performed By', key: 'performed_by_name', width: 20 },
-        { header: 'Parent Asset', key: 'parent_asset_tag', width: 15 }
+        { header: 'Parent Asset', key: 'parent_asset_tag', width: 18 }
       ];
 
       // Style the header row
@@ -703,9 +754,26 @@ class AssetMovementModel {
 
       // Add data rows
       movements.forEach((movement) => {
+        // const row = worksheet.addRow({
+        //   movement_date: movement.movement_date,
+        //   asset_tag: movement.asset_tag,
+        //   movement_type: movement.movement_type?.replace(/_/g, ' ').toUpperCase(),
+        //   status: movement.status?.toUpperCase(),
+        //   assigned_to_name: movement.assigned_to_name || '—',
+        //   location_name: movement.location_name || '—',
+        //   previous_user_name: movement.previous_user_name || '—',
+        //   previous_location_name: movement.previous_location_name || '—',
+        //   reason: movement.reason || '—',
+        //   notes: movement.notes || '—',
+        //   performed_by_name: movement.performed_by_name,
+        //   parent_asset_tag: movement.parent_asset_tag || '—'
+        // });
+
         const row = worksheet.addRow({
           movement_date: movement.movement_date,
           asset_tag: movement.asset_tag,
+          serial_number: movement.serial_number || '—',
+          subcategory_name: movement.subcategory_name || '—',
           movement_type: movement.movement_type?.replace(/_/g, ' ').toUpperCase(),
           status: movement.status?.toUpperCase(),
           assigned_to_name: movement.assigned_to_name || '—',
