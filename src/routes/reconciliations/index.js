@@ -449,6 +449,7 @@ router.put('/:id/start',
             floor: asset.floor,
             condition_status: asset.condition_status
           };
+            console.log("SNAPSHOT TO SAVE:", snapshot);
             insertRequest.input(`systemSnapshot${index}`, sql.NVarChar(sql.MAX), JSON.stringify(snapshot));
           });
 
