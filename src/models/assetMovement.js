@@ -234,12 +234,45 @@ class AssetMovementModel {
       dataRequest.input('limit', limit);
       dataRequest.input('offset', offset);
 
+      // const dataResult = await dataRequest.query(`
+      //   SELECT
+      //     am.id,
+      //     am.asset_id,
+      //     am.asset_tag,
+      //     a.serial_number,
+      //     am.assigned_to,
+      //     am.assigned_to_name,
+      //     am.location_id,
+      //     am.location_name,
+      //     am.movement_type,
+      //     am.status,
+      //     am.previous_user_id,
+      //     am.previous_user_name,
+      //     am.previous_location_id,
+      //     am.previous_location_name,
+      //     am.movement_date,
+      //     am.reason,
+      //     am.notes,
+      //     am.performed_by,
+      //     am.performed_by_name,
+      //     am.created_at
+      //   FROM ASSET_MOVEMENTS am
+      //   LEFT JOIN ASSETS a ON am.asset_id = a.id
+      //   ${whereClause}
+      //   ORDER BY am.movement_date DESC
+      //   OFFSET @offset ROWS
+      //   FETCH NEXT @limit ROWS ONLY
+      // `);
+
       const dataResult = await dataRequest.query(`
-        SELECT
+      SELECT
           am.id,
           am.asset_id,
           am.asset_tag,
           a.serial_number,
+        
+          c.name AS subcategory_name,
+        
           am.assigned_to,
           am.assigned_to_name,
           am.location_id,
@@ -256,10 +289,22 @@ class AssetMovementModel {
           am.performed_by,
           am.performed_by_name,
           am.created_at
+        
         FROM ASSET_MOVEMENTS am
-        LEFT JOIN ASSETS a ON am.asset_id = a.id
+        
+        LEFT JOIN ASSETS a
+            ON am.asset_id = a.id
+        
+        LEFT JOIN PRODUCTS p
+            ON a.product_id = p.id
+        
+        LEFT JOIN CATEGORIES c
+            ON p.subcategory_id = c.id
+        
         ${whereClause}
+        
         ORDER BY am.movement_date DESC
+        
         OFFSET @offset ROWS
         FETCH NEXT @limit ROWS ONLY
       `);
