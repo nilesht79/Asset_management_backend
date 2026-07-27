@@ -833,6 +833,158 @@ router.post('/',
   })
 );
 
+
+const XLSX = require('xlsx');
+
+router.get(
+  '/export',
+  requireRole([
+    USER_ROLES.ADMIN,
+    USER_ROLES.SUPERADMIN,
+    USER_ROLES.COORDINATOR,
+    USER_ROLES.IT_HEAD
+  ]),
+  asyncHandler(async (req, res) => {
+
+    const {
+      gate_pass_type,
+      date_from,
+      date_to,
+      search,
+      serial_number
+    } = req.query;
+
+    const pool = await connectDB();
+
+    let filter = "WHERE 1=1";
+    const request = pool.request();
+
+    if (gate_pass_type) {
+      filter += " AND gp.gate_pass_type=@gate_pass_type";
+      request.input("gate_pass_type", sql.VarChar, gate_pass_type);
+    }
+
+    if (date_from) {
+      filter += " AND CAST(gp.created_at AS DATE)>=@date_from";
+      request.input("date_from", sql.Date, date_from);
+    }
+
+    if (date_to) {
+      filter += " AND CAST(gp.created_at AS DATE)<=@date_to";
+      request.input("date_to", sql.Date, date_to);
+    }
+
+    if (search) {
+      filter += `
+      AND (
+          gp.gate_pass_number LIKE @search
+          OR gp.vendor_name LIKE @search
+          OR gp.recipient_name LIKE @search
+      )`;
+      request.input("search", sql.VarChar, `%${search}%`);
+    }
+
+    if (serial_number) {
+      filter += " AND gpa.serial_number LIKE @serial_number";
+      request.input("serial_number", sql.VarChar, `%${serial_number}%`);
+    }
+
+    const result = await request.query(`
+        SELECT
+    gp.gate_pass_number AS [Gate Pass No.],
+
+    gpa.asset_tag       AS [Asset Tag],
+    gpa.serial_number   AS [Serial Number],
+
+    c.name              AS [Category],
+    sc.name             AS [Sub Category],
+
+    p.name              AS [Product],
+    p.model             AS [Model],
+
+    CASE
+        WHEN gp.gate_pass_type='disposal_service'
+            THEN 'Disposal / Service'
+        ELSE 'End User'
+    END AS [Type],
+
+    CASE gp.purpose
+        WHEN 'repair' THEN 'External Repair'
+        WHEN 'buyback' THEN 'Buyback / Sale'
+        WHEN 'scrap' THEN 'Scrap / Disposal'
+        WHEN 'new_assignment' THEN 'New Assignment'
+        WHEN 'temporary_handover' THEN 'Temporary Handover'
+        WHEN 'permanent_transfer' THEN 'Permanent Transfer'
+        WHEN 'repair_return' THEN 'Repair and Return'
+        ELSE gp.purpose
+    END AS [Purpose],
+
+    gp.from_location_name AS [From],
+
+    CASE
+        WHEN gp.gate_pass_type='disposal_service'
+            THEN gp.vendor_name
+        ELSE gp.recipient_name
+    END AS [To],
+
+    (
+        SELECT COUNT(*)
+        FROM GATE_PASS_ASSETS x
+        WHERE x.gate_pass_id = gp.id
+    ) AS [Assets],
+
+    CONVERT(varchar(11), gp.created_at, 106) AS [Created Date]
+
+FROM GATE_PASSES gp
+
+LEFT JOIN GATE_PASS_ASSETS gpa
+       ON gp.id = gpa.gate_pass_id
+
+LEFT JOIN ASSETS a
+       ON gpa.asset_id = a.id
+
+LEFT JOIN PRODUCTS p
+       ON a.product_id = p.id
+
+LEFT JOIN CATEGORIES c
+       ON p.category_id = c.id
+
+LEFT JOIN CATEGORIES sc
+       ON p.subcategory_id = sc.id
+${filter}
+ORDER BY gp.created_at DESC;
+    `);
+
+    const workbook = XLSX.utils.book_new();
+
+    const worksheet = XLSX.utils.json_to_sheet(result.recordset);
+
+    XLSX.utils.book_append_sheet(
+        workbook,
+        worksheet,
+        "Gate Passes"
+    );
+
+    const buffer = XLSX.write(workbook,{
+        type:"buffer",
+        bookType:"xlsx"
+    });
+
+    res.setHeader(
+        "Content-Disposition",
+        "attachment; filename=GatePasses.xlsx"
+    );
+
+    res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+
+    res.send(buffer);
+
+}));
+
+
 /**
  * GET /api/v1/gate-passes/:id
  * Get single gate pass details
