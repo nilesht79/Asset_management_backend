@@ -126,50 +126,87 @@ router.get('/',
 
     const query = `
       SELECT
-        gp.id,
-        gp.gate_pass_number,
 
-        gpa.serial_number,
-        gpa.subcategory_name,
-        gpa.model,
+          gp.id,
+          gp.gate_pass_number,
+      
+          gpa.asset_tag,
+          gpa.serial_number,
+      
+          gpa.category_name,
+          gpa.subcategory_name,
+      
+          gpa.product_name,
+          gpa.model,
+      
+          gp.gate_pass_type,
+          gp.purpose,
+      
+          gp.from_location_name,
+      
+          gp.vendor_name,
+          gp.destination_address,
+      
+          gp.recipient_name,
+          gp.recipient_department,
+      
+          gp.authorized_by_name,
+      
+          gp.issue_date,
+          gp.valid_until,
+      
+          gp.created_by_name,
+          gp.created_at,
+      
+          gp.carrier_name,
+      
+          (
+              SELECT COUNT(*)
+              FROM GATE_PASS_ASSETS
+              WHERE gate_pass_id = gp.id
+          ) AS asset_count
+      
+      FROM GATE_PASSES gp
 
-        gp.gate_pass_type,
-        gp.purpose,
-        gp.from_location_name,
-        gp.vendor_name,
-        gp.destination_address,
-        gp.recipient_name,
-        gp.recipient_department,
-        gp.authorized_by_name,
-        gp.issue_date,
-        gp.valid_until,
-        gp.created_by_name,
-        gp.created_at,
-        gp.carrier_name,
-
-        (
-            SELECT COUNT(*)
-            FROM GATE_PASS_ASSETS
-            WHERE gate_pass_id = gp.id
-        ) AS asset_count
-
-    FROM GATE_PASSES gp
-
-    OUTER APPLY (
+    OUTER APPLY
+    (
         SELECT TOP 1
+    
+            gpa.asset_tag,
             gpa.serial_number,
-            gpa.model,
+    
+            p.name AS product_name,
+            p.model,
+    
+            c.name AS category_name,
             sc.name AS subcategory_name
+    
         FROM GATE_PASS_ASSETS gpa
+    
         LEFT JOIN ASSETS a
             ON a.id = gpa.asset_id
-        LEFT JOIN products p
+    
+        LEFT JOIN PRODUCTS p
             ON a.product_id = p.id
-        LEFT JOIN categories sc
+    
+        LEFT JOIN CATEGORIES c
+            ON p.category_id = c.id
+    
+        LEFT JOIN CATEGORIES sc
             ON p.subcategory_id = sc.id
+    
         WHERE gpa.gate_pass_id = gp.id
+    
         ORDER BY gpa.asset_tag
+    
     ) gpa
+
+    WHERE 1=1
+    ${filterConditions}
+    
+    ORDER BY gp.created_at DESC
+    OFFSET @offset ROWS
+    FETCH NEXT @limit ROWS ONLY;
     `;
 
     request.input('offset', sql.Int, offset);
@@ -677,14 +714,28 @@ router.post('/',
           .input('asset_id', sql.UniqueIdentifier, assetItem.asset_id)
           .query(`
             SELECT
-              a.id, a.asset_tag, a.serial_number, a.parent_asset_id,
-              p.name as product_name, p.model,
-              cat.name as category_name,
-              oem.name as oem_name,
-              (SELECT COUNT(*) FROM ASSETS WHERE parent_asset_id = a.id) as component_count
+                a.id,
+                a.asset_tag,
+                a.serial_number,
+            
+                p.name AS product_name,
+                p.model,
+            
+                cat.name AS category_name,
+                subcat.name AS subcategory_name,
+            
+                oem.name AS oem_name,
+            
+                (
+                    SELECT COUNT(*)
+                    FROM ASSETS
+                    WHERE parent_asset_id = a.id
+                ) AS component_count
             FROM ASSETS a
             LEFT JOIN products p ON a.product_id = p.id
             LEFT JOIN categories cat ON p.category_id = cat.id
+            LEFT JOIN categories subcat
+    ON p.subcategory_id = subcat.id
             LEFT JOIN oems oem ON p.oem_id = oem.id
             WHERE a.id = @asset_id
           `);
