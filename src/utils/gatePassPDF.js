@@ -582,126 +582,138 @@ class GatePassPDF {
   /**
    * Render remarks section
    */
-  // static renderRemarks(doc, remarks, margin, y, pageWidth) {
-  //   doc.font('Helvetica-Bold')
-  //     .fontSize(10)
-  //     .fillColor(this.colors.primary)
-  //     .text('Remarks:', margin, y, { lineBreak: false });
-
-  //   y += 15;
-
-  //   doc.rect(margin, y, pageWidth, 40)
-  //     .stroke(this.colors.border);
-
-  //   // Truncate remarks to prevent overflow
-  //   const truncatedRemarks = remarks.length > 150 ? remarks.substring(0, 150) + '...' : remarks;
-
-  //   // Use save/restore to clip text within bounds
-  //   doc.save();
-  //   doc.rect(margin + 5, y + 5, pageWidth - 10, 32).clip();
-  //   doc.font('Helvetica')
-  //     .fontSize(9)
-  //     .fillColor(this.colors.black)
-  //     .text(truncatedRemarks, margin + 10, y + 8, {
-  //       width: pageWidth - 20
-  //     });
-  //   doc.restore();
-
-  //   // Reset cursor position
-  //   doc.x = margin;
-  //   doc.y = y + 50;
-
-  //   return y + 50;
-  // }
+  
 
 //   static renderRemarks(doc, remarks, margin, y, pageWidth) {
-//     const cleanRemarks = (remarks || '')
-//   .replace(/\t/g, '    ')      // Replace TAB with 4 spaces
-//   .replace(/\r\n/g, '\n');     // Normalize line endings
-
-// doc.font('Helvetica')
-//   .fontSize(9)
-//   .fillColor(this.colors.black)
-//   .text(cleanRemarks, margin + 10, y + 8, {
-//     width: pageWidth - 20,
-//     lineGap: 2
-//   });
+//   doc.font('Helvetica-Bold')
+//     .fontSize(10)
+//     .fillColor(this.colors.primary)
+//     .text('Remarks:', margin, y);
 
 //   y += 15;
 
-//   // Calculate required height
-//   const remarksHeight = doc.heightOfString(remarks || '', {
-//     width: pageWidth - 20
-//   });
+//   const lines = (remarks || '')
+//     .trim()
+//     .split('\n');
 
-//   const boxHeight = Math.max(40, remarksHeight + 16);
+//   const lineHeight = 14;
+//   const boxHeight = Math.max(40, lines.length * lineHeight + 16);
 
-//   // Draw remarks box
 //   doc.rect(margin, y, pageWidth, boxHeight)
 //     .stroke(this.colors.border);
 
-//   // Print complete remarks (NO truncation)
+//   let currentY = y + 8;
+
 //   doc.font('Helvetica')
 //     .fontSize(9)
-//     .fillColor(this.colors.black)
-//     .text(remarks || '-', margin + 10, y + 8, {
-//       width: pageWidth - 20
+//     .fillColor(this.colors.black);
+
+//   lines.forEach(line => {
+//     const parts = line.split('\t');
+
+//     const sno = parts[0] || '';
+//     const item = parts[1] || '';
+//     const qty = parts[2] || '';
+
+//     doc.text(sno, margin + 10, currentY, {
+//       width: 25,
+//       lineBreak: false
 //     });
+
+//     doc.text(item, margin + 40, currentY, {
+//       width: 250,
+//       lineBreak: false
+//     });
+
+//     doc.text(qty, margin + 300, currentY, {
+//       width: 60,
+//       align: 'right',
+//       lineBreak: false
+//     });
+
+//     currentY += lineHeight;
+//   });
 
 //   return y + boxHeight + 10;
 // }
 
+
   static renderRemarks(doc, remarks, margin, y, pageWidth) {
+  // Title
   doc.font('Helvetica-Bold')
     .fontSize(10)
     .fillColor(this.colors.primary)
     .text('Remarks:', margin, y);
 
-  y += 15;
+  y += 18;
 
-  const lines = (remarks || '')
+  // Parse remarks
+  const rows = (remarks || '')
     .trim()
-    .split('\n');
+    .split('\n')
+    .filter(line => line.trim() !== '');
 
-  const lineHeight = 14;
-  const boxHeight = Math.max(40, lines.length * lineHeight + 16);
+  // Column widths
+  const snoWidth = 50;
+  const itemWidth = pageWidth - 150;
+  const qtyWidth = 100;
 
-  doc.rect(margin, y, pageWidth, boxHeight)
-    .stroke(this.colors.border);
+  const rowHeight = 26;
+  const tableHeight = rows.length * rowHeight;
 
-  let currentY = y + 8;
+  let currentY = y;
 
-  doc.font('Helvetica')
-    .fontSize(9)
-    .fillColor(this.colors.black);
+  rows.forEach(line => {
+    const cols = line.split('\t');
 
-  lines.forEach(line => {
-    const parts = line.split('\t');
+    const sno = cols[0] || '';
+    const item = cols[1] || '';
+    const qty = cols[2] || '';
 
-    const sno = parts[0] || '';
-    const item = parts[1] || '';
-    const qty = parts[2] || '';
+    let x = margin;
 
-    doc.text(sno, margin + 10, currentY, {
-      width: 25,
-      lineBreak: false
-    });
+    // -------- S.No --------
+    doc.rect(x, currentY, snoWidth, rowHeight)
+      .stroke();
 
-    doc.text(item, margin + 40, currentY, {
-      width: 250,
-      lineBreak: false
-    });
+    doc.font('Helvetica')
+      .fontSize(10)
+      .fillColor('black')
+      .text(sno, x, currentY + 7, {
+        width: snoWidth,
+        align: 'center'
+      });
 
-    doc.text(qty, margin + 300, currentY, {
-      width: 60,
-      align: 'right',
-      lineBreak: false
-    });
+    x += snoWidth;
 
-    currentY += lineHeight;
+    // -------- Item --------
+    doc.rect(x, currentY, itemWidth, rowHeight)
+      .stroke();
+
+    doc.font('Helvetica-Bold')
+      .fontSize(10)
+      .text(item, x, currentY + 7, {
+        width: itemWidth,
+        align: 'center'
+      });
+
+    x += itemWidth;
+
+    // -------- Qty --------
+    doc.rect(x, currentY, qtyWidth, rowHeight)
+      .stroke();
+
+    doc.font('Helvetica-Bold')
+      .fontSize(10)
+      .text(qty, x, currentY + 7, {
+        width: qtyWidth,
+        align: 'center'
+      });
+
+    currentY += rowHeight;
   });
 
-  return y + boxHeight + 10;
+  return currentY + 10;
 }
 
   /**
