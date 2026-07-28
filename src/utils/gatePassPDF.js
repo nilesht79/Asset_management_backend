@@ -615,15 +615,17 @@ class GatePassPDF {
   // }
 
   static renderRemarks(doc, remarks, margin, y, pageWidth) {
-    console.log("================================");
-    console.log("REMARKS RECEIVED IN PDF");
-    console.log(remarks);
-    console.log(JSON.stringify(remarks));
-    console.log("================================");
-  doc.font('Helvetica-Bold')
-    .fontSize(10)
-    .fillColor(this.colors.primary)
-    .text('Remarks:', margin, y);
+    const cleanRemarks = (remarks || '')
+  .replace(/\t/g, '    ')      // Replace TAB with 4 spaces
+  .replace(/\r\n/g, '\n');     // Normalize line endings
+
+doc.font('Helvetica')
+  .fontSize(9)
+  .fillColor(this.colors.black)
+  .text(cleanRemarks, margin + 10, y + 8, {
+    width: pageWidth - 20,
+    lineGap: 2
+  });
 
   y += 15;
 
