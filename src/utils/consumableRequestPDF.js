@@ -390,21 +390,21 @@ doc.font('Helvetica')
    .fontSize(9)
    .fillColor('#000');
 
-// doc.text(
-//     request.asset_tag || '-',
-//     startX + 8,
-//     dataY
-// );
-
 doc.text(
     request.asset_model || '-',
     startX + 8,
-    dataY + 22,
-    {
-        width: c1 - 16,
-        align: 'center'
-    }
+    dataY
 );
+
+// doc.text(
+//     request.asset_model || '-',
+//     startX + 8,
+//     dataY + 22,
+//     {
+//         width: c1 - 16,
+//         align: 'center'
+//     }
+// );
 
 doc.text(
     request.consumable_name || '-',
