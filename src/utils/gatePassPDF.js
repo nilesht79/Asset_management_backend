@@ -641,7 +641,7 @@ class GatePassPDF {
   static renderRemarks(doc, remarks, margin, y, pageWidth) {
   // Title
   doc.font('Helvetica-Bold')
-    .fontSize(10)
+    .fontSize(8)
     .fillColor(this.colors.primary)
     .text('Remarks:', margin, y);
 
@@ -654,11 +654,11 @@ class GatePassPDF {
     .filter(line => line.trim() !== '');
 
   // Column widths
-  const snoWidth = 50;
-  const itemWidth = pageWidth - 150;
-  const qtyWidth = 100;
+  const snoWidth = 35;
+  const qtyWidth = 55;
+  const itemWidth = pageWidth - snoWidth - qtyWidth;
 
-  const rowHeight = 26;
+  const rowHeight = 18;
   const tableHeight = rows.length * rowHeight;
 
   let currentY = y;
