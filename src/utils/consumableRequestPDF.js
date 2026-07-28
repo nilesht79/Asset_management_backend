@@ -397,9 +397,13 @@ doc.font('Helvetica')
 // );
 
 doc.text(
-    request.asset_model  || '-',
+    request.asset_model || '-',
     startX + 8,
-    dataY + 18
+    dataY + 22,
+    {
+        width: c1 - 16,
+        align: 'center'
+    }
 );
 
 doc.text(
