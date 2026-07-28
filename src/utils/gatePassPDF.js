@@ -645,71 +645,99 @@ class GatePassPDF {
     .fillColor(this.colors.primary)
     .text('Remarks:', margin, y);
 
-  y += 18;
+  y += 15;
 
-  // Parse remarks
+  // Parse rows
   const rows = (remarks || '')
     .trim()
     .split('\n')
-    .filter(line => line.trim() !== '');
+    .filter(r => r.trim() !== '');
 
-  // Column widths
+  // Column sizes
   const snoWidth = 35;
   const qtyWidth = 55;
   const itemWidth = pageWidth - snoWidth - qtyWidth;
 
   const rowHeight = 18;
-  const tableHeight = rows.length * rowHeight;
 
   let currentY = y;
 
   rows.forEach(line => {
-     const cols = line.split('\t').filter(c => c.trim() !== '');
 
-      const sno = cols[0] || '';
-      const qty = cols[cols.length - 1] || '';
-      
-      const item =
-          cols.length > 2
-              ? cols.slice(1, cols.length - 1).join(' ')
-              : (cols[1] || '');
+    // Remove empty tab values
+    const cols = line.split('\t').filter(c => c.trim() !== '');
 
+    let sno = '';
+    let item = '';
+    let qty = '';
+
+    // ----------------------------
+    // Normal rows
+    // Example:
+    // 1    Printer A3    5
+    // ----------------------------
+    if (cols.length >= 3) {
+
+      sno = cols[0];
+      qty = cols[cols.length - 1];
+      item = cols.slice(1, cols.length - 1).join(' ');
+
+    }
+
+    // ----------------------------
+    // Special row
+    // Example:
+    // 10    Black & White Toner 222
+    // ----------------------------
+    else if (cols.length === 2) {
+
+      sno = cols[0];
+
+      const match = cols[1].match(/^(.*?)(\d+)$/);
+
+      if (match) {
+        item = match[1].trim();
+        qty = match[2];
+      } else {
+        item = cols[1];
+        qty = '';
+      }
+
+    }
+
+    // Draw S.No
     let x = margin;
 
-    // -------- S.No --------
-    doc.rect(x, currentY, snoWidth, rowHeight)
-      .stroke();
+    doc.rect(x, currentY, snoWidth, rowHeight).stroke();
 
     doc.font('Helvetica')
-      .fontSize(10)
+      .fontSize(8)
       .fillColor('black')
-      .text(sno, x, currentY + 7, {
+      .text(sno, x, currentY + 5, {
         width: snoWidth,
         align: 'center'
       });
 
     x += snoWidth;
 
-    // -------- Item --------
-    doc.rect(x, currentY, itemWidth, rowHeight)
-      .stroke();
+    // Draw Item
+    doc.rect(x, currentY, itemWidth, rowHeight).stroke();
 
-    doc.font('Helvetica-Bold')
-      .fontSize(10)
-      .text(item, x, currentY + 7, {
-        width: itemWidth,
+    doc.font('Helvetica')
+      .fontSize(8)
+      .text(item, x + 2, currentY + 5, {
+        width: itemWidth - 4,
         align: 'center'
       });
 
     x += itemWidth;
 
-    // -------- Qty --------
-    doc.rect(x, currentY, qtyWidth, rowHeight)
-      .stroke();
+    // Draw Qty
+    doc.rect(x, currentY, qtyWidth, rowHeight).stroke();
 
-    doc.font('Helvetica-Bold')
-      .fontSize(10)
-      .text(qty, x, currentY + 7, {
+    doc.font('Helvetica')
+      .fontSize(8)
+      .text(qty, x, currentY + 5, {
         width: qtyWidth,
         align: 'center'
       });
