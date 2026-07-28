@@ -614,39 +614,92 @@ class GatePassPDF {
   //   return y + 50;
   // }
 
-  static renderRemarks(doc, remarks, margin, y, pageWidth) {
-    const cleanRemarks = (remarks || '')
-  .replace(/\t/g, '    ')      // Replace TAB with 4 spaces
-  .replace(/\r\n/g, '\n');     // Normalize line endings
+//   static renderRemarks(doc, remarks, margin, y, pageWidth) {
+//     const cleanRemarks = (remarks || '')
+//   .replace(/\t/g, '    ')      // Replace TAB with 4 spaces
+//   .replace(/\r\n/g, '\n');     // Normalize line endings
 
-doc.font('Helvetica')
-  .fontSize(9)
-  .fillColor(this.colors.black)
-  .text(cleanRemarks, margin + 10, y + 8, {
-    width: pageWidth - 20,
-    lineGap: 2
-  });
+// doc.font('Helvetica')
+//   .fontSize(9)
+//   .fillColor(this.colors.black)
+//   .text(cleanRemarks, margin + 10, y + 8, {
+//     width: pageWidth - 20,
+//     lineGap: 2
+//   });
+
+//   y += 15;
+
+//   // Calculate required height
+//   const remarksHeight = doc.heightOfString(remarks || '', {
+//     width: pageWidth - 20
+//   });
+
+//   const boxHeight = Math.max(40, remarksHeight + 16);
+
+//   // Draw remarks box
+//   doc.rect(margin, y, pageWidth, boxHeight)
+//     .stroke(this.colors.border);
+
+//   // Print complete remarks (NO truncation)
+//   doc.font('Helvetica')
+//     .fontSize(9)
+//     .fillColor(this.colors.black)
+//     .text(remarks || '-', margin + 10, y + 8, {
+//       width: pageWidth - 20
+//     });
+
+//   return y + boxHeight + 10;
+// }
+
+  static renderRemarks(doc, remarks, margin, y, pageWidth) {
+  doc.font('Helvetica-Bold')
+    .fontSize(10)
+    .fillColor(this.colors.primary)
+    .text('Remarks:', margin, y);
 
   y += 15;
 
-  // Calculate required height
-  const remarksHeight = doc.heightOfString(remarks || '', {
-    width: pageWidth - 20
-  });
+  const lines = (remarks || '')
+    .trim()
+    .split('\n');
 
-  const boxHeight = Math.max(40, remarksHeight + 16);
+  const lineHeight = 14;
+  const boxHeight = Math.max(40, lines.length * lineHeight + 16);
 
-  // Draw remarks box
   doc.rect(margin, y, pageWidth, boxHeight)
     .stroke(this.colors.border);
 
-  // Print complete remarks (NO truncation)
+  let currentY = y + 8;
+
   doc.font('Helvetica')
     .fontSize(9)
-    .fillColor(this.colors.black)
-    .text(remarks || '-', margin + 10, y + 8, {
-      width: pageWidth - 20
+    .fillColor(this.colors.black);
+
+  lines.forEach(line => {
+    const parts = line.split('\t');
+
+    const sno = parts[0] || '';
+    const item = parts[1] || '';
+    const qty = parts[2] || '';
+
+    doc.text(sno, margin + 10, currentY, {
+      width: 25,
+      lineBreak: false
     });
+
+    doc.text(item, margin + 40, currentY, {
+      width: 250,
+      lineBreak: false
+    });
+
+    doc.text(qty, margin + 300, currentY, {
+      width: 60,
+      align: 'right',
+      lineBreak: false
+    });
+
+    currentY += lineHeight;
+  });
 
   return y + boxHeight + 10;
 }
