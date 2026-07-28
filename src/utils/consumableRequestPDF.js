@@ -306,11 +306,7 @@ doc.moveTo(startX, y + head1 + head2)
 
 doc.font('Helvetica-Bold').fontSize(9).fillColor('#8B0000');
 
-doc.text('Asset Code', startX + 8, y + 10,{
-    lineBreak:false
-});
-
-doc.text('Make / Model', startX + 8, y + 34,{
+doc.text('Asset Make / Model', startX + 8, y + 34,{
     lineBreak:false
 });
 
@@ -394,11 +390,11 @@ doc.font('Helvetica')
    .fontSize(9)
    .fillColor('#000');
 
-doc.text(
-    request.asset_tag || '-',
-    startX + 8,
-    dataY
-);
+// doc.text(
+//     request.asset_tag || '-',
+//     startX + 8,
+//     dataY
+// );
 
 doc.text(
     request.asset_model  || '-',
