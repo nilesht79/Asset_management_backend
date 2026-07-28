@@ -401,7 +401,7 @@ doc.text(
 );
 
 doc.text(
-    request.asset_name || '-',
+    request.asset_model  || '-',
     startX + 8,
     dataY + 18
 );
