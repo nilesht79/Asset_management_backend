@@ -664,11 +664,15 @@ class GatePassPDF {
   let currentY = y;
 
   rows.forEach(line => {
-    const cols = line.split('\t');
+     const cols = line.split('\t').filter(c => c.trim() !== '');
 
-    const sno = cols[0] || '';
-    const item = cols[1] || '';
-    const qty = cols[2] || '';
+      const sno = cols[0] || '';
+      const qty = cols[cols.length - 1] || '';
+      
+      const item =
+          cols.length > 2
+              ? cols.slice(1, cols.length - 1).join(' ')
+              : (cols[1] || '');
 
     let x = margin;
 
