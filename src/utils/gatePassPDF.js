@@ -641,11 +641,11 @@ class GatePassPDF {
   static renderRemarks(doc, remarks, margin, y, pageWidth) {
   // Title
   doc.font('Helvetica-Bold')
-    .fontSize(8)
+    .fontSize(7)
     .fillColor(this.colors.primary)
     .text('Remarks:', margin, y);
 
-  y += 15;
+ y += 8;
 
   // Parse rows
   const rows = (remarks || '')
@@ -658,7 +658,7 @@ class GatePassPDF {
   const qtyWidth = 55;
   const itemWidth = pageWidth - snoWidth - qtyWidth;
 
-  const rowHeight = 18;
+  const rowHeight = 14;
 
   let currentY = y;
 
@@ -711,7 +711,7 @@ class GatePassPDF {
     doc.rect(x, currentY, snoWidth, rowHeight).stroke();
 
     doc.font('Helvetica')
-      .fontSize(8)
+      .fontSize(7)
       .fillColor('black')
       .text(sno, x, currentY + 5, {
         width: snoWidth,
@@ -724,7 +724,7 @@ class GatePassPDF {
     doc.rect(x, currentY, itemWidth, rowHeight).stroke();
 
     doc.font('Helvetica')
-      .fontSize(8)
+      .fontSize(7)
       .text(item, x + 2, currentY + 5, {
         width: itemWidth - 4,
         align: 'center'
@@ -736,7 +736,7 @@ class GatePassPDF {
     doc.rect(x, currentY, qtyWidth, rowHeight).stroke();
 
     doc.font('Helvetica')
-      .fontSize(8)
+      .fontSize(7)
       .text(qty, x, currentY + 5, {
         width: qtyWidth,
         align: 'center'
@@ -745,7 +745,7 @@ class GatePassPDF {
     currentY += rowHeight;
   });
 
-  return currentY + 10;
+  return currentY + 3;
 }
 
   /**
@@ -767,7 +767,7 @@ class GatePassPDF {
       .stroke(this.colors.border);
 
     doc.font('Helvetica-Bold')
-      .fontSize(8)
+      .fontSize(7)
       .fillColor(this.colors.gray)
       .text('Authorized By', margin + 10, y + 8, { lineBreak: false });
 
@@ -776,7 +776,7 @@ class GatePassPDF {
       .fillColor(this.colors.black)
       .text(gatePass.created_by_name || '_______________', margin + 10, y + 22, { lineBreak: false });
 
-    doc.fontSize(8)
+    doc.fontSize(7)
       .fillColor(this.colors.gray)
       .text('Signature: _____________', margin + 10, y + 50, { lineBreak: false });
 
@@ -786,7 +786,7 @@ class GatePassPDF {
       .stroke(this.colors.border);
 
     doc.font('Helvetica-Bold')
-      .fontSize(8)
+      .fontSize(7)
       .fillColor(this.colors.gray)
       .text(gatePass.gate_pass_type === 'end_user' ? 'Received By' : 'Handover To', recX + 10, y + 8, { lineBreak: false });
 
@@ -795,7 +795,7 @@ class GatePassPDF {
       .fillColor(this.colors.black)
       .text('_______________', recX + 10, y + 22, { lineBreak: false });
 
-    doc.fontSize(8)
+    doc.fontSize(7)
       .fillColor(this.colors.gray)
       .text('Signature: _____________', recX + 10, y + 50, { lineBreak: false });
 
@@ -805,7 +805,7 @@ class GatePassPDF {
       .stroke(this.colors.border);
 
     doc.font('Helvetica-Bold')
-      .fontSize(8)
+      .fontSize(7)
       .fillColor(this.colors.gray)
       .text('Issued By', secX + 10, y + 8, { lineBreak: false });
 
@@ -814,7 +814,7 @@ class GatePassPDF {
       .fillColor(this.colors.black)
       .text('_______________', secX + 10, y + 22, { lineBreak: false });
 
-    doc.fontSize(8)
+    doc.fontSize(7)
       .fillColor(this.colors.gray)
       .text('Signature: _____________', secX + 10, y + 50, { lineBreak: false });
 
