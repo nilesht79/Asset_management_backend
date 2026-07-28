@@ -815,12 +815,14 @@ router.get('/employee',
             a.serial_number,
             p.name as product_name,
             c.name as category_name,
+            sc.name AS subcategory_name,
             a.status,
             a.condition_status,
             a.created_at as assigned_at
           FROM assets a
           LEFT JOIN products p ON a.product_id = p.id
-          LEFT JOIN categories c ON p.category_id = c.id
+          LEFT JOIN categories sc ON p.category_id = sc.id
+          LEFT JOIN categories c ON sc.parent_category_id = c.id
           WHERE a.assigned_to = @userId AND a.is_active = 1 AND a.status <> 'retired'
           ORDER BY a.created_at DESC
         `);
