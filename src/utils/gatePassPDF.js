@@ -142,8 +142,9 @@ class GatePassPDF {
 
     // ===== AUTHORIZATION & SIGNATURES =====
     if (y < maxY) {
-      y = this.renderSignatures(doc, gatePass, margin, y, pageWidth);
-    }
+    y += 15; // Gap before Authorization section
+    y = this.renderSignatures(doc, gatePass, margin, y, pageWidth);
+}
 
     // ===== SECURITY SECTION =====
     this.renderSecuritySection(doc, margin, pageWidth);
@@ -745,7 +746,7 @@ class GatePassPDF {
     currentY += rowHeight;
   });
 
-  return currentY + 3;
+  return currentY + 15;
 }
 
   /**
