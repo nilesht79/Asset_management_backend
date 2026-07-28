@@ -402,7 +402,7 @@ router.get(
 
     a.asset_tag,
     
-    p.name AS asset_model,
+   p.model AS asset_model,
 
     req.employee_id,
 
