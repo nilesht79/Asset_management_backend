@@ -615,6 +615,11 @@ class GatePassPDF {
   // }
 
   static renderRemarks(doc, remarks, margin, y, pageWidth) {
+    console.log("================================");
+    console.log("REMARKS RECEIVED IN PDF");
+    console.log(remarks);
+    console.log(JSON.stringify(remarks));
+    console.log("================================");
   doc.font('Helvetica-Bold')
     .fontSize(10)
     .fillColor(this.colors.primary)
