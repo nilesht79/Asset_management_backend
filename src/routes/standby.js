@@ -81,6 +81,27 @@ router.get(
   asyncHandler(standbyAssignmentController.getStandbyAssignments)
 );
 
+
+/**
+ * PUT /api/v1/standby-assignments/:id/reassign
+ * Reassign standby asset to another user
+ * Access: superadmin, admin, coordinator
+ */
+router.put(
+  '/assignments/:id/reassign',
+  requireRole(['superadmin', 'admin', 'coordinator']),
+  asyncHandler(standbyAssignmentController.reassignStandbyAsset)
+);
+
+
+router.put(
+  '/assignments/:id/unassign',
+  requireRole(['superadmin', 'admin', 'coordinator']),
+  asyncHandler(
+    standbyAssignmentController.unassignStandbyAsset
+  )
+);
+
 /**
  * POST /api/v1/standby-assignments
  * Assign standby asset to user
