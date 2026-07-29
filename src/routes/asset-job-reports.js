@@ -153,7 +153,7 @@ router.get('/',
         COALESCE(assigned_user.first_name + ' ' + assigned_user.last_name, am.assigned_to_name) as assigned_to_name,
         assigned_user.email as assigned_to_email,
         assigned_user.employee_id as assigned_to_emp_code,
-        assigned_dept.department_name as assigned_to_department,
+        asset_dept.department_name as assigned_to_department,
 
         -- Current location (fallback: movement location -> user's location)
         am.location_id,
@@ -211,7 +211,7 @@ router.get('/',
       LEFT JOIN oems oem ON p.oem_id = oem.id
       LEFT JOIN categories cat ON p.category_id = cat.id
       LEFT JOIN USER_MASTER assigned_user ON am.assigned_to = assigned_user.user_id
-      LEFT JOIN DEPARTMENT_MASTER assigned_dept ON assigned_user.department_id = assigned_dept.department_id
+      LEFT JOIN DEPARTMENT_MASTER asset_dept ON a.department_id = asset_dept.department_id
       LEFT JOIN locations loc ON a.location_id = loc.id
       LEFT JOIN locations user_loc ON assigned_user.location_id = user_loc.id
       LEFT JOIN USER_MASTER prev_user ON am.previous_user_id = prev_user.user_id
@@ -238,7 +238,7 @@ router.get('/',
       LEFT JOIN oems oem ON p.oem_id = oem.id
       LEFT JOIN categories cat ON p.category_id = cat.id
       LEFT JOIN USER_MASTER assigned_user ON am.assigned_to = assigned_user.user_id
-      LEFT JOIN DEPARTMENT_MASTER assigned_dept ON assigned_user.department_id = assigned_dept.department_id
+      LEFT JOIN DEPARTMENT_MASTER asset_dept ON a.department_id = asset_dept.department_id
       LEFT JOIN USER_MASTER prev_user ON am.previous_user_id = prev_user.user_id
       LEFT JOIN DEPARTMENT_MASTER prev_dept ON prev_user.department_id = prev_dept.department_id
       WHERE 1=1 ${typeCondition} ${filterConditions}
@@ -436,7 +436,7 @@ router.get('/export/excel',
       LEFT JOIN oems oem ON p.oem_id = oem.id
       LEFT JOIN categories cat ON p.category_id = cat.id
       LEFT JOIN USER_MASTER assigned_user ON am.assigned_to = assigned_user.user_id
-      LEFT JOIN DEPARTMENT_MASTER assigned_dept ON assigned_user.department_id = assigned_dept.department_id
+      LEFT JOIN DEPARTMENT_MASTER asset_dept ON a.department_id = asset_dept.department_id
       LEFT JOIN locations loc ON a.location_id = loc.id
       LEFT JOIN locations user_loc ON assigned_user.location_id = user_loc.id
       LEFT JOIN USER_MASTER prev_user ON am.previous_user_id = prev_user.user_id
@@ -562,7 +562,7 @@ router.get('/:id',
           assigned_user.email as assigned_to_email,
           assigned_user.employee_id as assigned_to_emp_code,
           NULL as assigned_to_phone,
-          assigned_dept.department_name as assigned_to_department,
+          asset_dept.department_name as assigned_to_department,
 
           -- Current location (fallback: movement location -> user's location)
           am.location_id,
@@ -611,7 +611,7 @@ router.get('/:id',
         LEFT JOIN oems oem ON p.oem_id = oem.id
         LEFT JOIN categories cat ON p.category_id = cat.id
         LEFT JOIN USER_MASTER assigned_user ON am.assigned_to = assigned_user.user_id
-        LEFT JOIN DEPARTMENT_MASTER assigned_dept ON assigned_user.department_id = assigned_dept.department_id
+        LEFT JOIN DEPARTMENT_MASTER asset_dept ON a.department_id = asset_dept.department_id
         LEFT JOIN locations loc ON a.location_id = loc.id
         LEFT JOIN locations user_loc ON assigned_user.location_id = user_loc.id
         LEFT JOIN USER_MASTER prev_user ON am.previous_user_id = prev_user.user_id
@@ -667,7 +667,7 @@ router.get('/:id/pdf',
           assigned_user.email as assigned_to_email,
           assigned_user.employee_id as assigned_to_emp_code,
           NULL as assigned_to_phone,
-          assigned_dept.department_name as assigned_to_department,
+          asset_dept.department_name as assigned_to_department,
 
           -- Current location (fallback: movement location -> user's location)
          am.location_id,
@@ -711,7 +711,7 @@ router.get('/:id/pdf',
         LEFT JOIN oems oem ON p.oem_id = oem.id
         LEFT JOIN categories cat ON p.category_id = cat.id
         LEFT JOIN USER_MASTER assigned_user ON am.assigned_to = assigned_user.user_id
-        LEFT JOIN DEPARTMENT_MASTER assigned_dept ON assigned_user.department_id = assigned_dept.department_id
+        LEFT JOIN DEPARTMENT_MASTER asset_dept ON a.department_id = asset_dept.department_id
         LEFT JOIN locations loc ON a.location_id = loc.id
         LEFT JOIN locations user_loc ON assigned_user.location_id = user_loc.id
         LEFT JOIN USER_MASTER prev_user ON am.previous_user_id = prev_user.user_id
@@ -790,7 +790,7 @@ router.post('/pdf/bulk',
           assigned_user.email as assigned_to_email,
           assigned_user.employee_id as assigned_to_emp_code,
           NULL as assigned_to_phone,
-          assigned_dept.department_name as assigned_to_department,
+          asset_dept.department_name as assigned_to_department,
 
           -- Current location (fallback: movement location -> user's location)
           am.location_id,
@@ -834,7 +834,7 @@ router.post('/pdf/bulk',
         LEFT JOIN oems oem ON p.oem_id = oem.id
         LEFT JOIN categories cat ON p.category_id = cat.id
         LEFT JOIN USER_MASTER assigned_user ON am.assigned_to = assigned_user.user_id
-        LEFT JOIN DEPARTMENT_MASTER assigned_dept ON assigned_user.department_id = assigned_dept.department_id
+        LEFT JOIN DEPARTMENT_MASTER asset_dept ON a.department_id = asset_dept.department_id
         LEFT JOIN locations loc ON a.location_id = loc.id
         LEFT JOIN locations user_loc ON assigned_user.location_id = user_loc.id
         LEFT JOIN USER_MASTER prev_user ON am.previous_user_id = prev_user.user_id
