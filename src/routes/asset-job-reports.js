@@ -159,16 +159,17 @@ router.get('/',
         am.location_id,
         
         CONCAT(
-          COALESCE(loc.name, asset_loc.name, am.location_name, user_loc.name),
-          CASE
-              WHEN COALESCE(loc.floor, asset_loc.floor, user_loc.floor) IS NOT NULL
-                   AND LTRIM(RTRIM(COALESCE(loc.floor, asset_loc.floor, user_loc.floor))) <> ''
-              THEN ' - ' + COALESCE(loc.floor, asset_loc.floor, user_loc.floor)
-              ELSE ''
-          END
-      ) AS location_name,
-        COALESCE(loc.building, asset_loc.building, user_loc.building) AS location_building,
-        COALESCE(loc.floor, asset_loc.floor, user_loc.floor) AS location_floor,
+            asset_loc.name,
+            CASE
+                WHEN asset_loc.floor IS NOT NULL
+                     AND LTRIM(RTRIM(asset_loc.floor)) <> ''
+                THEN ' - ' + asset_loc.floor
+                ELSE ''
+            END
+        ) AS location_name,
+        
+        asset_loc.building AS location_building,
+        asset_loc.floor AS location_floor,
         assigned_user.room_no as location_room_no,
         assigned_user.room_no as location_room_no,
 
@@ -565,12 +566,9 @@ router.get('/:id',
 
           -- Current location (fallback: movement location -> user's location)
           am.location_id,
-          COALESCE(loc.name, asset_loc.name, am.location_name, user_loc.name) AS location_name,
-          COALESCE(loc.building, asset_loc.building, user_loc.building) AS location_building,
-          COALESCE(loc.floor, asset_loc.floor, user_loc.floor) AS location_floor,
-          loc.name as location_name,
-          loc.building as location_building,
-          loc.floor as location_floor,
+        asset_loc.name AS location_name,
+        asset_loc.building AS location_building,
+        asset_loc.floor AS location_floor,
           assigned_user.room_no as location_room_no,
 
           -- Previous user (for transfers)
@@ -672,10 +670,10 @@ router.get('/:id/pdf',
           assigned_dept.department_name as assigned_to_department,
 
           -- Current location (fallback: movement location -> user's location)
-          am.location_id,
-          COALESCE(loc.name, asset_loc.name, am.location_name, user_loc.name) AS location_name,
-          COALESCE(loc.building, asset_loc.building, user_loc.building) AS location_building,
-          COALESCE(loc.floor, asset_loc.floor, user_loc.floor) AS location_floor,
+         am.location_id,
+          asset_loc.name AS location_name,
+          asset_loc.building AS location_building,
+          asset_loc.floor AS location_floor,
 
           am.previous_user_id,
           COALESCE(prev_user.first_name + ' ' + prev_user.last_name, am.previous_user_name) as previous_user_name,
