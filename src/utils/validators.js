@@ -424,7 +424,7 @@ const validators = {
       purchase_cost: Joi.number().positive().precision(2).optional().allow(null),
       vendor_id: Joi.string().uuid().optional().allow(null),
       invoice_number: Joi.string().max(100).optional().allow(null, ''),
-      notes: Joi.string().max(1000).optional().allow(null),
+      notes: Joi.string().max(1000).optional().allow(null, ''),
       is_active: Joi.boolean().default(true),
       // New fields for component hierarchy
       asset_type: Joi.string().valid('standalone', 'parent', 'component').default('standalone'),
@@ -464,7 +464,7 @@ const validators = {
       purchase_cost: Joi.number().positive().precision(2).optional().allow(null),
       vendor_id: Joi.string().uuid().optional().allow(null),
       invoice_number: Joi.string().max(100).optional().allow(null, ''),
-      notes: Joi.string().max(1000).optional().allow(null),
+      notes: Joi.string().max(1000).optional().allow(null, ''),
       is_active: Joi.boolean().optional(),
       // New fields for component hierarchy
       asset_type: Joi.string().valid('standalone', 'parent', 'component').optional(),
