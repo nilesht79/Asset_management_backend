@@ -564,35 +564,54 @@ router.post('/',
 
     
 
-    // Verify the target user exists and is eligible
-      const targetUser = await pool.request()
-        .input('user_id', sql.UniqueIdentifier, requested_for)
-        .query(`
-          SELECT user_id, role FROM USER_MASTER
-          WHERE user_id = @user_id
-            AND is_active = 1
-            AND role IN (
-              'employee',
-              'department_head',
-              'department_coordinator',
-              'coordinator',
-              'it_head',
-              'engineer'
-            )
-        `);
+    // Coordinators/Admins/Engineers can request on behalf of others
+if (requested_for && canRequestOnBehalf) {
 
-      if (targetUser.recordset.length === 0) {
-        return sendError(res, 'Target user not found or not eligible for consumable requests', 400);
-      }
+  // Verify the target user exists and is eligible
+  const targetUser = await pool.request()
+    .input('user_id', sql.UniqueIdentifier, requested_for)
+    .query(`
+      SELECT user_id, role
+      FROM USER_MASTER
+      WHERE user_id = @user_id
+        AND is_active = 1
+        AND role IN (
+          'employee',
+          'department_head',
+          'department_coordinator',
+          'coordinator',
+          'it_head',
+          'engineer'
+        )
+    `);
 
-      requestedById = requested_for;
-    } else if (!canRequestOnBehalf) {
-      // Regular users can only request for themselves
-      // Verify current user is eligible (employee, department_head, department_coordinator, it_head, engineer)
-      if (!['employee', 'department_head', 'department_coordinator', 'it_head', 'engineer'].includes(userRole)) {
-        return sendError(res, 'Only employees, department heads, department coordinators, IT heads, and engineers can request consumables', 403);
-      }
-    }
+  if (targetUser.recordset.length === 0) {
+    return sendError(
+      res,
+      'Target user not found or not eligible for consumable requests',
+      400
+    );
+  }
+
+  requestedById = requested_for;
+
+} else if (!canRequestOnBehalf) {
+
+  // Regular users can only request for themselves
+  if (![
+    'employee',
+    'department_head',
+    'department_coordinator',
+    'it_head',
+    'engineer'
+  ].includes(userRole)) {
+    return sendError(
+      res,
+      'Only employees, department heads, department coordinators, IT heads, and engineers can request consumables',
+      403
+    );
+  }
+}
 
     // Verify consumable exists and is active
     const consumable = await pool.request()
