@@ -563,14 +563,31 @@ router.post('/',
     let requestedById = currentUserId;
 
     // Coordinators/Admins/Engineers can request on behalf of others
-    if (requested_for && canRequestOnBehalf) {
-      // Verify the target user exists and is eligible (employee, department_head, department_coordinator, it_head, engineer)
+    // if (requested_for && canRequestOnBehalf) {
+    //   // Verify the target user exists and is eligible (employee, department_head, department_coordinator, it_head, engineer)
+    //   const targetUser = await pool.request()
+    //     .input('user_id', sql.UniqueIdentifier, requested_for)
+    //     .query(`
+    //       SELECT user_id, role FROM USER_MASTER
+    //       WHERE user_id = @user_id AND is_active = 1
+    //       AND role IN ('employee', 'department_head', 'department_coordinator', 'it_head', 'engineer')
+    //     `);
+
+    // Verify the target user exists and is eligible
       const targetUser = await pool.request()
         .input('user_id', sql.UniqueIdentifier, requested_for)
         .query(`
           SELECT user_id, role FROM USER_MASTER
-          WHERE user_id = @user_id AND is_active = 1
-          AND role IN ('employee', 'department_head', 'department_coordinator', 'it_head', 'engineer')
+          WHERE user_id = @user_id
+            AND is_active = 1
+            AND role IN (
+              'employee',
+              'department_head',
+              'department_coordinator',
+              'coordinator',
+              'it_head',
+              'engineer'
+            )
         `);
 
       if (targetUser.recordset.length === 0) {
