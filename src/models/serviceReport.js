@@ -939,7 +939,8 @@ class ServiceReportModel {
       const pool = await connectDB();
 
       // Get standalone or parent assets that are available (not assigned)
-      let whereClause = "WHERE a.asset_type IN ('standalone', 'parent') AND a.status = 'available' AND a.is_active = 1";
+      // let whereClause = "WHERE a.asset_type IN ('standalone', 'parent') AND a.status = 'available' AND a.is_active = 1";
+      let whereClause = "WHERE a.status IN ('assigned', 'available') AND a.is_active = 1";
       const params = {};
 
       // Filter by category to match the asset being replaced
@@ -963,25 +964,45 @@ class ServiceReportModel {
         params.search = `%${filters.search}%`;
       }
 
+      // const query = `
+      //   SELECT
+      //     a.id AS asset_id,
+      //     a.asset_tag,
+      //     a.serial_number,
+      //     a.condition_status,
+      //     a.purchase_cost,
+      //     a.asset_type,
+      //     p.name AS product_name,
+      //     p.model AS product_model,
+      //     c.name AS category_name,
+      //     o.name AS oem_name
+      //   FROM assets a
+      //   INNER JOIN products p ON a.product_id = p.id
+      //   LEFT JOIN categories c ON p.category_id = c.id
+      //   LEFT JOIN oems o ON p.oem_id = o.id
+      //   ${whereClause}
+      //   ORDER BY c.name, p.name, a.asset_tag
+      // `;
+
       const query = `
-        SELECT
-          a.id AS asset_id,
-          a.asset_tag,
-          a.serial_number,
-          a.condition_status,
-          a.purchase_cost,
-          a.asset_type,
-          p.name AS product_name,
-          p.model AS product_model,
-          c.name AS category_name,
-          o.name AS oem_name
-        FROM assets a
-        INNER JOIN products p ON a.product_id = p.id
-        LEFT JOIN categories c ON p.category_id = c.id
-        LEFT JOIN oems o ON p.oem_id = o.id
-        ${whereClause}
-        ORDER BY c.name, p.name, a.asset_tag
-      `;
+          SELECT
+            a.id AS asset_id,
+            a.asset_tag,
+            a.serial_number,
+            a.condition_status,
+            a.purchase_cost,
+            a.asset_type,
+            p.name AS product_name,
+            p.model AS product_model,
+            c.name AS category_name,
+            o.name AS oem_name
+          FROM assets a
+          INNER JOIN products p ON a.product_id = p.id
+          LEFT JOIN categories c ON p.category_id = c.id
+          LEFT JOIN oems o ON p.oem_id = o.id
+          ${whereClause}
+          ORDER BY a.serial_number, a.asset_tag
+        `;
 
       let request = pool.request();
       Object.keys(params).forEach(key => {
