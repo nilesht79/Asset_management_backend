@@ -989,6 +989,7 @@ class ServiceReportModel {
             a.id AS asset_id,
             a.asset_tag,
             a.serial_number,
+            a.status,
             a.condition_status,
             a.purchase_cost,
             a.asset_type,
