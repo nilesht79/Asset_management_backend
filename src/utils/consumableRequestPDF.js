@@ -635,12 +635,11 @@ doc.text('----------------', col3, y + 22, {
 
 // Data Center / Location
 doc.text(
-    request.location_name || '',
-    col4,
-    y,
+    request.location_name || '-',
+    130,
+    y + 54,
     {
-        width: 80,
-        align: 'center',
+        width: 100,
         lineBreak: false
     }
 );
