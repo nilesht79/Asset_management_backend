@@ -401,8 +401,8 @@ router.get(
     c.name AS consumable_name,
 
     a.asset_tag,
-    
-   CONCAT(p.name, ' ', p.model) AS asset_model,
+
+    CONCAT(p.name, ' ', p.model) AS asset_model,
 
     req.employee_id,
 
@@ -416,7 +416,9 @@ router.get(
 
     eng.first_name + ' ' + eng.last_name AS engineer_name,
 
-    loc.name AS location_name,
+    asset_loc.name AS location_name,
+
+    req_loc.name AS requester_location_name,
 
     ISNULL(ci.quantity_in_stock,0) AS current_stock
 
@@ -440,8 +442,11 @@ ON cr.assigned_engineer = eng.user_id
 LEFT JOIN DEPARTMENT_MASTER d
 ON req.department_id = d.department_id
 
-LEFT JOIN locations loc
-ON req.location_id = loc.id
+LEFT JOIN locations asset_loc
+ON a.location_id = asset_loc.id
+
+LEFT JOIN locations req_loc
+ON req.location_id = req_loc.id
 
 LEFT JOIN (
     SELECT
