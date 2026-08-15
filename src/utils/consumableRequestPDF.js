@@ -189,7 +189,16 @@ doc.font('Helvetica').fillColor('#000');
 doc.text(request.request_number || '-', 130, y);
 doc.text(request.employee_id || '-', 130, y + 18);
 doc.text(request.department_name || '-', 130, y + 36);
-doc.text(request.location_name || '-', 130, y + 54);
+doc.text(
+    request.location_name || '',
+    col4,
+    y,
+    {
+        width: 80,
+        align: 'center',
+        lineBreak: false
+    }
+);
 
 doc.text(request.requested_by_name || '-', 275, y + 18);
 doc.text(request.section_name || '-', 275, y + 36);
