@@ -402,9 +402,11 @@ router.get(
 
     a.asset_tag,
 
-    CONCAT(p.name, ' ', p.model) AS asset_model,
-
-    req.employee_id,
+  a.floor AS floor,
+  
+  CONCAT(p.name, ' ', p.model) AS asset_model,
+  
+  req.employee_id,
 
     req.designation,
 
