@@ -401,8 +401,12 @@ router.get(
     c.name AS consumable_name,
 
     a.asset_tag,
-  
-  asset_loc.floor AS floor,
+
+    o.name AS asset_make,
+
+    p.model AS asset_model,
+
+    asset_loc.floor AS floor,
   
   req.employee_id,
 
@@ -428,10 +432,13 @@ JOIN consumables c
 ON cr.consumable_id = c.id
 
 LEFT JOIN assets a
-ON cr.for_asset_id = a.id
+    ON cr.for_asset_id = a.id
 
 LEFT JOIN products p
-ON a.product_id = p.id
+    ON a.product_id = p.id
+
+LEFT JOIN oems o
+    ON p.oem_id = o.id
 
 JOIN USER_MASTER req
 ON cr.requested_by = req.user_id
