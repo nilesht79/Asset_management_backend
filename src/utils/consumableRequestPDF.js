@@ -399,9 +399,14 @@ doc.font('Helvetica')
    .fillColor('#000');
 
 doc.text(
-    request.asset_model || '-',
+    `${request.asset_make || '-'} / ${request.asset_model || '-'}`,
     startX + 8,
-    dataY
+    dataY,
+    {
+        width: c1 - 16,
+        align: 'center',
+        lineBreak: false
+    }
 );
 
 // doc.text(
