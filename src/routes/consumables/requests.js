@@ -404,7 +404,7 @@ router.get(
 
   a.floor AS floor,
   
-  CONCAT(p.name, ' ', p.model) AS asset_model,
+  asset_loc.floor AS floor,
   
   req.employee_id,
 
