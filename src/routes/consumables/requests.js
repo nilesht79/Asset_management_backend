@@ -401,8 +401,6 @@ router.get(
     c.name AS consumable_name,
 
     a.asset_tag,
-
-  a.floor AS floor,
   
   asset_loc.floor AS floor,
   
