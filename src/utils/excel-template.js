@@ -1341,12 +1341,12 @@ vendors.forEach((v) => {
     }
 
     // Warnings for optional fields
-    if (!rowData.purchase_date) {
-      warnings.push('Purchase date not provided');
-    }
-    if (!rowData.purchase_cost) {
-      warnings.push('Purchase cost not provided');
-    }
+    // if (!rowData.purchase_date) {
+    //   warnings.push('Purchase date not provided');
+    // }
+    // if (!rowData.purchase_cost) {
+    //   warnings.push('Purchase cost not provided');
+    // }
 
     // Prepare final row data with resolved IDs
     const finalRowData = {
