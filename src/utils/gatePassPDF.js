@@ -136,15 +136,80 @@ class GatePassPDF {
     y = this.renderAssetsTable(doc, gatePass, margin, y, pageWidth, maxY);
 
     // ===== REMARKS =====
-    if (gatePass.remarks && y < maxY - 60) {
-      y = this.renderRemarks(doc, gatePass.remarks, margin, y, pageWidth);
-    }
+//     if (gatePass.remarks && y < maxY - 60) {
+//       y = this.renderRemarks(doc, gatePass.remarks, margin, y, pageWidth);
+//     }
 
-    // ===== AUTHORIZATION & SIGNATURES =====
-    if (y < maxY) {
-    y += 15; // Gap before Authorization section
-    y = this.renderSignatures(doc, gatePass, margin, y, pageWidth);
+//     // ===== AUTHORIZATION & SIGNATURES =====
+//     if (y < maxY) {
+//     y += 15; // Gap before Authorization section
+//     y = this.renderSignatures(doc, gatePass, margin, y, pageWidth);
+// }
+
+    // ===== REMARKS =====
+if (gatePass.remarks && String(gatePass.remarks).trim()) {
+
+  // Calculate how much space the remarks need
+  const remarksText = String(gatePass.remarks).trim();
+
+  doc.font('Helvetica').fontSize(9);
+
+  const remarksHeight = doc.heightOfString(remarksText, {
+    width: pageWidth - 20
+  });
+
+  const remarksBoxHeight = Math.max(40, remarksHeight + 16);
+
+  // Need space for:
+  // - Remarks heading: 15
+  // - Remarks box
+  // - Small bottom spacing: 10
+  const remarksRequiredHeight = 15 + remarksBoxHeight + 10;
+
+  // If there isn't enough space on current page,
+  // start remarks on a new page.
+  if (y + remarksRequiredHeight > maxY) {
+    doc.addPage();
+
+    y = margin;
+
+    // Optional small continuation heading
+    doc.font('Helvetica-Bold')
+      .fontSize(9)
+      .fillColor(this.colors.gray)
+      .text('GATE PASS - CONTINUED', margin, y, {
+        lineBreak: false
+      });
+
+    y += 25;
+  }
+
+  y = this.renderRemarks(
+    doc,
+    remarksText,
+    margin,
+    y,
+    pageWidth
+  );
 }
+
+// ===== AUTHORIZATION & SIGNATURES =====
+
+// Signature section needs approximately 110px
+const signatureRequiredHeight = 110;
+
+if (y + signatureRequiredHeight > maxY) {
+  doc.addPage();
+  y = margin;
+}
+
+y = this.renderSignatures(
+  doc,
+  gatePass,
+  margin,
+  y,
+  pageWidth
+);
 
     // ===== SECURITY SECTION =====
     this.renderSecuritySection(doc, margin, pageWidth);
