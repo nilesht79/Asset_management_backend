@@ -505,6 +505,25 @@ y = this.renderSignatures(
   // static renderAssetsTable(doc, assets, margin, y, pageWidth, maxY) {
   static renderAssetsTable(doc, gatePass, margin, y, pageWidth, maxY) {
     // Section header
+    cconst assets = Array.isArray(gatePass.assets)
+    ? gatePass.assets
+    : [];
+
+  // Do not render an empty assets table.
+  // Remarks will be rendered separately.
+  if (assets.length === 0) {
+    doc.x = margin;
+    doc.y = y;
+    return y;
+  }
+
+  // Section header
+  doc.font('Helvetica-Bold')
+    .fontSize(11)
+    .fillColor(this.colors.primary)
+    .text('ASSETS', margin, y, {
+      lineBreak: false
+    });
     const assets = gatePass.assets || [];
     doc.font('Helvetica-Bold')
       .fontSize(11)
