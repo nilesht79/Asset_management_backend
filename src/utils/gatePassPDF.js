@@ -639,59 +639,251 @@ class GatePassPDF {
 // }
 
 
+//   static renderRemarks(doc, remarks, margin, y, pageWidth) {
+//   // Title
+//   doc.font('Helvetica-Bold')
+//     .fontSize(7)
+//     .fillColor(this.colors.primary)
+//     .text('Remarks:', margin, y);
+
+//  y += 8;
+
+//   // Parse rows
+//   const rows = (remarks || '')
+//     .trim()
+//     .split('\n')
+//     .filter(r => r.trim() !== '');
+
+//   // Column sizes
+//   const snoWidth = 35;
+//   const qtyWidth = 55;
+//   const itemWidth = pageWidth - snoWidth - qtyWidth;
+
+//   const rowHeight = 14;
+
+//   let currentY = y;
+
+//   rows.forEach(line => {
+
+//     // Remove empty tab values
+//     const cols = line.split('\t').filter(c => c.trim() !== '');
+
+//     let sno = '';
+//     let item = '';
+//     let qty = '';
+
+//     // ----------------------------
+//     // Normal rows
+//     // Example:
+//     // 1    Printer A3    5
+//     // ----------------------------
+//     if (cols.length >= 3) {
+
+//       sno = cols[0];
+//       qty = cols[cols.length - 1];
+//       item = cols.slice(1, cols.length - 1).join(' ');
+
+//     }
+
+//     // ----------------------------
+//     // Special row
+//     // Example:
+//     // 10    Black & White Toner 222
+//     // ----------------------------
+//     else if (cols.length === 2) {
+
+//       sno = cols[0];
+
+//       const match = cols[1].match(/^(.*?)(\d+)$/);
+
+//       if (match) {
+//         item = match[1].trim();
+//         qty = match[2];
+//       } else {
+//         item = cols[1];
+//         qty = '';
+//       }
+
+//     }
+
+//     // Draw S.No
+//     let x = margin;
+
+//     doc.rect(x, currentY, snoWidth, rowHeight).stroke();
+
+//     doc.font('Helvetica')
+//       .fontSize(7)
+//       .fillColor('black')
+//       .text(sno, x, currentY + 5, {
+//         width: snoWidth,
+//         align: 'center'
+//       });
+
+//     x += snoWidth;
+
+//     // Draw Item
+//     doc.rect(x, currentY, itemWidth, rowHeight).stroke();
+
+//     doc.font('Helvetica')
+//       .fontSize(7)
+//       .text(item, x + 2, currentY + 5, {
+//         width: itemWidth - 4,
+//         align: 'center'
+//       });
+
+//     x += itemWidth;
+
+//     // Draw Qty
+//     doc.rect(x, currentY, qtyWidth, rowHeight).stroke();
+
+//     doc.font('Helvetica')
+//       .fontSize(7)
+//       .text(qty, x, currentY + 5, {
+//         width: qtyWidth,
+//         align: 'center'
+//       });
+
+//     currentY += rowHeight;
+//   });
+
+//   return currentY + 15;
+// }
+
+
   static renderRemarks(doc, remarks, margin, y, pageWidth) {
-  // Title
+  if (!remarks || !remarks.trim()) {
+    return y;
+  }
+
+  const text = remarks.trim();
+
+  // ==============================
+  // REMARKS TITLE
+  // ==============================
   doc.font('Helvetica-Bold')
     .fontSize(7)
     .fillColor(this.colors.primary)
     .text('Remarks:', margin, y);
 
- y += 8;
+  y += 10;
 
-  // Parse rows
-  const rows = (remarks || '')
-    .trim()
+  // ============================================================
+  // DETECT WHETHER REMARKS ARE TABULAR DATA
+  // ============================================================
+
+  const lines = text
     .split('\n')
-    .filter(r => r.trim() !== '');
+    .map(line => line.trim())
+    .filter(line => line !== '');
 
-  // Column sizes
+  const isTableData = lines.some(line => {
+    const cols = line
+      .split('\t')
+      .map(c => c.trim())
+      .filter(c => c !== '');
+
+    return cols.length >= 2;
+  });
+
+  // ============================================================
+  // CASE 1: NORMAL TEXT REMARKS
+  // ============================================================
+
+  if (!isTableData) {
+    const textWidth = pageWidth - 10;
+
+    const textHeight = doc.heightOfString(text, {
+      width: textWidth,
+      font: 'Helvetica',
+      fontSize: 8,
+      lineGap: 1
+    });
+
+    const boxHeight = Math.max(30, textHeight + 12);
+
+    // Border
+    doc.rect(margin, y, pageWidth, boxHeight)
+      .stroke(this.colors.border);
+
+    // Text
+    doc.font('Helvetica')
+      .fontSize(8)
+      .fillColor(this.colors.black)
+      .text(text, margin + 5, y + 6, {
+        width: textWidth,
+        lineGap: 1
+      });
+
+    return y + boxHeight + 10;
+  }
+
+  // ============================================================
+  // CASE 2: TABULAR REMARKS DATA
+  // ============================================================
+
   const snoWidth = 35;
   const qtyWidth = 55;
   const itemWidth = pageWidth - snoWidth - qtyWidth;
 
-  const rowHeight = 14;
+  const rowHeight = 18;
 
-  let currentY = y;
+  // Table header
+  doc.rect(margin, y, pageWidth, rowHeight)
+    .fill(this.colors.primary);
 
-  rows.forEach(line => {
+  let x = margin;
 
-    // Remove empty tab values
-    const cols = line.split('\t').filter(c => c.trim() !== '');
+  doc.font('Helvetica-Bold')
+    .fontSize(7)
+    .fillColor(this.colors.white);
+
+  doc.text('S.No', x + 5, y + 5, {
+    width: snoWidth - 10,
+    align: 'center',
+    lineBreak: false
+  });
+
+  x += snoWidth;
+
+  doc.text('Item / Description', x + 5, y + 5, {
+    width: itemWidth - 10,
+    lineBreak: false
+  });
+
+  x += itemWidth;
+
+  doc.text('Qty', x + 5, y + 5, {
+    width: qtyWidth - 10,
+    align: 'center',
+    lineBreak: false
+  });
+
+  y += rowHeight;
+
+  // Table rows
+  lines.forEach(line => {
+    const cols = line
+      .split('\t')
+      .map(c => c.trim())
+      .filter(c => c !== '');
 
     let sno = '';
     let item = '';
     let qty = '';
 
-    // ----------------------------
-    // Normal rows
-    // Example:
-    // 1    Printer A3    5
-    // ----------------------------
+    // --------------------------------
+    // 3 or more columns
+    // --------------------------------
     if (cols.length >= 3) {
-
       sno = cols[0];
       qty = cols[cols.length - 1];
       item = cols.slice(1, cols.length - 1).join(' ');
-
     }
 
-    // ----------------------------
-    // Special row
-    // Example:
-    // 10    Black & White Toner 222
-    // ----------------------------
+    // --------------------------------
+    // 2 columns
+    // --------------------------------
     else if (cols.length === 2) {
-
       sno = cols[0];
 
       const match = cols[1].match(/^(.*?)(\d+)$/);
@@ -701,52 +893,54 @@ class GatePassPDF {
         qty = match[2];
       } else {
         item = cols[1];
-        qty = '';
       }
-
     }
 
-    // Draw S.No
-    let x = margin;
+    // --------------------------------
+    // Safety fallback
+    // --------------------------------
+    else {
+      item = cols[0] || '';
+    }
 
-    doc.rect(x, currentY, snoWidth, rowHeight).stroke();
+    // Row border
+    doc.rect(margin, y, pageWidth, rowHeight)
+      .stroke(this.colors.border);
+
+    x = margin;
 
     doc.font('Helvetica')
       .fontSize(7)
-      .fillColor('black')
-      .text(sno, x, currentY + 5, {
-        width: snoWidth,
-        align: 'center'
-      });
+      .fillColor(this.colors.black);
+
+    // S.No
+    doc.text(sno, x + 5, y + 5, {
+      width: snoWidth - 10,
+      align: 'center',
+      lineBreak: false
+    });
 
     x += snoWidth;
 
-    // Draw Item
-    doc.rect(x, currentY, itemWidth, rowHeight).stroke();
-
-    doc.font('Helvetica')
-      .fontSize(7)
-      .text(item, x + 2, currentY + 5, {
-        width: itemWidth - 4,
-        align: 'center'
-      });
+    // Item
+    doc.text(item, x + 5, y + 5, {
+      width: itemWidth - 10,
+      lineBreak: false
+    });
 
     x += itemWidth;
 
-    // Draw Qty
-    doc.rect(x, currentY, qtyWidth, rowHeight).stroke();
+    // Qty
+    doc.text(qty, x + 5, y + 5, {
+      width: qtyWidth - 10,
+      align: 'center',
+      lineBreak: false
+    });
 
-    doc.font('Helvetica')
-      .fontSize(7)
-      .text(qty, x, currentY + 5, {
-        width: qtyWidth,
-        align: 'center'
-      });
-
-    currentY += rowHeight;
+    y += rowHeight;
   });
 
-  return currentY + 15;
+  return y + 10;
 }
 
   /**
