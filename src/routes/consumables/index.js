@@ -941,18 +941,23 @@ router.get('/',
   LEFT JOIN consumable_inventory ci ON c.id = ci.consumable_id
 
   OUTER APPLY (
-    SELECT STRING_AGG(
+  SELECT STRING_AGG(
+    LTRIM(RTRIM(
       CASE
+        WHEN NULLIF(LTRIM(RTRIM(p.name)), '') IS NOT NULL
+             AND NULLIF(LTRIM(RTRIM(p.model)), '') IS NOT NULL
+          THEN p.name + ' ' + p.model
         WHEN NULLIF(LTRIM(RTRIM(p.model)), '') IS NOT NULL
           THEN p.model
         ELSE p.name
-      END,
-      ', '
-    ) AS printer_models
-    FROM consumable_compatibility cp
-    INNER JOIN products p ON cp.product_id = p.id
-    WHERE cp.consumable_id = c.id
-  ) pm
+      END
+    )),
+    ', '
+  ) AS printer_models
+  FROM consumable_compatibility cp
+  INNER JOIN products p ON cp.product_id = p.id
+  WHERE cp.consumable_id = c.id
+) pm
 
   WHERE ${whereClause}
 
