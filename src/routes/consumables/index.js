@@ -910,22 +910,69 @@ router.get('/',
     dataRequest.input('offset', sql.Int, offset);
     dataRequest.input('limit', sql.Int, limit);
 
+    // let dataQuery = `
+    //   SELECT
+    //     c.*,
+    //     cc.name as category_name,
+    //     v.name as vendor_name,
+    //     COALESCE(SUM(ci.quantity_in_stock), 0) as total_stock,
+    //     COALESCE(SUM(ci.quantity_reserved), 0) as total_reserved
+    //   FROM consumables c
+    //   LEFT JOIN consumable_categories cc ON c.category_id = cc.id
+    //   LEFT JOIN vendors v ON c.vendor_id = v.id
+    //   LEFT JOIN consumable_inventory ci ON c.id = ci.consumable_id
+    //   WHERE ${whereClause}
+    //   GROUP BY c.id, c.name, c.sku, c.category_id, c.description, c.unit_of_measure,
+    //            c.reorder_level, c.unit_cost, c.vendor_id, c.is_active, c.created_at, c.updated_at,
+    //            cc.name, v.name
+    // `;
+
     let dataQuery = `
-      SELECT
-        c.*,
-        cc.name as category_name,
-        v.name as vendor_name,
-        COALESCE(SUM(ci.quantity_in_stock), 0) as total_stock,
-        COALESCE(SUM(ci.quantity_reserved), 0) as total_reserved
-      FROM consumables c
-      LEFT JOIN consumable_categories cc ON c.category_id = cc.id
-      LEFT JOIN vendors v ON c.vendor_id = v.id
-      LEFT JOIN consumable_inventory ci ON c.id = ci.consumable_id
-      WHERE ${whereClause}
-      GROUP BY c.id, c.name, c.sku, c.category_id, c.description, c.unit_of_measure,
-               c.reorder_level, c.unit_cost, c.vendor_id, c.is_active, c.created_at, c.updated_at,
-               cc.name, v.name
-    `;
+  SELECT
+    c.*,
+    cc.name as category_name,
+    v.name as vendor_name,
+    pm.printer_models,
+    COALESCE(SUM(ci.quantity_in_stock), 0) as total_stock,
+    COALESCE(SUM(ci.quantity_reserved), 0) as total_reserved
+  FROM consumables c
+  LEFT JOIN consumable_categories cc ON c.category_id = cc.id
+  LEFT JOIN vendors v ON c.vendor_id = v.id
+  LEFT JOIN consumable_inventory ci ON c.id = ci.consumable_id
+
+  OUTER APPLY (
+    SELECT STRING_AGG(
+      CASE
+        WHEN NULLIF(LTRIM(RTRIM(p.model)), '') IS NOT NULL
+          THEN p.model
+        ELSE p.name
+      END,
+      ', '
+    ) AS printer_models
+    FROM consumable_compatibility cp
+    INNER JOIN products p ON cp.product_id = p.id
+    WHERE cp.consumable_id = c.id
+  ) pm
+
+  WHERE ${whereClause}
+
+  GROUP BY
+    c.id,
+    c.name,
+    c.sku,
+    c.category_id,
+    c.description,
+    c.unit_of_measure,
+    c.reorder_level,
+    c.unit_cost,
+    c.vendor_id,
+    c.is_active,
+    c.created_at,
+    c.updated_at,
+    cc.name,
+    v.name,
+    pm.printer_models
+`;
 
     if (low_stock === 'true') {
       dataQuery += ' HAVING COALESCE(SUM(ci.quantity_in_stock), 0) <= c.reorder_level';
