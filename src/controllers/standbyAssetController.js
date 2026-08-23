@@ -98,8 +98,8 @@ const getStandbyAssets = async (req, res) => {
         p.speed_value,
         p.speed_unit,
         pt.name as product_type,
-        parent_cat.name as category_name,
-        cat.name as subcategory_name,
+        cat.name as category_name,
+        subcat.name as subcategory_name,
         o.name as oem_name,
         u.first_name + ' ' + u.last_name as assigned_to_name,
         u.email as assigned_to_email,
@@ -126,11 +126,11 @@ const getStandbyAssets = async (req, res) => {
       LEFT JOIN product_types pt
           ON p.type_id = pt.id
       
-      LEFT JOIN categories cat
-          ON p.category_id = cat.id
-      
-      LEFT JOIN categories parent_cat
-          ON cat.parent_category_id = parent_cat.id
+         LEFT JOIN categories cat
+        ON p.category_id = cat.id
+
+      LEFT JOIN categories subcat
+          ON p.subcategory_id = subcat.id
       
       LEFT JOIN oems o
           ON p.oem_id = o.id
