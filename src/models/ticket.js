@@ -436,44 +436,148 @@ class TicketModel {
       }
 
       // Main query
+      // const query = `
+      //   SELECT
+      //     t.*,
+      //     -- Created By User (Employee)
+      //     u1.first_name + ' ' + u1.last_name AS created_by_user_name,
+      //     u1.email AS created_by_user_email,
+      //     u1.employee_id AS created_by_user_employee_id,
+      //     -- Coordinator
+      //     u2.first_name + ' ' + u2.last_name AS coordinator_name,
+      //     u2.email AS coordinator_email,
+      //     -- Engineer
+      //     u3.first_name + ' ' + u3.last_name AS engineer_name,
+      //     u3.email AS engineer_email,
+      //     u3.employee_id AS engineer_employee_id,
+      //     -- Department & Location
+      //     d.department_name AS department_name,
+      //     l.name AS location_name,
+      //     -- Guest Information
+      //     gt.guest_name,
+      //     gt.guest_email,
+      //     gt.guest_phone,
+      //     c.name AS asset_subcategory
+      //   FROM TICKETS t
+      //   LEFT JOIN USER_MASTER u1 ON t.created_by_user_id = u1.user_id
+      //   LEFT JOIN USER_MASTER u2 ON t.created_by_coordinator_id = u2.user_id
+      //   LEFT JOIN USER_MASTER u3 ON t.assigned_to_engineer_id = u3.user_id
+      //   LEFT JOIN DEPARTMENT_MASTER d ON t.department_id = d.department_id
+      //   LEFT JOIN locations l ON t.location_id = l.id
+      //   LEFT JOIN GUEST_TICKETS gt ON t.ticket_id = gt.ticket_id
+      //   LEFT JOIN ticket_assets ta ON ta.ticket_id = t.ticket_id
+      //   LEFT JOIN assets a ON a.id = ta.asset_id
+      //   LEFT JOIN products p ON p.id = a.product_id
+      //   LEFT JOIN categories c ON c.id = p.subcategory_id
+      //   ${whereClause}
+      //   ORDER BY t.created_at DESC
+      //   OFFSET @offset ROWS
+      //   FETCH NEXT @limit ROWS ONLY
+      // `;
       const query = `
-        SELECT
-          t.*,
-          -- Created By User (Employee)
-          u1.first_name + ' ' + u1.last_name AS created_by_user_name,
-          u1.email AS created_by_user_email,
-          u1.employee_id AS created_by_user_employee_id,
-          -- Coordinator
-          u2.first_name + ' ' + u2.last_name AS coordinator_name,
-          u2.email AS coordinator_email,
-          -- Engineer
-          u3.first_name + ' ' + u3.last_name AS engineer_name,
-          u3.email AS engineer_email,
-          u3.employee_id AS engineer_employee_id,
-          -- Department & Location
-          d.department_name AS department_name,
-          l.name AS location_name,
-          -- Guest Information
-          gt.guest_name,
-          gt.guest_email,
-          gt.guest_phone,
-          c.name AS asset_subcategory
-        FROM TICKETS t
-        LEFT JOIN USER_MASTER u1 ON t.created_by_user_id = u1.user_id
-        LEFT JOIN USER_MASTER u2 ON t.created_by_coordinator_id = u2.user_id
-        LEFT JOIN USER_MASTER u3 ON t.assigned_to_engineer_id = u3.user_id
-        LEFT JOIN DEPARTMENT_MASTER d ON t.department_id = d.department_id
-        LEFT JOIN locations l ON t.location_id = l.id
-        LEFT JOIN GUEST_TICKETS gt ON t.ticket_id = gt.ticket_id
-        LEFT JOIN ticket_assets ta ON ta.ticket_id = t.ticket_id
-        LEFT JOIN assets a ON a.id = ta.asset_id
-        LEFT JOIN products p ON p.id = a.product_id
-        LEFT JOIN categories c ON c.id = p.subcategory_id
-        ${whereClause}
-        ORDER BY t.created_at DESC
-        OFFSET @offset ROWS
-        FETCH NEXT @limit ROWS ONLY
-      `;
+  SELECT
+    t.*,
+
+    -- Created By User
+    u1.first_name + ' ' + u1.last_name AS created_by_user_name,
+    u1.email AS created_by_user_email,
+    u1.employee_id AS created_by_user_employee_id,
+
+    -- Coordinator
+    u2.first_name + ' ' + u2.last_name AS coordinator_name,
+    u2.email AS coordinator_email,
+
+    -- Engineer
+    u3.first_name + ' ' + u3.last_name AS engineer_name,
+    u3.email AS engineer_email,
+    u3.employee_id AS engineer_employee_id,
+
+    -- Ticket Department & Location
+    d.department_name AS department_name,
+    l.name AS location_name,
+
+    -- Guest Information
+    gt.guest_name,
+    gt.guest_email,
+    gt.guest_phone,
+
+    -- Asset Subcategory
+    c.name AS asset_subcategory,
+
+    -- Asset Serial Number
+    a.serial_number AS asset_serial_number,
+
+    -- Final Location
+    -- If asset selected -> asset location
+    -- If no asset -> USER_MASTER location
+    CASE
+      WHEN a.id IS NOT NULL THEN al.name
+      ELSE ul.name
+    END AS display_location,
+
+    -- Final Floor
+    -- If asset selected -> asset floor
+    -- If no asset -> USER_MASTER floor
+    CASE
+      WHEN a.id IS NOT NULL THEN al.floor
+      ELSE ul.floor
+    END AS display_floor
+
+  FROM TICKETS t
+
+  -- Creator
+  LEFT JOIN USER_MASTER u1
+    ON t.created_by_user_id = u1.user_id
+
+  -- Coordinator
+  LEFT JOIN USER_MASTER u2
+    ON t.created_by_coordinator_id = u2.user_id
+
+  -- Engineer
+  LEFT JOIN USER_MASTER u3
+    ON t.assigned_to_engineer_id = u3.user_id
+
+  -- Department
+  LEFT JOIN DEPARTMENT_MASTER d
+    ON t.department_id = d.department_id
+
+  -- Existing ticket location
+  LEFT JOIN locations l
+    ON t.location_id = l.id
+
+  -- Guest
+  LEFT JOIN GUEST_TICKETS gt
+    ON t.ticket_id = gt.ticket_id
+
+  -- Selected asset linked to ticket
+  LEFT JOIN ticket_assets ta
+    ON ta.ticket_id = t.ticket_id
+
+  LEFT JOIN assets a
+    ON a.id = ta.asset_id
+
+  LEFT JOIN products p
+    ON p.id = a.product_id
+
+  LEFT JOIN categories c
+    ON c.id = p.subcategory_id
+
+  -- Asset location
+  LEFT JOIN locations al
+    ON al.id = a.location_id
+
+  -- USER_MASTER location
+  -- Used when no asset is selected
+  LEFT JOIN locations ul
+    ON ul.id = u1.location_id
+
+  ${whereClause}
+
+  ORDER BY t.created_at DESC
+
+  OFFSET @offset ROWS
+  FETCH NEXT @limit ROWS ONLY
+`;
 
       // Count query
       const countQuery = `
