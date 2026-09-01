@@ -220,6 +220,8 @@ async function generateAssetBulkTemplate({ quantity, product }) {
     { header: 'Product Model', key: 'product_model', width: 20 },
     { header: 'Category', key: 'category', width: 20 },
     { header: 'OEM', key: 'oem', width: 15 },
+    { header: 'IP Address', key: 'ip_address', width: 18 },
+    { header: 'Hostname', key: 'hostname', width: 25 },
     { header: 'Asset Type', key: 'asset_type', width: 15 },
     { header: 'Parent Serial Number', key: 'parent_serial_number', width: 25 },
     { header: 'Is Standby Asset', key: 'is_standby_asset', width: 18 },
@@ -259,6 +261,8 @@ async function generateAssetBulkTemplate({ quantity, product }) {
       product_model: product?.model || '',
       category: product?.category_name || '',
       oem: product?.oem_name || '',
+      ip_address: '',
+      hostname: '',
       asset_type: 'standalone',
       parent_serial_number: '',
       is_standby_asset: 'false',
@@ -308,7 +312,7 @@ async function generateAssetBulkTemplate({ quantity, product }) {
   }
 
   // Add data validation for Asset Type column (column 7)
-  worksheet.getColumn(7).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
+  worksheet.getColumn(9).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
     if (rowNumber > 1) {
       cell.dataValidation = {
         type: 'list',
@@ -322,7 +326,7 @@ async function generateAssetBulkTemplate({ quantity, product }) {
   });
 
   // Add data validation for Is Standby Asset column (column 9)
-  worksheet.getColumn(9).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
+  worksheet.getColumn(11).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
     if (rowNumber > 1) {
       cell.dataValidation = {
         type: 'list',
@@ -336,7 +340,7 @@ async function generateAssetBulkTemplate({ quantity, product }) {
   });
 
   // Add data validation for Standby Available column (column 10)
-  worksheet.getColumn(10).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
+  worksheet.getColumn(12).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
     if (rowNumber > 1) {
       cell.dataValidation = {
         type: 'list',
@@ -350,7 +354,7 @@ async function generateAssetBulkTemplate({ quantity, product }) {
   });
 
   // Add data validation for Status column (column 11)
-  worksheet.getColumn(11).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
+  worksheet.getColumn(13).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
     if (rowNumber > 1) {
       cell.dataValidation = {
         type: 'list',
@@ -364,7 +368,7 @@ async function generateAssetBulkTemplate({ quantity, product }) {
   });
 
   // Add data validation for Condition column (column 12)
-  worksheet.getColumn(12).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
+  worksheet.getColumn(14).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
     if (rowNumber > 1) {
       cell.dataValidation = {
         type: 'list',
@@ -378,7 +382,7 @@ async function generateAssetBulkTemplate({ quantity, product }) {
   });
 
   // Add data validation for Importance column (column 13)
-  worksheet.getColumn(13).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
+  worksheet.getColumn(15).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
     if (rowNumber > 1) {
       cell.dataValidation = {
         type: 'list',
@@ -560,34 +564,114 @@ async function parseAssetBulkFile(fileBuffer, productId) {
     // Skip header row
     if (rowNumber === 1) return;
 
-    const assetType = row.getCell(7).value?.toString().trim().toLowerCase() || 'standalone';
-    const parentAssetTag = row.getCell(8).value?.toString().trim() || null;
-    const isStandbyAsset = row.getCell(9).value?.toString().trim().toLowerCase() === 'true';
-    const standbyAvailable = row.getCell(10).value?.toString().trim().toLowerCase() === 'true';
+    // const assetType = row.getCell(7).value?.toString().trim().toLowerCase() || 'standalone';
+    // const parentAssetTag = row.getCell(8).value?.toString().trim() || null;
+    // const isStandbyAsset = row.getCell(9).value?.toString().trim().toLowerCase() === 'true';
+    // const standbyAvailable = row.getCell(10).value?.toString().trim().toLowerCase() === 'true';
 
-    const rowData = {
-      row_number: row.getCell(1).value,
-      serial_number: row.getCell(2).value?.toString().trim() || '',
-      asset_type: assetType,
-      parent_serial_number: parentAssetTag,
-      is_standby_asset: isStandbyAsset,
-      standby_available: standbyAvailable,
-      status: row.getCell(11).value?.toString().trim() || 'available',
-      condition_status: row.getCell(12).value?.toString().trim() || 'new',
-      importance: row.getCell(13).value?.toString().trim() || 'medium',
-      vendor_name: row.getCell(14).value?.toString().trim() || null,
-      invoice_number: row.getCell(15).value?.toString().trim() || null,
-      purchase_date: row.getCell(16).value || null,
-      purchase_cost: row.getCell(17).value || null,
-      warranty_start_date: row.getCell(18).value || null,
-      warranty_end_date: row.getCell(19).value || null,
-      eol_date: row.getCell(20).value || null,
-      eos_date: row.getCell(21).value || null,
-      installation_notes: row.getCell(22).value?.toString().trim() || null,
-      notes: row.getCell(23).value?.toString().trim() || null,
-      product_id: productId,
-      additional_software: [] // Will be populated from Additional Software sheet
-    };
+    // const rowData = {
+    //   row_number: row.getCell(1).value,
+    //   serial_number: row.getCell(2).value?.toString().trim() || '',
+    //   asset_type: assetType,
+    //   parent_serial_number: parentAssetTag,
+    //   is_standby_asset: isStandbyAsset,
+    //   standby_available: standbyAvailable,
+    //   status: row.getCell(11).value?.toString().trim() || 'available',
+    //   condition_status: row.getCell(12).value?.toString().trim() || 'new',
+    //   importance: row.getCell(13).value?.toString().trim() || 'medium',
+    //   vendor_name: row.getCell(14).value?.toString().trim() || null,
+    //   invoice_number: row.getCell(15).value?.toString().trim() || null,
+    //   purchase_date: row.getCell(16).value || null,
+    //   purchase_cost: row.getCell(17).value || null,
+    //   warranty_start_date: row.getCell(18).value || null,
+    //   warranty_end_date: row.getCell(19).value || null,
+    //   eol_date: row.getCell(20).value || null,
+    //   eos_date: row.getCell(21).value || null,
+    //   installation_notes: row.getCell(22).value?.toString().trim() || null,
+    //   notes: row.getCell(23).value?.toString().trim() || null,
+    //   product_id: productId,
+    //   additional_software: [] // Will be populated from Additional Software sheet
+    // };
+
+    const ipAddress =
+  row.getCell(7).value?.toString().trim() || null;
+
+const hostname =
+  row.getCell(8).value?.toString().trim() || null;
+
+const assetType =
+  row.getCell(9).value?.toString().trim().toLowerCase() || 'standalone';
+
+const parentAssetTag =
+  row.getCell(10).value?.toString().trim() || null;
+
+const isStandbyAsset =
+  row.getCell(11).value?.toString().trim().toLowerCase() === 'true';
+
+const standbyAvailable =
+  row.getCell(12).value?.toString().trim().toLowerCase() === 'true';
+
+const rowData = {
+  row_number: row.getCell(1).value,
+
+  serial_number:
+    row.getCell(2).value?.toString().trim() || '',
+
+  ip_address: ipAddress,
+
+  hostname: hostname,
+
+  asset_type: assetType,
+
+  parent_serial_number: parentAssetTag,
+
+  is_standby_asset: isStandbyAsset,
+
+  standby_available: standbyAvailable,
+
+  status:
+    row.getCell(13).value?.toString().trim().toLowerCase() || 'available',
+
+  condition_status:
+    row.getCell(14).value?.toString().trim().toLowerCase() || 'new',
+
+  importance:
+    row.getCell(15).value?.toString().trim().toLowerCase() || 'medium',
+
+  vendor_name:
+    row.getCell(16).value?.toString().trim() || null,
+
+  invoice_number:
+    row.getCell(17).value?.toString().trim() || null,
+
+  purchase_date:
+    row.getCell(18).value || null,
+
+  purchase_cost:
+    row.getCell(19).value || null,
+
+  warranty_start_date:
+    row.getCell(20).value || null,
+
+  warranty_end_date:
+    row.getCell(21).value || null,
+
+  eol_date:
+    row.getCell(22).value || null,
+
+  eos_date:
+    row.getCell(23).value || null,
+
+  installation_notes:
+    row.getCell(24).value?.toString().trim() || null,
+
+  notes:
+    row.getCell(25).value?.toString().trim() || null,
+
+  product_id: productId,
+
+  additional_software: []
+};
 
     // Validate serial number
     if (!rowData.serial_number) {
@@ -699,6 +783,8 @@ async function generateLegacyAssetTemplate({ products, users, vendors = [] }) {
     { header: 'Row', key: 'row_number', width: 8 },
     { header: 'Serial Number*', key: 'serial_number', width: 20 },
     { header: 'Product Name/ID*', key: 'product', width: 30 },
+    { header: 'IP Address', key: 'ip_address', width: 18 },
+    { header: 'Hostname', key: 'hostname', width: 25 },
     { header: 'Asset Type', key: 'asset_type', width: 15 },
     { header: 'Parent Serial Number', key: 'parent_serial_number', width: 25 },
     { header: 'Is Standby Asset', key: 'is_standby_asset', width: 18 },
@@ -738,6 +824,8 @@ async function generateLegacyAssetTemplate({ products, users, vendors = [] }) {
     row_number: 1,
     serial_number: 'SN-2023-001',
     product: 'Dell Laptop E7450',
+    ip_address: '172.18.1.12',
+    hostname: 'RB5WSPCTS6',
     asset_type: 'standalone',
     parent_serial_number: '',
     is_standby_asset: 'false',
@@ -763,6 +851,8 @@ async function generateLegacyAssetTemplate({ products, users, vendors = [] }) {
     serial_number: 'SN-2023-002',
     product: products.length > 0 ? products[0].id : '',
     asset_type: 'standalone',
+    ip_address: '172.18.1.9',
+    hostname: 'RB3WATVAC36',
     parent_serial_number: '',
     is_standby_asset: 'false',
     standby_available: '',
@@ -786,6 +876,8 @@ async function generateLegacyAssetTemplate({ products, users, vendors = [] }) {
     row_number: 3,
     serial_number: 'RAM-SN-003',
     product: 'Kingston 16GB DDR4',
+    ip_address: '172.18.1.24',
+    hostname: 'RB6NAINNA2AEE34',
     asset_type: 'component',
     parent_serial_number: 'SN-2023-001',
     is_standby_asset: 'false',
@@ -806,7 +898,7 @@ async function generateLegacyAssetTemplate({ products, users, vendors = [] }) {
 
   // Add data validations
   // Asset Type column (column 4)
-  worksheet.getColumn(4).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
+  worksheet.getColumn(6).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
     if (rowNumber > 1) {
       cell.dataValidation = {
         type: 'list',
@@ -820,7 +912,7 @@ async function generateLegacyAssetTemplate({ products, users, vendors = [] }) {
   });
 
   // Is Standby Asset column (column 6)
-  worksheet.getColumn(6).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
+  worksheet.getColumn(8).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
     if (rowNumber > 1) {
       cell.dataValidation = {
         type: 'list',
@@ -834,7 +926,7 @@ async function generateLegacyAssetTemplate({ products, users, vendors = [] }) {
   });
 
   // Standby Available column (column 7)
-  worksheet.getColumn(7).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
+  worksheet.getColumn(9).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
     if (rowNumber > 1) {
       cell.dataValidation = {
         type: 'list',
@@ -848,7 +940,7 @@ async function generateLegacyAssetTemplate({ products, users, vendors = [] }) {
   });
 
   // Status column (now column 8)
-  worksheet.getColumn(8).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
+  worksheet.getColumn(10).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
     if (rowNumber > 1) {
       cell.dataValidation = {
         type: 'list',
@@ -862,7 +954,7 @@ async function generateLegacyAssetTemplate({ products, users, vendors = [] }) {
   });
 
   // Condition column (now column 9)
-  worksheet.getColumn(9).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
+  worksheet.getColumn(11).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
     if (rowNumber > 1) {
       cell.dataValidation = {
         type: 'list',
@@ -876,7 +968,7 @@ async function generateLegacyAssetTemplate({ products, users, vendors = [] }) {
   });
 
   // Importance column (column 10)
-  worksheet.getColumn(10).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
+  worksheet.getColumn(12).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
     if (rowNumber > 1) {
       cell.dataValidation = {
         type: 'list',
@@ -911,6 +1003,8 @@ async function generateLegacyAssetTemplate({ products, users, vendors = [] }) {
   const instructions = [
     { field: 'Serial Number', required: 'Yes', description: 'Unique serial number for the asset. Must be unique across all assets.' },
     { field: 'Product Name/ID', required: 'Yes', description: 'Product name OR Product ID from Products reference sheet. System will match both.' },
+    { field: 'IP Address', required: 'No', description: 'IP address assigned to the asset, if applicable.'},
+    { field: 'Hostname', required: 'No', description: 'Hostname of the asset, if applicable.'},
     { field: 'Asset Type', required: 'No', description: 'standalone (default) = regular assets. component = parts that can be installed in other assets (RAM, HDD, monitors). Components can exist as spare stock without a parent.' },
     { field: 'Parent Serial Number', required: 'No', description: 'Only for component type. Serial number of the parent asset. Leave empty for spare/stock components. Required only when installing a component.' },
     { field: 'Is Standby Asset', required: 'No', description: 'true/false (default: false). Set to true for assets in the standby pool. Standby assets cannot be assigned to users and appear in a separate pool view.' },
@@ -1215,30 +1309,102 @@ vendors.forEach((v) => {
     // Skip header row and sample rows (rows 1-4)
     if (rowNumber <= 1) return;
 
+    // const rowData = {
+    //   row_number: rowNumber,
+    //   serial_number: row.getCell(2).value?.toString().trim() || '',
+    //   product_input: row.getCell(3).value?.toString().trim() || '',
+    //   asset_type: row.getCell(4).value?.toString().trim().toLowerCase() || 'standalone',
+    //   parent_serial_number: row.getCell(5).value?.toString().trim() || null,
+    //   is_standby_asset: row.getCell(6).value?.toString().trim().toLowerCase() === 'true',
+    //   standby_available: row.getCell(7).value?.toString().trim().toLowerCase() === 'true',
+    //   status: row.getCell(8).value?.toString().trim().toLowerCase() || 'available',
+    //   condition_status: row.getCell(9).value?.toString().trim().toLowerCase() || 'good',
+    //   importance: row.getCell(10).value?.toString().trim().toLowerCase() || 'medium',
+    //   vendor_name: row.getCell(11).value?.toString().trim() || null,
+    //   invoice_number: row.getCell(12).value?.toString().trim() || null,
+    //   purchase_date: row.getCell(13).value || null,
+    //   purchase_cost: row.getCell(14).value || null,
+    //   warranty_start_date: row.getCell(15).value || null,
+    //   warranty_end_date: row.getCell(16).value || null,
+    //   eol_date: row.getCell(17).value || null,
+    //   eos_date: row.getCell(18).value || null,
+    //   assigned_to_input: row.getCell(19).value?.toString().trim() || '',
+    //   installation_notes: row.getCell(20).value?.toString().trim() || null,
+    //   notes: row.getCell(21).value?.toString().trim() || null,
+    //   additional_software: [] // Will be populated from Additional Software sheet
+    // };
+
     const rowData = {
-      row_number: rowNumber,
-      serial_number: row.getCell(2).value?.toString().trim() || '',
-      product_input: row.getCell(3).value?.toString().trim() || '',
-      asset_type: row.getCell(4).value?.toString().trim().toLowerCase() || 'standalone',
-      parent_serial_number: row.getCell(5).value?.toString().trim() || null,
-      is_standby_asset: row.getCell(6).value?.toString().trim().toLowerCase() === 'true',
-      standby_available: row.getCell(7).value?.toString().trim().toLowerCase() === 'true',
-      status: row.getCell(8).value?.toString().trim().toLowerCase() || 'available',
-      condition_status: row.getCell(9).value?.toString().trim().toLowerCase() || 'good',
-      importance: row.getCell(10).value?.toString().trim().toLowerCase() || 'medium',
-      vendor_name: row.getCell(11).value?.toString().trim() || null,
-      invoice_number: row.getCell(12).value?.toString().trim() || null,
-      purchase_date: row.getCell(13).value || null,
-      purchase_cost: row.getCell(14).value || null,
-      warranty_start_date: row.getCell(15).value || null,
-      warranty_end_date: row.getCell(16).value || null,
-      eol_date: row.getCell(17).value || null,
-      eos_date: row.getCell(18).value || null,
-      assigned_to_input: row.getCell(19).value?.toString().trim() || '',
-      installation_notes: row.getCell(20).value?.toString().trim() || null,
-      notes: row.getCell(21).value?.toString().trim() || null,
-      additional_software: [] // Will be populated from Additional Software sheet
-    };
+  row_number: rowNumber,
+
+  serial_number:
+    row.getCell(2).value?.toString().trim() || '',
+
+  product_input:
+    row.getCell(3).value?.toString().trim() || '',
+
+  ip_address:
+    row.getCell(4).value?.toString().trim() || null,
+
+  hostname:
+    row.getCell(5).value?.toString().trim() || null,
+
+  asset_type:
+    row.getCell(6).value?.toString().trim().toLowerCase() || 'standalone',
+
+  parent_serial_number:
+    row.getCell(7).value?.toString().trim() || null,
+
+  is_standby_asset:
+    row.getCell(8).value?.toString().trim().toLowerCase() === 'true',
+
+  standby_available:
+    row.getCell(9).value?.toString().trim().toLowerCase() === 'true',
+
+  status:
+    row.getCell(10).value?.toString().trim().toLowerCase() || 'available',
+
+  condition_status:
+    row.getCell(11).value?.toString().trim().toLowerCase() || 'good',
+
+  importance:
+    row.getCell(12).value?.toString().trim().toLowerCase() || 'medium',
+
+  vendor_name:
+    row.getCell(13).value?.toString().trim() || null,
+
+  invoice_number:
+    row.getCell(14).value?.toString().trim() || null,
+
+  purchase_date:
+    row.getCell(15).value || null,
+
+  purchase_cost:
+    row.getCell(16).value || null,
+
+  warranty_start_date:
+    row.getCell(17).value || null,
+
+  warranty_end_date:
+    row.getCell(18).value || null,
+
+  eol_date:
+    row.getCell(19).value || null,
+
+  eos_date:
+    row.getCell(20).value || null,
+
+  assigned_to_input:
+    row.getCell(21).value?.toString().trim() || '',
+
+  installation_notes:
+    row.getCell(22).value?.toString().trim() || null,
+
+  notes:
+    row.getCell(23).value?.toString().trim() || null,
+
+  additional_software: []
+};
 
     const errors = [];
     const warnings = [];
