@@ -948,7 +948,8 @@ router.get('/export',
 
 let exportQuery = `
 SELECT
-  a.id, a.asset_tag, a.tag_no, a.serial_number, a.status, a.condition_status,
+  a.id, a.asset_tag, a.tag_no, a.serial_number, a.ip_address,
+a.hostname, a.status, a.condition_status,
   a.purchase_date, a.warranty_end_date, a.purchase_cost, a.notes, a.created_at, a.updated_at,
   a.asset_type, a.parent_asset_id, a.installation_date, a.removal_date, a.installation_notes,
   p.name as product_name, p.model as product_model,
@@ -988,7 +989,7 @@ params.forEach(p => {
 
     const result = await dataRequest.query(`
       SELECT
-        a.id, a.asset_tag, a.tag_no, a.serial_number, a.status, a.condition_status,
+        a.id, a.asset_tag, a.tag_no, a.serial_number, a.ip_address, a.hostname,a.status, a.condition_status,
         a.purchase_date, a.warranty_end_date, a.purchase_cost, a.notes, a.created_at, a.updated_at,
         a.asset_type, a.parent_asset_id, a.installation_date, a.removal_date, a.installation_notes,
         p.name as product_name, p.model as product_model,
@@ -1045,6 +1046,8 @@ ON COALESCE(
         'Asset Tag': asset.asset_tag,
         'Tag No': asset.tag_no || '',
         'Serial Number': asset.serial_number || '',
+        'IP Address': asset.ip_address || '',
+        'Hostname': asset.hostname || '',
         'Product Name': asset.product_name,
         'Product Model': asset.product_model || '',
         'OEM': asset.oem_name || '',
@@ -1505,6 +1508,8 @@ router.post('/legacy-import',
             .input('assetTag', sql.VarChar(50), assetTag)
             .input('tagNo', sql.VarChar(100), tagNo)
             .input('serialNumber', sql.VarChar(100), asset.serial_number)
+            .input('ipAddress', sql.VarChar(45), asset.ip_address || null)
+            .input('hostname', sql.VarChar(255), asset.hostname || null)
             .input('productId', sql.UniqueIdentifier, asset.product_id || null)
             .input('assignedTo', sql.UniqueIdentifier, asset.assigned_to || null)
             .input('status', sql.VarChar(20), finalStatus)
@@ -1531,7 +1536,7 @@ router.post('/legacy-import',
             .input('standbyAvailable', sql.Bit, asset.standby_available ? 1 : 0)
             .query(`
               INSERT INTO assets (
-                id, asset_tag, tag_no, serial_number, product_id, assigned_to,
+                id, asset_tag, tag_no, serial_number, ip_address, hostname, product_id, assigned_to,
                 status, condition_status, importance, purchase_date, purchase_cost,
                 warranty_start_date, warranty_end_date, eol_date, eos_date,
                 notes, is_active,
@@ -1539,7 +1544,7 @@ router.post('/legacy-import',
                 vendor_id, invoice_number, is_standby_asset, standby_available,
                 created_at, updated_at, location_id, department_id
               ) VALUES (
-                @id, @assetTag, @tagNo, @serialNumber, @productId, @assignedTo,
+                @id, @assetTag, @tagNo, @serialNumber, @productId, @assignedTo, @ipAddress, @hostname,
                 @status, @conditionStatus, @importance, @purchaseDate, @purchaseCost,
                 @warrantyStartDate, @warrantyEndDate, @eolDate, @eosDate,
                 @notes, 1,
@@ -2149,6 +2154,8 @@ router.post('/bulk',
         const {
           serial_number,
           product_id,
+          ip_address,
+          hostname,
           status = 'available',
           condition_status = 'good',
           purchase_date,
@@ -2266,6 +2273,8 @@ console.log('department_id =', asset.department_id);
           .input('assetTag', sql.VarChar(50), assetTag)
           .input('tagNo', sql.VarChar(100), tagNo)
           .input('serialNumber', sql.VarChar(100), serial_number)
+          .input('ipAddress', sql.VarChar(45), ip_address || null)
+          .input('hostname', sql.VarChar(255), hostname || null)
           .input('productId', sql.UniqueIdentifier, product_id)
           .input('assignedTo', sql.UniqueIdentifier, asset.assigned_to || null)
           .input('status', sql.VarChar(20), finalStatus)
@@ -2288,14 +2297,14 @@ console.log('department_id =', asset.department_id);
 
         await request.query(`
           INSERT INTO assets (
-            id, asset_tag, tag_no, serial_number, product_id, assigned_to, status, condition_status,
+            id, asset_tag, tag_no, serial_number, product_id, assigned_to, ip_address, hostname, status, condition_status,
             purchase_date, warranty_start_date, warranty_end_date, eol_date, eos_date,
             purchase_cost, notes, is_active,
             asset_type, parent_asset_id, installation_date, installation_notes,
             created_at, updated_at, location_id, department_id
           )
           VALUES (
-            @id, @assetTag, @tagNo, @serialNumber, @productId, @assignedTo, @status, @conditionStatus,
+            @id, @assetTag, @tagNo, @serialNumber, @productId, @assignedTo, @ipAddress, @hostname, @status, @conditionStatus,
             @purchaseDate, @warrantyStartDate, @warrantyEndDate, @eolDate, @eosDate,
             @purchaseCost, @notes, @isActive,
             @assetType, @parentAssetId, @installationDate, @installationNotes,
@@ -2348,6 +2357,8 @@ router.post('/',
       serial_number,
       product_id,
       assigned_to,
+      ip_address,
+      hostname,
       status = 'available',
       condition_status = 'good',
       importance = 'medium',
@@ -2546,6 +2557,8 @@ router.post('/',
       .input('assetTag', sql.VarChar(50), finalAssetTag)
       .input('tagNo', sql.VarChar(100), tagNo)
       .input('serialNumber', sql.VarChar(100), serial_number ? serial_number.trim() : null)
+      .input('ipAddress', sql.VarChar(45), ip_address || null)
+      .input('hostname', sql.VarChar(255), hostname || null) 
       .input('productId', sql.UniqueIdentifier, product_id)
       .input('assignedTo', sql.UniqueIdentifier, assigned_to)
       .input('status', sql.VarChar(20), finalStatus)
@@ -2570,14 +2583,14 @@ router.post('/',
       .input('departmentId', sql.UniqueIdentifier, department_id || null)
       .query(`
         INSERT INTO assets (
-          id, asset_tag, tag_no, serial_number, product_id, assigned_to, status, condition_status, importance,
+          id, asset_tag, tag_no, serial_number, product_id, assigned_to, ip_address, hostname, status, condition_status, importance,
           purchase_date, warranty_end_date, warranty_start_date, eol_date, eos_date,
           purchase_cost, vendor_id, invoice_number, notes, is_active,
           asset_type, parent_asset_id, installation_date, installation_notes, installed_by,
           created_at, updated_at, location_id, department_id
         )
         VALUES (
-          @id, @assetTag, @tagNo, @serialNumber, @productId, @assignedTo, @status, @conditionStatus, @importance,
+          @id, @assetTag, @tagNo, @serialNumber, @productId, @assignedTo, @ipAddress, @hostname, @status, @conditionStatus, @importance,
           @purchaseDate, @warrantyEndDate, @warrantyStartDate, @eolDate, @eosDate,
           @purchaseCost, @vendorId, @invoiceNumber, @notes, @isActive,
           @assetType, @parentAssetId, @installationDate, @installationNotes, @installedBy,
@@ -2714,6 +2727,8 @@ router.put('/:id',
       asset_tag,
       serial_number,
       product_id,
+      ip_address,
+      hostname,
       assigned_to,
       status,
       condition_status,
@@ -2876,6 +2891,23 @@ router.put('/:id',
       updateFields.push('serial_number = @serialNumber');
       updateRequest.input('serialNumber', sql.VarChar(100), serial_number ? serial_number.trim() : null);
     }
+     if (ip_address !== undefined) {
+        updateFields.push('ip_address = @ipAddress');
+        updateRequest.input(
+          'ipAddress',
+          sql.VarChar(45),
+          ip_address ? ip_address.trim() : null
+        );
+      }
+
+      if (hostname !== undefined) {
+        updateFields.push('hostname = @hostname');
+        updateRequest.input(
+          'hostname',
+          sql.VarChar(255),
+          hostname ? hostname.trim() : null
+        );
+      }
     if (product_id !== undefined) {
       updateFields.push('product_id = @productId');
       updateRequest.input('productId', sql.UniqueIdentifier, product_id);
@@ -2981,7 +3013,7 @@ router.put('/:id',
       WHERE id = @id;
 
       SELECT
-        a.id, a.asset_tag, a.serial_number, a.status, a.condition_status, a.importance, a.purchase_date,
+        a.id, a.asset_tag, a.serial_number, a.ip_address, a.hostname, a.status, a.condition_status, a.importance, a.purchase_date,
         a.warranty_start_date, a.warranty_end_date, a.eol_date, a.eos_date,
         a.purchase_cost, a.vendor_id as asset_vendor_id, a.invoice_number, a.notes, a.asset_type, a.parent_asset_id, a.installation_date,
         a.installation_notes, a.created_at, a.updated_at,
