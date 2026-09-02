@@ -285,7 +285,8 @@ if (board_id) {
 
     const dataQuery = `
 SELECT
-  a.id, a.asset_tag, a.tag_no, a.serial_number, a.status, a.condition_status, a.importance, a.purchase_date,
+  a.id, a.asset_tag, a.tag_no, a.serial_number, a.ip_address,
+a.hostname, a.status, a.condition_status, a.importance, a.purchase_date,
   a.warranty_start_date, a.warranty_end_date,
   a.purchase_cost, a.vendor_id as asset_vendor_id, a.invoice_number, a.notes, a.created_at, a.updated_at,
   a.eol_date, a.eos_date,
@@ -371,7 +372,8 @@ finalQuery = finalQuery.replace('@limit', limit);
 
     const result = await dataRequest.query(`
       SELECT
-        a.id, a.asset_tag, a.tag_no, a.serial_number, a.status, a.condition_status, a.importance, a.purchase_date,
+        a.id, a.asset_tag, a.tag_no, a.serial_number, a.status, a.ip_address,
+a.hostname, a.condition_status, a.importance, a.purchase_date,
         a.warranty_start_date, a.warranty_end_date,
         a.purchase_cost, a.vendor_id as asset_vendor_id, a.invoice_number, a.notes, a.created_at, a.updated_at,
         a.eol_date, a.eos_date,
