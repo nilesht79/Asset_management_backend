@@ -482,10 +482,12 @@ class TicketModel {
     u1.first_name + ' ' + u1.last_name AS created_by_user_name,
     u1.email AS created_by_user_email,
     u1.employee_id AS created_by_user_employee_id,
+    u1.role AS created_by_user_role,
 
     -- Coordinator
     u2.first_name + ' ' + u2.last_name AS coordinator_name,
     u2.email AS coordinator_email,
+    u2.role AS coordinator_role,
 
     -- Engineer
     u3.first_name + ' ' + u3.last_name AS engineer_name,
