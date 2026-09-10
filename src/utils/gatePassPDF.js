@@ -1021,192 +1021,346 @@ y = this.renderSignatures(
 //   return y + 10;
 // }
 
+//   static renderRemarks(doc, remarks, margin, y, pageWidth) {
+//   if (!remarks || !remarks.trim()) {
+//     return y;
+//   }
+
+//   const text = remarks.trim();
+
+//   // ==============================
+//   // REMARKS TITLE
+//   // ==============================
+//   doc.font('Helvetica-Bold')
+//     .fontSize(7)
+//     .fillColor(this.colors.primary)
+//     .text('Remarks:', margin, y, {
+//       lineBreak: false
+//     });
+
+//   y += 10;
+
+//   // ==============================
+//   // DETECT TABULAR DATA
+//   // ==============================
+//   const lines = text
+//     .split('\n')
+//     .map(line => line.trim())
+//     .filter(line => line !== '');
+
+//   const isTableData = lines.some(line => {
+//     const cols = line
+//       .split('\t')
+//       .map(c => c.trim())
+//       .filter(c => c !== '');
+
+//     return cols.length >= 2;
+//   });
+
+//   // ==============================
+//   // NORMAL TEXT REMARKS
+//   // ==============================
+//   if (!isTableData) {
+//     const textWidth = pageWidth - 10;
+
+//     doc.font('Helvetica')
+//       .fontSize(8);
+
+//     const textHeight = doc.heightOfString(text, {
+//       width: textWidth,
+//       lineGap: 1
+//     });
+
+//     const boxHeight = Math.max(30, textHeight + 12);
+
+//     doc.rect(margin, y, pageWidth, boxHeight)
+//       .stroke(this.colors.border);
+
+//     doc.font('Helvetica')
+//       .fontSize(8)
+//       .fillColor(this.colors.black)
+//       .text(text, margin + 5, y + 6, {
+//         width: textWidth,
+//         lineGap: 1
+//       });
+
+//     return y + boxHeight + 10;
+//   }
+
+//   // ==============================
+//   // TABULAR REMARKS
+//   // ==============================
+
+//   const snoWidth = 35;
+//   const qtyWidth = 55;
+
+//   // IMPORTANT:
+//   // Item / Description gets the remaining FULL width
+//   const itemWidth = pageWidth - snoWidth - qtyWidth;
+
+//   const headerHeight = 18;
+
+//   // ==============================
+//   // TABLE HEADER
+//   // ==============================
+
+//   doc.rect(margin, y, pageWidth, headerHeight)
+//     .fill(this.colors.primary);
+
+//   let x = margin;
+
+//   doc.font('Helvetica-Bold')
+//     .fontSize(7)
+//     .fillColor(this.colors.white);
+
+//   doc.text('S.No', x + 5, y + 5, {
+//     width: snoWidth - 10,
+//     align: 'center',
+//     lineBreak: false
+//   });
+
+//   x += snoWidth;
+
+//   doc.text('Item / Description', x + 5, y + 5, {
+//     width: itemWidth - 10,
+//     lineBreak: false
+//   });
+
+//   x += itemWidth;
+
+//   doc.text('Qty', x + 5, y + 5, {
+//     width: qtyWidth - 10,
+//     align: 'center',
+//     lineBreak: false
+//   });
+
+//   y += headerHeight;
+
+//   // ==============================
+//   // TABLE ROWS
+//   // ==============================
+
+//   lines.forEach(line => {
+
+//     const cols = line
+//       .split('\t')
+//       .map(c => c.trim())
+//       .filter(c => c !== '');
+
+//     let sno = '';
+//     let item = '';
+//     let qty = '';
+
+//     if (cols.length >= 3) {
+//       sno = cols[0];
+//       qty = cols[cols.length - 1];
+//       item = cols.slice(1, cols.length - 1).join(' ');
+//     }
+//     else if (cols.length === 2) {
+//       sno = cols[0];
+
+//       const match = cols[1].match(/^(.*?)(\d+)$/);
+
+//       if (match) {
+//         item = match[1].trim();
+//         qty = match[2];
+//       } else {
+//         item = cols[1];
+//       }
+//     }
+//     else {
+//       item = cols[0] || '';
+//     }
+
+//     // ==============================
+//     // CALCULATE ROW HEIGHT
+//     // ==============================
+
+//     doc.font('Helvetica')
+//       .fontSize(7);
+
+//     const itemTextHeight = doc.heightOfString(item, {
+//       width: itemWidth - 10,
+//       lineGap: 1
+//     });
+
+//     const rowHeight = Math.max(
+//       22,
+//       itemTextHeight + 10
+//     );
+
+//     // ==============================
+//     // ROW BORDER
+//     // ==============================
+
+//     doc.rect(margin, y, pageWidth, rowHeight)
+//       .stroke(this.colors.border);
+
+//     x = margin;
+
+//     doc.font('Helvetica')
+//       .fontSize(7)
+//       .fillColor(this.colors.black);
+
+//     // ==============================
+//     // S.NO
+//     // ==============================
+
+//     doc.text(sno, x + 5, y + 5, {
+//       width: snoWidth - 10,
+//       align: 'center',
+//       lineBreak: false
+//     });
+
+//     x += snoWidth;
+
+//     // ==============================
+//     // ITEM / DESCRIPTION
+//     // ==============================
+
+//     doc.text(item, x + 5, y + 5, {
+//       width: itemWidth - 10,
+//       lineGap: 1
+//       // IMPORTANT:
+//       // Do NOT use lineBreak:false here
+//     });
+
+//     x += itemWidth;
+
+//     // ==============================
+//     // QTY
+//     // ==============================
+
+//     doc.text(qty, x + 5, y + 5, {
+//       width: qtyWidth - 10,
+//       align: 'center',
+//       lineBreak: false
+//     });
+
+//     y += rowHeight;
+//   });
+
+//   return y + 10;
+// }
+
+
   static renderRemarks(doc, remarks, margin, y, pageWidth) {
-  if (!remarks || !remarks.trim()) {
+  if (!remarks || !String(remarks).trim()) {
     return y;
   }
 
-  const text = remarks.trim();
+  const text = String(remarks).trim();
 
   // ==============================
   // REMARKS TITLE
   // ==============================
   doc.font('Helvetica-Bold')
-    .fontSize(7)
+    .fontSize(8)
     .fillColor(this.colors.primary)
     .text('Remarks:', margin, y, {
       lineBreak: false
     });
 
-  y += 10;
+  y += 12;
 
-  // ==============================
-  // DETECT TABULAR DATA
-  // ==============================
+  // ============================================================
+  // SPLIT REMARKS INTO LINES
+  // ============================================================
+
   const lines = text
-    .split('\n')
+    .split(/\r?\n/)
     .map(line => line.trim())
     .filter(line => line !== '');
 
-  const isTableData = lines.some(line => {
-    const cols = line
-      .split('\t')
-      .map(c => c.trim())
-      .filter(c => c !== '');
+  // ============================================================
+  // SEPARATE TABLE ROWS AND NORMAL TEXT
+  // ============================================================
 
-    return cols.length >= 2;
-  });
-
-  // ==============================
-  // NORMAL TEXT REMARKS
-  // ==============================
-  if (!isTableData) {
-    const textWidth = pageWidth - 10;
-
-    doc.font('Helvetica')
-      .fontSize(8);
-
-    const textHeight = doc.heightOfString(text, {
-      width: textWidth,
-      lineGap: 1
-    });
-
-    const boxHeight = Math.max(30, textHeight + 12);
-
-    doc.rect(margin, y, pageWidth, boxHeight)
-      .stroke(this.colors.border);
-
-    doc.font('Helvetica')
-      .fontSize(8)
-      .fillColor(this.colors.black)
-      .text(text, margin + 5, y + 6, {
-        width: textWidth,
-        lineGap: 1
-      });
-
-    return y + boxHeight + 10;
-  }
-
-  // ==============================
-  // TABULAR REMARKS
-  // ==============================
-
-  const snoWidth = 35;
-  const qtyWidth = 55;
-
-  // IMPORTANT:
-  // Item / Description gets the remaining FULL width
-  const itemWidth = pageWidth - snoWidth - qtyWidth;
-
-  const headerHeight = 18;
-
-  // ==============================
-  // TABLE HEADER
-  // ==============================
-
-  doc.rect(margin, y, pageWidth, headerHeight)
-    .fill(this.colors.primary);
-
-  let x = margin;
-
-  doc.font('Helvetica-Bold')
-    .fontSize(7)
-    .fillColor(this.colors.white);
-
-  doc.text('S.No', x + 5, y + 5, {
-    width: snoWidth - 10,
-    align: 'center',
-    lineBreak: false
-  });
-
-  x += snoWidth;
-
-  doc.text('Item / Description', x + 5, y + 5, {
-    width: itemWidth - 10,
-    lineBreak: false
-  });
-
-  x += itemWidth;
-
-  doc.text('Qty', x + 5, y + 5, {
-    width: qtyWidth - 10,
-    align: 'center',
-    lineBreak: false
-  });
-
-  y += headerHeight;
-
-  // ==============================
-  // TABLE ROWS
-  // ==============================
+  const tableRows = [];
+  const normalText = [];
 
   lines.forEach(line => {
 
     const cols = line
       .split('\t')
-      .map(c => c.trim())
-      .filter(c => c !== '');
+      .map(c => c.trim());
 
-    let sno = '';
-    let item = '';
-    let qty = '';
+    // A line is treated as table data ONLY when it has
+    // at least 2 meaningful tab-separated columns.
+    const meaningfulCols = cols.filter(c => c !== '');
 
-    if (cols.length >= 3) {
-      sno = cols[0];
-      qty = cols[cols.length - 1];
-      item = cols.slice(1, cols.length - 1).join(' ');
-    }
-    else if (cols.length === 2) {
-      sno = cols[0];
+    if (meaningfulCols.length >= 2) {
 
-      const match = cols[1].match(/^(.*?)(\d+)$/);
+      let sno = '';
+      let item = '';
+      let qty = '';
 
-      if (match) {
-        item = match[1].trim();
-        qty = match[2];
+      if (meaningfulCols.length >= 3) {
+
+        sno = meaningfulCols[0];
+
+        qty = meaningfulCols[meaningfulCols.length - 1];
+
+        item = meaningfulCols
+          .slice(1, meaningfulCols.length - 1)
+          .join(' ');
+
       } else {
-        item = cols[1];
+
+        sno = meaningfulCols[0];
+
+        item = meaningfulCols[1];
+
+        // If the second column ends with a number,
+        // treat that number as Qty.
+        const match = item.match(/^(.*?)(\d+)$/);
+
+        if (match) {
+          item = match[1].trim();
+          qty = match[2];
+        }
       }
+
+      tableRows.push({
+        sno,
+        item,
+        qty
+      });
+
+    } else {
+
+      // Normal remark text
+      normalText.push(line);
+
     }
-    else {
-      item = cols[0] || '';
-    }
+  });
 
-    // ==============================
-    // CALCULATE ROW HEIGHT
-    // ==============================
+  // ============================================================
+  // TABLE
+  // ============================================================
 
-    doc.font('Helvetica')
-      .fontSize(7);
+  if (tableRows.length > 0) {
 
-    const itemTextHeight = doc.heightOfString(item, {
-      width: itemWidth - 10,
-      lineGap: 1
-    });
+    const snoWidth = 35;
+    const qtyWidth = 55;
+    const itemWidth = pageWidth - snoWidth - qtyWidth;
 
-    const rowHeight = Math.max(
-      22,
-      itemTextHeight + 10
-    );
+    const headerHeight = 18;
 
-    // ==============================
-    // ROW BORDER
-    // ==============================
+    // ------------------------------
+    // Header
+    // ------------------------------
 
-    doc.rect(margin, y, pageWidth, rowHeight)
-      .stroke(this.colors.border);
+    doc.rect(margin, y, pageWidth, headerHeight)
+      .fill(this.colors.primary);
 
-    x = margin;
+    let x = margin;
 
-    doc.font('Helvetica')
+    doc.font('Helvetica-Bold')
       .fontSize(7)
-      .fillColor(this.colors.black);
+      .fillColor(this.colors.white);
 
-    // ==============================
-    // S.NO
-    // ==============================
-
-    doc.text(sno, x + 5, y + 5, {
+    doc.text('S.No', x + 5, y + 5, {
       width: snoWidth - 10,
       align: 'center',
       lineBreak: false
@@ -1214,33 +1368,127 @@ y = this.renderSignatures(
 
     x += snoWidth;
 
-    // ==============================
-    // ITEM / DESCRIPTION
-    // ==============================
-
-    doc.text(item, x + 5, y + 5, {
+    doc.text('Item / Description', x + 5, y + 5, {
       width: itemWidth - 10,
-      lineGap: 1
-      // IMPORTANT:
-      // Do NOT use lineBreak:false here
+      lineBreak: false
     });
 
     x += itemWidth;
 
-    // ==============================
-    // QTY
-    // ==============================
-
-    doc.text(qty, x + 5, y + 5, {
+    doc.text('Qty', x + 5, y + 5, {
       width: qtyWidth - 10,
       align: 'center',
       lineBreak: false
     });
 
-    y += rowHeight;
-  });
+    y += headerHeight;
 
-  return y + 10;
+    // ------------------------------
+    // Rows
+    // ------------------------------
+
+    tableRows.forEach(row => {
+
+      doc.font('Helvetica')
+        .fontSize(7);
+
+      const itemHeight = doc.heightOfString(row.item || '', {
+        width: itemWidth - 10,
+        lineGap: 1
+      });
+
+      const rowHeight = Math.max(
+        22,
+        itemHeight + 10
+      );
+
+      // Border
+      doc.rect(margin, y, pageWidth, rowHeight)
+        .stroke(this.colors.border);
+
+      x = margin;
+
+      doc.font('Helvetica')
+        .fontSize(7)
+        .fillColor(this.colors.black);
+
+      // S.No
+      doc.text(row.sno || '', x + 5, y + 5, {
+        width: snoWidth - 10,
+        align: 'center',
+        lineBreak: false
+      });
+
+      x += snoWidth;
+
+      // Item / Description
+      doc.text(row.item || '', x + 5, y + 5, {
+        width: itemWidth - 10,
+        lineGap: 1
+      });
+
+      x += itemWidth;
+
+      // Qty
+      doc.text(row.qty || '', x + 5, y + 5, {
+        width: qtyWidth - 10,
+        align: 'center',
+        lineBreak: false
+      });
+
+      y += rowHeight;
+    });
+
+    y += 5;
+  }
+
+  // ============================================================
+  // NORMAL REMARK TEXT
+  // ============================================================
+
+  if (normalText.length > 0) {
+
+    const normalRemarks = normalText.join('\n');
+
+    const textWidth = pageWidth - 10;
+
+    doc.font('Helvetica')
+      .fontSize(8)
+      .fillColor(this.colors.black);
+
+    const textHeight = doc.heightOfString(normalRemarks, {
+      width: textWidth,
+      lineGap: 2
+    });
+
+    const boxHeight = Math.max(
+      40,
+      textHeight + 14
+    );
+
+    // Border
+    doc.rect(
+      margin,
+      y,
+      pageWidth,
+      boxHeight
+    ).stroke(this.colors.border);
+
+    // Text
+    doc.text(
+      normalRemarks,
+      margin + 5,
+      y + 7,
+      {
+        width: textWidth,
+        lineGap: 2
+      }
+    );
+
+    y += boxHeight + 10;
+  }
+
+  return y;
 }
 
   /**
