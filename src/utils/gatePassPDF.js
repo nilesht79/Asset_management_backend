@@ -156,57 +156,138 @@ class GatePassPDF {
   .map(value => String(value).trim())
   .join('\n');
 
-if (combinedRemarks) {
+// if (combinedRemarks) {
 
-  // Calculate how much space the remarks need
-  // const remarksText = String(gatePass.remarks).trim();
-  const remarksText = [
-  gatePass.remarks,
-  gatePass.service_description
-]
-  .filter(value => value && String(value).trim())
-  .map(value => String(value).trim())
-  .join('\n');
+//   // Calculate how much space the remarks need
+//   // const remarksText = String(gatePass.remarks).trim();
+//   const remarksText = [
+//   gatePass.remarks,
+//   gatePass.service_description
+// ]
+//   .filter(value => value && String(value).trim())
+//   .map(value => String(value).trim())
+//   .join('\n');
 
-  doc.font('Helvetica').fontSize(9);
+//   doc.font('Helvetica').fontSize(9);
 
-  const remarksHeight = doc.heightOfString(remarksText, {
-    width: pageWidth - 20
-  });
+//   const remarksHeight = doc.heightOfString(remarksText, {
+//     width: pageWidth - 20
+//   });
 
-  const remarksBoxHeight = Math.max(40, remarksHeight + 16);
+//   const remarksBoxHeight = Math.max(40, remarksHeight + 16);
 
-  // Need space for:
-  // - Remarks heading: 15
-  // - Remarks box
-  // - Small bottom spacing: 10
-  const remarksRequiredHeight = 15 + remarksBoxHeight + 10;
+//   // Need space for:
+//   // - Remarks heading: 15
+//   // - Remarks box
+//   // - Small bottom spacing: 10
+//   const remarksRequiredHeight = 15 + remarksBoxHeight + 10;
 
-  // If there isn't enough space on current page,
-  // start remarks on a new page.
-  if (y + remarksRequiredHeight > maxY) {
+//   // If there isn't enough space on current page,
+//   // start remarks on a new page.
+//   if (y + remarksRequiredHeight > maxY) {
+//     doc.addPage();
+
+//     y = margin;
+
+//     // Optional small continuation heading
+//     doc.font('Helvetica-Bold')
+//       .fontSize(9)
+//       .fillColor(this.colors.gray)
+//       .text('GATE PASS - CONTINUED', margin, y, {
+//         lineBreak: false
+//       });
+
+//     y += 25;
+//   }
+
+//   y = this.renderRemarks(
+//     doc,
+//     remarksText,
+//     margin,
+//     y,
+//     pageWidth
+//   );
+// }
+
+    // ===== SERVICE DESCRIPTION =====
+
+const serviceDescription = gatePass.service_description
+  ? String(gatePass.service_description).trim()
+  : '';
+
+if (serviceDescription) {
+
+  // Set font before calculating height
+  doc.font('Helvetica')
+    .fontSize(8);
+
+  // Full available width inside the box
+  const descriptionWidth = pageWidth - 10;
+
+  // Calculate height required for the complete description
+  const descriptionHeight = doc.heightOfString(
+    serviceDescription,
+    {
+      width: descriptionWidth,
+      lineGap: 2
+    }
+  );
+
+  // Minimum height = 40
+  // Otherwise expand automatically based on content
+  const descriptionBoxHeight = Math.max(
+    40,
+    descriptionHeight + 14
+  );
+
+  // Space required for heading + description box + gap
+  const descriptionRequiredHeight =
+    15 + descriptionBoxHeight + 10;
+
+  // Move to new page if required
+  if (y + descriptionRequiredHeight > maxY) {
     doc.addPage();
-
     y = margin;
-
-    // Optional small continuation heading
-    doc.font('Helvetica-Bold')
-      .fontSize(9)
-      .fillColor(this.colors.gray)
-      .text('GATE PASS - CONTINUED', margin, y, {
-        lineBreak: false
-      });
-
-    y += 25;
   }
 
-  y = this.renderRemarks(
-    doc,
-    remarksText,
+  // Service Description heading
+  doc.font('Helvetica-Bold')
+    .fontSize(8)
+    .fillColor(this.colors.primary)
+    .text(
+      'Service Description:',
+      margin,
+      y,
+      {
+        lineBreak: false
+      }
+    );
+
+  y += 12;
+
+  // Description box
+  doc.rect(
     margin,
     y,
-    pageWidth
-  );
+    pageWidth,
+    descriptionBoxHeight
+  ).stroke(this.colors.border);
+
+  // Complete service description
+  doc.font('Helvetica')
+    .fontSize(8)
+    .fillColor(this.colors.black)
+    .text(
+      serviceDescription,
+      margin + 5,
+      y + 7,
+      {
+        width: descriptionWidth,
+        lineGap: 2
+      }
+    );
+
+  y += descriptionBoxHeight + 10;
 }
 
 // ===== AUTHORIZATION & SIGNATURES =====
