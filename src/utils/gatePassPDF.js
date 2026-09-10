@@ -147,10 +147,26 @@ class GatePassPDF {
 // }
 
     // ===== REMARKS =====
-if (gatePass.remarks && String(gatePass.remarks).trim()) {
+// if (gatePass.remarks && String(gatePass.remarks).trim()) {
+    const combinedRemarks = [
+  gatePass.remarks,
+  gatePass.service_description
+]
+  .filter(value => value && String(value).trim())
+  .map(value => String(value).trim())
+  .join('\n');
+
+if (combinedRemarks) {
 
   // Calculate how much space the remarks need
-  const remarksText = String(gatePass.remarks).trim();
+  // const remarksText = String(gatePass.remarks).trim();
+  const remarksText = [
+  gatePass.remarks,
+  gatePass.service_description
+]
+  .filter(value => value && String(value).trim())
+  .map(value => String(value).trim())
+  .join('\n');
 
   doc.font('Helvetica').fontSize(9);
 
