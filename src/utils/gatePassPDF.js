@@ -1289,7 +1289,11 @@ y = this.renderSignatures(
     // at least 2 meaningful tab-separated columns.
     const meaningfulCols = cols.filter(c => c !== '');
 
-    if (meaningfulCols.length >= 2) {
+    const isActualTableRow =
+  meaningfulCols.length >= 2 &&
+  /^\d+$/.test(meaningfulCols[0]);
+
+if (isActualTableRow) {
 
       let sno = '';
       let item = '';
