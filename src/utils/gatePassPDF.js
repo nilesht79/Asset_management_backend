@@ -828,6 +828,199 @@ y = this.renderSignatures(
 // }
 
 
+//   static renderRemarks(doc, remarks, margin, y, pageWidth) {
+//   if (!remarks || !remarks.trim()) {
+//     return y;
+//   }
+
+//   const text = remarks.trim();
+
+//   // ==============================
+//   // REMARKS TITLE
+//   // ==============================
+//   doc.font('Helvetica-Bold')
+//     .fontSize(7)
+//     .fillColor(this.colors.primary)
+//     .text('Remarks:', margin, y);
+
+//   y += 10;
+
+//   // ============================================================
+//   // DETECT WHETHER REMARKS ARE TABULAR DATA
+//   // ============================================================
+
+//   const lines = text
+//     .split('\n')
+//     .map(line => line.trim())
+//     .filter(line => line !== '');
+
+//   const isTableData = lines.some(line => {
+//     const cols = line
+//       .split('\t')
+//       .map(c => c.trim())
+//       .filter(c => c !== '');
+
+//     return cols.length >= 2;
+//   });
+
+//   // ============================================================
+//   // CASE 1: NORMAL TEXT REMARKS
+//   // ============================================================
+
+//   if (!isTableData) {
+//     const textWidth = pageWidth - 10;
+
+//     const textHeight = doc.heightOfString(text, {
+//       width: textWidth,
+//       font: 'Helvetica',
+//       fontSize: 8,
+//       lineGap: 1
+//     });
+
+//     const boxHeight = Math.max(30, textHeight + 12);
+
+//     // Border
+//     doc.rect(margin, y, pageWidth, boxHeight)
+//       .stroke(this.colors.border);
+
+//     // Text
+//     doc.font('Helvetica')
+//       .fontSize(8)
+//       .fillColor(this.colors.black)
+//       .text(text, margin + 5, y + 6, {
+//         width: textWidth,
+//         lineGap: 1
+//       });
+
+//     return y + boxHeight + 10;
+//   }
+
+//   // ============================================================
+//   // CASE 2: TABULAR REMARKS DATA
+//   // ============================================================
+
+//   const snoWidth = 35;
+//   const qtyWidth = 55;
+//   const itemWidth = pageWidth - snoWidth - qtyWidth;
+
+//   const rowHeight = 18;
+
+//   // Table header
+//   doc.rect(margin, y, pageWidth, rowHeight)
+//     .fill(this.colors.primary);
+
+//   let x = margin;
+
+//   doc.font('Helvetica-Bold')
+//     .fontSize(7)
+//     .fillColor(this.colors.white);
+
+//   doc.text('S.No', x + 5, y + 5, {
+//     width: snoWidth - 10,
+//     align: 'center',
+//     lineBreak: false
+//   });
+
+//   x += snoWidth;
+
+//   doc.text('Item / Description', x + 5, y + 5, {
+//     width: itemWidth - 10,
+//     lineBreak: false
+//   });
+
+//   x += itemWidth;
+
+//   doc.text('Qty', x + 5, y + 5, {
+//     width: qtyWidth - 10,
+//     align: 'center',
+//     lineBreak: false
+//   });
+
+//   y += rowHeight;
+
+//   // Table rows
+//   lines.forEach(line => {
+//     const cols = line
+//       .split('\t')
+//       .map(c => c.trim())
+//       .filter(c => c !== '');
+
+//     let sno = '';
+//     let item = '';
+//     let qty = '';
+
+//     // --------------------------------
+//     // 3 or more columns
+//     // --------------------------------
+//     if (cols.length >= 3) {
+//       sno = cols[0];
+//       qty = cols[cols.length - 1];
+//       item = cols.slice(1, cols.length - 1).join(' ');
+//     }
+
+//     // --------------------------------
+//     // 2 columns
+//     // --------------------------------
+//     else if (cols.length === 2) {
+//       sno = cols[0];
+
+//       const match = cols[1].match(/^(.*?)(\d+)$/);
+
+//       if (match) {
+//         item = match[1].trim();
+//         qty = match[2];
+//       } else {
+//         item = cols[1];
+//       }
+//     }
+
+//     // --------------------------------
+//     // Safety fallback
+//     // --------------------------------
+//     else {
+//       item = cols[0] || '';
+//     }
+
+//     // Row border
+//     doc.rect(margin, y, pageWidth, rowHeight)
+//       .stroke(this.colors.border);
+
+//     x = margin;
+
+//     doc.font('Helvetica')
+//       .fontSize(7)
+//       .fillColor(this.colors.black);
+
+//     // S.No
+//     doc.text(sno, x + 5, y + 5, {
+//       width: snoWidth - 10,
+//       align: 'center',
+//       lineBreak: false
+//     });
+
+//     x += snoWidth;
+
+//     // Item
+//     doc.text(item, x + 5, y + 5, {
+//       width: itemWidth - 10,
+//       lineBreak: false
+//     });
+
+//     x += itemWidth;
+
+//     // Qty
+//     doc.text(qty, x + 5, y + 5, {
+//       width: qtyWidth - 10,
+//       align: 'center',
+//       lineBreak: false
+//     });
+
+//     y += rowHeight;
+//   });
+
+//   return y + 10;
+// }
+
   static renderRemarks(doc, remarks, margin, y, pageWidth) {
   if (!remarks || !remarks.trim()) {
     return y;
@@ -841,14 +1034,15 @@ y = this.renderSignatures(
   doc.font('Helvetica-Bold')
     .fontSize(7)
     .fillColor(this.colors.primary)
-    .text('Remarks:', margin, y);
+    .text('Remarks:', margin, y, {
+      lineBreak: false
+    });
 
   y += 10;
 
-  // ============================================================
-  // DETECT WHETHER REMARKS ARE TABULAR DATA
-  // ============================================================
-
+  // ==============================
+  // DETECT TABULAR DATA
+  // ==============================
   const lines = text
     .split('\n')
     .map(line => line.trim())
@@ -863,27 +1057,25 @@ y = this.renderSignatures(
     return cols.length >= 2;
   });
 
-  // ============================================================
-  // CASE 1: NORMAL TEXT REMARKS
-  // ============================================================
-
+  // ==============================
+  // NORMAL TEXT REMARKS
+  // ==============================
   if (!isTableData) {
     const textWidth = pageWidth - 10;
 
+    doc.font('Helvetica')
+      .fontSize(8);
+
     const textHeight = doc.heightOfString(text, {
       width: textWidth,
-      font: 'Helvetica',
-      fontSize: 8,
       lineGap: 1
     });
 
     const boxHeight = Math.max(30, textHeight + 12);
 
-    // Border
     doc.rect(margin, y, pageWidth, boxHeight)
       .stroke(this.colors.border);
 
-    // Text
     doc.font('Helvetica')
       .fontSize(8)
       .fillColor(this.colors.black)
@@ -895,18 +1087,24 @@ y = this.renderSignatures(
     return y + boxHeight + 10;
   }
 
-  // ============================================================
-  // CASE 2: TABULAR REMARKS DATA
-  // ============================================================
+  // ==============================
+  // TABULAR REMARKS
+  // ==============================
 
   const snoWidth = 35;
   const qtyWidth = 55;
+
+  // IMPORTANT:
+  // Item / Description gets the remaining FULL width
   const itemWidth = pageWidth - snoWidth - qtyWidth;
 
-  const rowHeight = 18;
+  const headerHeight = 18;
 
-  // Table header
-  doc.rect(margin, y, pageWidth, rowHeight)
+  // ==============================
+  // TABLE HEADER
+  // ==============================
+
+  doc.rect(margin, y, pageWidth, headerHeight)
     .fill(this.colors.primary);
 
   let x = margin;
@@ -936,10 +1134,14 @@ y = this.renderSignatures(
     lineBreak: false
   });
 
-  y += rowHeight;
+  y += headerHeight;
 
-  // Table rows
+  // ==============================
+  // TABLE ROWS
+  // ==============================
+
   lines.forEach(line => {
+
     const cols = line
       .split('\t')
       .map(c => c.trim())
@@ -949,18 +1151,11 @@ y = this.renderSignatures(
     let item = '';
     let qty = '';
 
-    // --------------------------------
-    // 3 or more columns
-    // --------------------------------
     if (cols.length >= 3) {
       sno = cols[0];
       qty = cols[cols.length - 1];
       item = cols.slice(1, cols.length - 1).join(' ');
     }
-
-    // --------------------------------
-    // 2 columns
-    // --------------------------------
     else if (cols.length === 2) {
       sno = cols[0];
 
@@ -973,15 +1168,31 @@ y = this.renderSignatures(
         item = cols[1];
       }
     }
-
-    // --------------------------------
-    // Safety fallback
-    // --------------------------------
     else {
       item = cols[0] || '';
     }
 
-    // Row border
+    // ==============================
+    // CALCULATE ROW HEIGHT
+    // ==============================
+
+    doc.font('Helvetica')
+      .fontSize(7);
+
+    const itemTextHeight = doc.heightOfString(item, {
+      width: itemWidth - 10,
+      lineGap: 1
+    });
+
+    const rowHeight = Math.max(
+      22,
+      itemTextHeight + 10
+    );
+
+    // ==============================
+    // ROW BORDER
+    // ==============================
+
     doc.rect(margin, y, pageWidth, rowHeight)
       .stroke(this.colors.border);
 
@@ -991,7 +1202,10 @@ y = this.renderSignatures(
       .fontSize(7)
       .fillColor(this.colors.black);
 
-    // S.No
+    // ==============================
+    // S.NO
+    // ==============================
+
     doc.text(sno, x + 5, y + 5, {
       width: snoWidth - 10,
       align: 'center',
@@ -1000,15 +1214,23 @@ y = this.renderSignatures(
 
     x += snoWidth;
 
-    // Item
+    // ==============================
+    // ITEM / DESCRIPTION
+    // ==============================
+
     doc.text(item, x + 5, y + 5, {
       width: itemWidth - 10,
-      lineBreak: false
+      lineGap: 1
+      // IMPORTANT:
+      // Do NOT use lineBreak:false here
     });
 
     x += itemWidth;
 
-    // Qty
+    // ==============================
+    // QTY
+    // ==============================
+
     doc.text(qty, x + 5, y + 5, {
       width: qtyWidth - 10,
       align: 'center',
