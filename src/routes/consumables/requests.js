@@ -845,34 +845,74 @@ router.put('/:id/approve',
     //   return sendError(res, 'No inventory record found for this consumable', 400);
     // }
 
+//     let sourceLocationId = location_id || reqData.requester_location_id;
+
+// let stockCheck = await pool.request()
+//   .input('consumable_id', sql.UniqueIdentifier, reqData.consumable_id)
+//   .input('location_id', sql.UniqueIdentifier, sourceLocationId)
+//   .query(`
+//     SELECT id,
+//            quantity_in_stock,
+//            COALESCE(quantity_reserved,0) as quantity_reserved,
+//            location_id
+//     FROM consumable_inventory
+//     WHERE consumable_id = @consumable_id
+//       AND location_id = @location_id
+//   `);
+
+// // Fallback to any location having stock
+// if (stockCheck.recordset.length === 0) {
+//   stockCheck = await pool.request()
+//     .input('consumable_id', sql.UniqueIdentifier, reqData.consumable_id)
+//     .query(`
+//       SELECT TOP 1
+//              id,
+//              quantity_in_stock,
+//              COALESCE(quantity_reserved,0) as quantity_reserved,
+//              location_id
+//       FROM consumable_inventory
+//       WHERE consumable_id = @consumable_id
+//         AND quantity_in_stock > COALESCE(quantity_reserved,0)
+//       ORDER BY quantity_in_stock DESC
+//     `);
+// }
+
     let sourceLocationId = location_id || reqData.requester_location_id;
 
+// First try the specified/requester's location,
+// but ONLY if it has sufficient available stock.
 let stockCheck = await pool.request()
   .input('consumable_id', sql.UniqueIdentifier, reqData.consumable_id)
   .input('location_id', sql.UniqueIdentifier, sourceLocationId)
+  .input('quantity_requested', sql.Int, reqData.quantity_requested)
   .query(`
-    SELECT id,
+    SELECT TOP 1
+           id,
            quantity_in_stock,
-           COALESCE(quantity_reserved,0) as quantity_reserved,
+           COALESCE(quantity_reserved, 0) AS quantity_reserved,
            location_id
     FROM consumable_inventory
     WHERE consumable_id = @consumable_id
       AND location_id = @location_id
+      AND quantity_in_stock - COALESCE(quantity_reserved, 0) >= @quantity_requested
+    ORDER BY quantity_in_stock DESC
   `);
 
-// Fallback to any location having stock
+// If the requester's location does not have sufficient stock,
+// use another location that has sufficient stock.
 if (stockCheck.recordset.length === 0) {
   stockCheck = await pool.request()
     .input('consumable_id', sql.UniqueIdentifier, reqData.consumable_id)
+    .input('quantity_requested', sql.Int, reqData.quantity_requested)
     .query(`
       SELECT TOP 1
              id,
              quantity_in_stock,
-             COALESCE(quantity_reserved,0) as quantity_reserved,
+             COALESCE(quantity_reserved, 0) AS quantity_reserved,
              location_id
       FROM consumable_inventory
       WHERE consumable_id = @consumable_id
-        AND quantity_in_stock > COALESCE(quantity_reserved,0)
+        AND quantity_in_stock - COALESCE(quantity_reserved, 0) >= @quantity_requested
       ORDER BY quantity_in_stock DESC
     `);
 }
