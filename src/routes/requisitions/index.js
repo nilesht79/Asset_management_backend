@@ -351,7 +351,7 @@ router.get('/all-requisitions',
   SELECT
          r.*,
          loc.name AS location,
-         loc.floor AS floor,
+         loc.floor AS location_floor,
          cat.name AS category_name,
          subcat.name AS subcategory_name
   FROM ASSET_REQUISITIONS r
