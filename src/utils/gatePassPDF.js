@@ -140,6 +140,17 @@ class GatePassPDF {
 //       y = this.renderRemarks(doc, gatePass.remarks, margin, y, pageWidth);
 //     }
 
+    // ===== REMARKS =====
+if (gatePass.remarks && String(gatePass.remarks).trim()) {
+  y = this.renderRemarks(
+    doc,
+    gatePass.remarks,
+    margin,
+    y,
+    pageWidth
+  );
+}
+
 //     // ===== AUTHORIZATION & SIGNATURES =====
 //     if (y < maxY) {
 //     y += 15; // Gap before Authorization section
