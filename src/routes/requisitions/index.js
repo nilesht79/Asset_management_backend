@@ -335,16 +335,37 @@ router.get('/all-requisitions',
     dataRequest.input('offset', sql.Int, offset);
     dataRequest.input('limit', sql.Int, limit);
 
-    const result = await dataRequest.query(`
-      SELECT r.*,
-             cat.name as category_name,
-             subcat.name as subcategory_name
-      FROM ASSET_REQUISITIONS r
-      LEFT JOIN categories cat ON r.asset_category_id = cat.id
-      LEFT JOIN categories subcat ON r.product_type_id = subcat.id
-      WHERE ${whereClause.replace(/\b(status|urgency|department_id|requested_by|requisition_number|purpose|requester_name)\b/g, 'r.$1')}
-      ORDER BY r.created_at DESC
-      OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+    // const result = await dataRequest.query(`
+    //   SELECT r.*,
+    //          cat.name as category_name,
+    //          subcat.name as subcategory_name
+    //   FROM ASSET_REQUISITIONS r
+    //   LEFT JOIN categories cat ON r.asset_category_id = cat.id
+    //   LEFT JOIN categories subcat ON r.product_type_id = subcat.id
+    //   WHERE ${whereClause.replace(/\b(status|urgency|department_id|requested_by|requisition_number|purpose|requester_name)\b/g, 'r.$1')}
+    //   ORDER BY r.created_at DESC
+    //   OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+    // `);
+
+     const result = await dataRequest.query(`
+      SELECT
+       r.*,
+       u.location_id,
+       loc.name AS location,
+       cat.name AS category_name,
+       subcat.name AS subcategory_name
+FROM ASSET_REQUISITIONS r
+LEFT JOIN USER_MASTER u
+       ON r.requested_by = u.user_id
+LEFT JOIN locations loc
+       ON u.location_id = loc.id
+LEFT JOIN categories cat
+       ON r.asset_category_id = cat.id
+LEFT JOIN categories subcat
+       ON r.product_type_id = subcat.id
+WHERE ${whereClause.replace(/\b(status|urgency|department_id|requested_by|requisition_number|purpose|requester_name)\b/g, 'r.$1')}
+ORDER BY r.created_at DESC
+OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
     `);
 
     const pagination = getPaginationInfo(page, limit, total);
