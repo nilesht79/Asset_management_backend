@@ -271,6 +271,7 @@ router.get('/all-requisitions',
   validatePagination,
   asyncHandler(async (req, res) => {
     const { page, limit, offset } = req.pagination;
+    // const { status, urgency, search, department_id, requester_id } = req.query;
     const { status, urgency, search, department_id, requester_id } = req.query;
     const userId = req.oauth.user.id;
     const userRole = req.oauth.user.role;
@@ -307,11 +308,25 @@ router.get('/all-requisitions',
 const statsWhereClause = whereClause;
 const statsParams = [...params];
 
+//     if (status) {
+//   if (status === 'approved_by_it_head') {
+//     whereClause += " AND it_head_status = 'approved'";
+//   } else {
+//     whereClause += ' AND status = @status';
+
+//     params.push({
+//       name: 'status',
+//       type: sql.VarChar(50),
+//       value: status
+//     });
+//   }
+// }
+
     if (status) {
   if (status === 'approved_by_it_head') {
-    whereClause += " AND it_head_status = 'approved'";
+    whereClause += " AND r.it_head_status = 'approved'";
   } else {
-    whereClause += ' AND status = @status';
+    whereClause += ' AND r.status = @status';
 
     params.push({
       name: 'status',
@@ -321,8 +336,27 @@ const statsParams = [...params];
   }
 }
 
-if (urgency) {
-  whereClause += ' AND urgency = @urgency';
+// if (urgency) {
+//   whereClause += ' AND urgency = @urgency';
+//   params.push({
+//     name: 'urgency',
+//     type: sql.VarChar(20),
+//     value: urgency
+//   });
+// }
+
+// if (department_id) {
+//   whereClause += ' AND department_id = @departmentId';
+//   params.push({
+//     name: 'departmentId',
+//     type: sql.UniqueIdentifier,
+//     value: department_id
+//   });
+// }
+
+    if (urgency) {
+  whereClause += ' AND r.urgency = @urgency';
+
   params.push({
     name: 'urgency',
     type: sql.VarChar(20),
@@ -331,11 +365,22 @@ if (urgency) {
 }
 
 if (department_id) {
-  whereClause += ' AND department_id = @departmentId';
+  whereClause += ' AND r.department_id = @departmentId';
+
   params.push({
     name: 'departmentId',
     type: sql.UniqueIdentifier,
     value: department_id
+  });
+}
+
+    if (location_id) {
+  whereClause += ' AND u.location_id = @locationId';
+
+  params.push({
+    name: 'locationId',
+    type: sql.UniqueIdentifier,
+    value: location_id
   });
 }
 
@@ -348,8 +393,17 @@ if (requester_id) {
   });
 }
 
-if (search) {
-  whereClause += ' AND (requisition_number LIKE @search OR purpose LIKE @search OR requester_name LIKE @search)';
+// if (search) {
+//   whereClause += ' AND (requisition_number LIKE @search OR purpose LIKE @search OR requester_name LIKE @search)';
+
+    if (search) {
+  whereClause += `
+    AND (
+      r.requisition_number LIKE @search
+      OR r.purpose LIKE @search
+      OR r.requester_name LIKE @search
+    )
+  `;
 
   params.push({
     name: 'search',
