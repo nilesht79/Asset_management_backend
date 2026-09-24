@@ -302,13 +302,27 @@ router.get('/all-requisitions',
     // }
 
     // Additional filters
+// if (status) {
+//   whereClause += ' AND status = @status';
+//   params.push({
+//     name: 'status',
+//     type: sql.VarChar(50),
+//     value: status
+//   });
+// }
+
+    // Additional filters
 if (status) {
-  whereClause += ' AND status = @status';
-  params.push({
-    name: 'status',
-    type: sql.VarChar(50),
-    value: status
-  });
+  if (status === 'approved_by_it_head') {
+    whereClause += " AND it_head_status = 'approved'";
+  } else {
+    whereClause += ' AND status = @status';
+    params.push({
+      name: 'status',
+      type: sql.VarChar(50),
+      value: status
+    });
+  }
 }
 
     if (urgency) {
