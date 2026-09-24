@@ -391,18 +391,18 @@ if (department_id) {
   });
 }
 
-    if (location_id) {
-  whereClause += ' AND u.location_id = @locationId';
+//     if (location_id) {
+//   whereClause += ' AND u.location_id = @locationId';
 
-  params.push({
-    name: 'locationId',
-    type: sql.UniqueIdentifier,
-    value: location_id
-  });
-}
+//   params.push({
+//     name: 'locationId',
+//     type: sql.UniqueIdentifier,
+//     value: location_id
+//   });
+// }
 
 if (requester_id) {
-  whereClause += ' AND requested_by = @requesterId';
+  whereClause += ' AND r.requested_by = @requesterId';
   params.push({
     name: 'requesterId',
     type: sql.UniqueIdentifier,
