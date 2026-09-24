@@ -296,10 +296,20 @@ router.get('/all-requisitions',
     // Coordinators and IT heads see all requisitions (no additional filtering)
 
     // Additional filters
-    if (status) {
-      whereClause += ' AND status = @status';
-      params.push({ name: 'status', type: sql.VarChar(50), value: status });
-    }
+    // if (status) {
+    //   whereClause += ' AND status = @status';
+    //   params.push({ name: 'status', type: sql.VarChar(50), value: status });
+    // }
+
+    // Additional filters
+if (status) {
+  whereClause += ' AND status = @status';
+  params.push({
+    name: 'status',
+    type: sql.VarChar(50),
+    value: status
+  });
+}
 
     if (urgency) {
       whereClause += ' AND urgency = @urgency';
@@ -324,9 +334,14 @@ router.get('/all-requisitions',
     // Get total count
     const countRequest = pool.request();
     params.forEach(p => countRequest.input(p.name, p.type, p.value));
+    // const countResult = await countRequest.query(`
+    //   SELECT COUNT(*) as total FROM ASSET_REQUISITIONS WHERE ${whereClause}
+    // `);
     const countResult = await countRequest.query(`
-      SELECT COUNT(*) as total FROM ASSET_REQUISITIONS WHERE ${whereClause}
-    `);
+  SELECT COUNT(*) AS total
+  FROM ASSET_REQUISITIONS
+  WHERE ${whereClause}
+`);
     const total = countResult.recordset[0].total;
 
     // Get paginated results
@@ -347,7 +362,28 @@ router.get('/all-requisitions',
     //   OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
     // `);
 
-     const result = await dataRequest.query(`
+//      const result = await dataRequest.query(`
+//   SELECT
+//          r.*,
+//          loc.name AS location,
+//          loc.floor AS location_floor,
+//          cat.name AS category_name,
+//          subcat.name AS subcategory_name
+//   FROM ASSET_REQUISITIONS r
+//   LEFT JOIN USER_MASTER u
+//          ON r.requested_by = u.user_id
+//   LEFT JOIN locations loc
+//          ON u.location_id = loc.id
+//   LEFT JOIN categories cat
+//          ON r.asset_category_id = cat.id
+//   LEFT JOIN categories subcat
+//          ON r.product_type_id = subcat.id
+//   WHERE ${whereClause.replace(/\b(status|urgency|department_id|requested_by|requisition_number|purpose|requester_name)\b/g, 'r.$1')}
+//   ORDER BY r.created_at DESC
+//   OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+// `);
+
+    const result = await dataRequest.query(`
   SELECT
          r.*,
          loc.name AS location,
@@ -363,7 +399,7 @@ router.get('/all-requisitions',
          ON r.asset_category_id = cat.id
   LEFT JOIN categories subcat
          ON r.product_type_id = subcat.id
-  WHERE ${whereClause.replace(/\b(status|urgency|department_id|requested_by|requisition_number|purpose|requester_name)\b/g, 'r.$1')}
+  WHERE ${whereClause}
   ORDER BY r.created_at DESC
   OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
 `);
