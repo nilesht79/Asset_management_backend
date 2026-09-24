@@ -272,7 +272,14 @@ router.get('/all-requisitions',
   asyncHandler(async (req, res) => {
     const { page, limit, offset } = req.pagination;
     // const { status, urgency, search, department_id, requester_id } = req.query;
-    const { status, urgency, search, department_id, requester_id } = req.query;
+    const {
+  status,
+  urgency,
+  search,
+  location_id,
+  department_id,
+  requester_id
+} = req.query;
     const userId = req.oauth.user.id;
     const userRole = req.oauth.user.role;
 
@@ -354,7 +361,17 @@ const statsParams = [...params];
 //   });
 // }
 
-    if (urgency) {
+    if (location_id) {
+  whereClause += ' AND u.location_id = @locationId';
+
+  params.push({
+    name: 'locationId',
+    type: sql.UniqueIdentifier,
+    value: location_id
+  });
+}
+
+  if (urgency) {
   whereClause += ' AND r.urgency = @urgency';
 
   params.push({
@@ -485,9 +502,17 @@ const stats = {
     // const countResult = await countRequest.query(`
     //   SELECT COUNT(*) as total FROM ASSET_REQUISITIONS WHERE ${whereClause}
     // `);
+//     const countResult = await countRequest.query(`
+//   SELECT COUNT(*) AS total
+//   FROM ASSET_REQUISITIONS
+//   WHERE ${whereClause}
+// `);
+
     const countResult = await countRequest.query(`
   SELECT COUNT(*) AS total
-  FROM ASSET_REQUISITIONS
+  FROM ASSET_REQUISITIONS r
+  LEFT JOIN USER_MASTER u
+      ON r.requested_by = u.user_id
   WHERE ${whereClause}
 `);
     const total = countResult.recordset[0].total;
