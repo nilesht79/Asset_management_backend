@@ -293,7 +293,19 @@ router.get('/all-requisitions',
         params.push({ name: 'userDepartmentId', type: sql.UniqueIdentifier, value: userDept.recordset[0].department_id });
       }
     }
+
+    
     // Coordinators and IT heads see all requisitions (no additional filtering)
+
+    // ============================================================
+// GLOBAL STATISTICS FILTER
+// This is intentionally created BEFORE status/search/urgency
+// filters so card counts are always calculated from all
+// requisitions visible to the current role.
+// ============================================================
+
+const statsWhereClause = whereClause;
+const statsParams = [...params];
 
     // Additional filters
     // if (status) {
@@ -457,13 +469,84 @@ router.get('/my-requisitions',
       params.push({ name: 'search', type: sql.VarChar(255), value: `%${search}%` });
     }
 
-    // Get total count
-    const countRequest = pool.request();
-    params.forEach(p => countRequest.input(p.name, p.type, p.value));
-    const countResult = await countRequest.query(`
-      SELECT COUNT(*) as total FROM ASSET_REQUISITIONS WHERE ${whereClause}
-    `);
-    const total = countResult.recordset[0].total;
+    // // Get total count
+    // const countRequest = pool.request();
+    // params.forEach(p => countRequest.input(p.name, p.type, p.value));
+    // const countResult = await countRequest.query(`
+    //   SELECT COUNT(*) as total FROM ASSET_REQUISITIONS WHERE ${whereClause}
+    // `);
+    // const total = countResult.recordset[0].total;
+
+      // ============================================================
+  // GLOBAL CARD STATISTICS
+  // These counts ignore status/search/urgency/department filters.
+  // They are calculated from ALL requisitions visible to the user.
+  // ============================================================
+  
+  const statsRequest = pool.request();
+  
+  statsParams.forEach(p => {
+    statsRequest.input(p.name, p.type, p.value);
+  });
+  
+  const statsResult = await statsRequest.query(`
+    SELECT
+      COUNT(*) AS total,
+  
+      SUM(
+        CASE
+          WHEN status = 'pending_it_head'
+          THEN 1
+          ELSE 0
+        END
+      ) AS pending,
+  
+      SUM(
+        CASE
+          WHEN it_head_status = 'approved'
+          THEN 1
+          ELSE 0
+        END
+      ) AS approved,
+  
+      SUM(
+        CASE
+          WHEN status = 'rejected_by_it_head'
+          THEN 1
+          ELSE 0
+        END
+      ) AS rejected
+  
+    FROM ASSET_REQUISITIONS
+    WHERE ${statsWhereClause}
+  `);
+  
+  const stats = {
+    total: Number(statsResult.recordset[0].total || 0),
+    pending: Number(statsResult.recordset[0].pending || 0),
+    approved: Number(statsResult.recordset[0].approved || 0),
+    rejected: Number(statsResult.recordset[0].rejected || 0)
+  };
+  
+  
+  // ============================================================
+  // FILTERED RESULT COUNT
+  // This count is ONLY for the list and pagination.
+  // ============================================================
+  
+  const countRequest = pool.request();
+  
+  params.forEach(p => {
+    countRequest.input(p.name, p.type, p.value);
+  });
+  
+  const countResult = await countRequest.query(`
+    SELECT COUNT(*) AS total
+    FROM ASSET_REQUISITIONS
+    WHERE ${whereClause}
+  `);
+  
+  const total = countResult.recordset[0].total;
 
     // Get paginated results
     const dataRequest = pool.request();
@@ -486,9 +569,10 @@ router.get('/my-requisitions',
     const pagination = getPaginationInfo(page, limit, total);
 
     sendSuccess(res, {
-      requisitions: result.recordset,
-      pagination
-    }, 'Requisitions retrieved successfully');
+  requisitions: result.recordset,
+  pagination,
+  stats
+}, 'Requisitions retrieved successfully');
   })
 );
 
