@@ -307,6 +307,57 @@ router.get('/all-requisitions',
 const statsWhereClause = whereClause;
 const statsParams = [...params];
 
+    if (status) {
+  if (status === 'approved_by_it_head') {
+    whereClause += " AND it_head_status = 'approved'";
+  } else {
+    whereClause += ' AND status = @status';
+
+    params.push({
+      name: 'status',
+      type: sql.VarChar(50),
+      value: status
+    });
+  }
+}
+
+if (urgency) {
+  whereClause += ' AND urgency = @urgency';
+  params.push({
+    name: 'urgency',
+    type: sql.VarChar(20),
+    value: urgency
+  });
+}
+
+if (department_id) {
+  whereClause += ' AND department_id = @departmentId';
+  params.push({
+    name: 'departmentId',
+    type: sql.UniqueIdentifier,
+    value: department_id
+  });
+}
+
+if (requester_id) {
+  whereClause += ' AND requested_by = @requesterId';
+  params.push({
+    name: 'requesterId',
+    type: sql.UniqueIdentifier,
+    value: requester_id
+  });
+}
+
+if (search) {
+  whereClause += ' AND (requisition_number LIKE @search OR purpose LIKE @search OR requester_name LIKE @search)';
+
+  params.push({
+    name: 'search',
+    type: sql.VarChar(255),
+    value: `%${search}%`
+  });
+}
+
     // Additional filters
     // if (status) {
     //   whereClause += ' AND status = @status';
@@ -323,39 +374,56 @@ const statsParams = [...params];
 //   });
 // }
 
-    // Additional filters
-if (status) {
-  if (status === 'approved_by_it_head') {
-    whereClause += " AND it_head_status = 'approved'";
-  } else {
-    whereClause += ' AND status = @status';
-    params.push({
-      name: 'status',
-      type: sql.VarChar(50),
-      value: status
-    });
-  }
-}
+      // ============================================================
+// GLOBAL CARD STATISTICS
+// These statistics are NOT affected by status/search/urgency
+// filters. They are based on all requisitions visible to IT Head.
+// ============================================================
 
-    if (urgency) {
-      whereClause += ' AND urgency = @urgency';
-      params.push({ name: 'urgency', type: sql.VarChar(20), value: urgency });
-    }
+const statsRequest = pool.request();
 
-    if (department_id) {
-      whereClause += ' AND department_id = @departmentId';
-      params.push({ name: 'departmentId', type: sql.UniqueIdentifier, value: department_id });
-    }
+statsParams.forEach(p => {
+  statsRequest.input(p.name, p.type, p.value);
+});
 
-    if (requester_id) {
-      whereClause += ' AND requested_by = @requesterId';
-      params.push({ name: 'requesterId', type: sql.UniqueIdentifier, value: requester_id });
-    }
+const statsResult = await statsRequest.query(`
+  SELECT
+    COUNT(*) AS total,
 
-    if (search) {
-      whereClause += ' AND (requisition_number LIKE @search OR purpose LIKE @search OR requester_name LIKE @search)';
-      params.push({ name: 'search', type: sql.VarChar(255), value: `%${search}%` });
-    }
+    SUM(
+      CASE
+        WHEN status = 'pending_it_head'
+        THEN 1
+        ELSE 0
+      END
+    ) AS pending,
+
+    SUM(
+      CASE
+        WHEN it_head_status = 'approved'
+        THEN 1
+        ELSE 0
+      END
+    ) AS approved,
+
+    SUM(
+      CASE
+        WHEN status = 'rejected_by_it_head'
+        THEN 1
+        ELSE 0
+      END
+    ) AS rejected
+
+  FROM ASSET_REQUISITIONS
+  WHERE ${statsWhereClause}
+`);
+
+const stats = {
+  total: Number(statsResult.recordset[0].total || 0),
+  pending: Number(statsResult.recordset[0].pending || 0),
+  approved: Number(statsResult.recordset[0].approved || 0),
+  rejected: Number(statsResult.recordset[0].rejected || 0)
+};
 
     // Get total count
     const countRequest = pool.request();
@@ -432,10 +500,15 @@ if (status) {
 
     const pagination = getPaginationInfo(page, limit, total);
 
+    // sendSuccess(res, {
+    //   requisitions: result.recordset,
+    //   pagination
+    // }, 'Requisitions retrieved successfully');
     sendSuccess(res, {
-      requisitions: result.recordset,
-      pagination
-    }, 'Requisitions retrieved successfully');
+  requisitions: result.recordset,
+  pagination,
+  stats
+}, 'Requisitions retrieved successfully');
   })
 );
 
@@ -477,56 +550,56 @@ router.get('/my-requisitions',
     // `);
     // const total = countResult.recordset[0].total;
 
-      // ============================================================
-  // GLOBAL CARD STATISTICS
-  // These counts ignore status/search/urgency/department filters.
-  // They are calculated from ALL requisitions visible to the user.
-  // ============================================================
+  //     // ============================================================
+  // // GLOBAL CARD STATISTICS
+  // // These counts ignore status/search/urgency/department filters.
+  // // They are calculated from ALL requisitions visible to the user.
+  // // ============================================================
   
-  const statsRequest = pool.request();
+  // const statsRequest = pool.request();
   
-  statsParams.forEach(p => {
-    statsRequest.input(p.name, p.type, p.value);
-  });
+  // statsParams.forEach(p => {
+  //   statsRequest.input(p.name, p.type, p.value);
+  // });
   
-  const statsResult = await statsRequest.query(`
-    SELECT
-      COUNT(*) AS total,
+  // const statsResult = await statsRequest.query(`
+  //   SELECT
+  //     COUNT(*) AS total,
   
-      SUM(
-        CASE
-          WHEN status = 'pending_it_head'
-          THEN 1
-          ELSE 0
-        END
-      ) AS pending,
+  //     SUM(
+  //       CASE
+  //         WHEN status = 'pending_it_head'
+  //         THEN 1
+  //         ELSE 0
+  //       END
+  //     ) AS pending,
   
-      SUM(
-        CASE
-          WHEN it_head_status = 'approved'
-          THEN 1
-          ELSE 0
-        END
-      ) AS approved,
+  //     SUM(
+  //       CASE
+  //         WHEN it_head_status = 'approved'
+  //         THEN 1
+  //         ELSE 0
+  //       END
+  //     ) AS approved,
   
-      SUM(
-        CASE
-          WHEN status = 'rejected_by_it_head'
-          THEN 1
-          ELSE 0
-        END
-      ) AS rejected
+  //     SUM(
+  //       CASE
+  //         WHEN status = 'rejected_by_it_head'
+  //         THEN 1
+  //         ELSE 0
+  //       END
+  //     ) AS rejected
   
-    FROM ASSET_REQUISITIONS
-    WHERE ${statsWhereClause}
-  `);
+  //   FROM ASSET_REQUISITIONS
+  //   WHERE ${statsWhereClause}
+  // `);
   
-  const stats = {
-    total: Number(statsResult.recordset[0].total || 0),
-    pending: Number(statsResult.recordset[0].pending || 0),
-    approved: Number(statsResult.recordset[0].approved || 0),
-    rejected: Number(statsResult.recordset[0].rejected || 0)
-  };
+  // const stats = {
+  //   total: Number(statsResult.recordset[0].total || 0),
+  //   pending: Number(statsResult.recordset[0].pending || 0),
+  //   approved: Number(statsResult.recordset[0].approved || 0),
+  //   rejected: Number(statsResult.recordset[0].rejected || 0)
+  // };
   
   
   // ============================================================
