@@ -290,14 +290,12 @@ a.hostname, a.status, a.condition_status, a.importance, a.purchase_date,
   subcat.id as subcategory_id, subcat.name as subcategory_name,
   o.id as oem_id, o.name as oem_name,
   v.id as vendor_id, v.name as vendor_name, v.code as vendor_code,
-//  COALESCE(parent.location_id, a.location_id, u.location_id) as location_id,
-// COALESCE(parent.department_id, a.department_id, u.department_id) as department_id,
 a.location_id as location_id,
 a.department_id as department_id,
   u.first_name + ' ' + u.last_name as assigned_user_name,
   u.email as assigned_user_email,
   u.employee_id as assigned_employee_code,
-  d.department_name as department,
+  dept.department_name as department,
   l.name as location_name,
   l.address as location_address,
   l.building as location_building,
@@ -1654,8 +1652,11 @@ router.get('/dropdown',
 
      if (location_id) {
   query += `
-    AND COALESCE(a.location_id, u.location_id) = @locationId
+    AND a.location_id = @locationId
   `;
+
+  request.input('locationId', sql.UniqueIdentifier, location_id);
+}
 
   request.input('locationId', sql.UniqueIdentifier, location_id);
 }
