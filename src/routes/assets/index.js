@@ -374,7 +374,7 @@ a.department_id as department_id,
         u.first_name + ' ' + u.last_name as assigned_user_name,
         u.email as assigned_user_email,
         u.employee_id as assigned_employee_code,
-        d.department_name as department,
+        dept.department_name as department,
         l.name as location_name,
         l.address as location_address,
         l.building as location_building,
@@ -1650,13 +1650,10 @@ router.get('/dropdown',
     // }
 
 
-     if (location_id) {
+   if (location_id) {
   query += `
     AND a.location_id = @locationId
   `;
-
-  request.input('locationId', sql.UniqueIdentifier, location_id);
-}
 
   request.input('locationId', sql.UniqueIdentifier, location_id);
 }
