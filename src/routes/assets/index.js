@@ -136,21 +136,17 @@ router.get('/',
     //   params.push({ name: 'locationId', type: sql.UniqueIdentifier, value: location_id });
     // }
 
-     if (location_id) {
-        whereClause += `
-          AND COALESCE(
-            parent.location_id,
-            a.location_id,
-            u.location_id
-          ) = @locationId
-        `;
+    if (location_id) {
+  whereClause += `
+    AND a.location_id = @locationId
+  `;
 
-        params.push({
-          name: 'locationId',
-          type: sql.UniqueIdentifier,
-          value: location_id
-        });
-      }
+  params.push({
+    name: 'locationId',
+    type: sql.UniqueIdentifier,
+    value: location_id
+  });
+}
 
     // if (assigned_to) {
     //   whereClause += ' AND a.assigned_to = @assignedTo';
@@ -263,12 +259,8 @@ if (board_id) {
       LEFT JOIN USER_MASTER u
       ON COALESCE(parent.assigned_to, a.assigned_to) = u.user_id
 
-      LEFT JOIN DEPARTMENT_MASTER dept
-      ON COALESCE(
-          parent.department_id,
-          a.department_id,
-          u.department_id
-      ) = dept.department_id
+     LEFT JOIN DEPARTMENT_MASTER dept
+    ON a.department_id = dept.department_id
       WHERE ${whereClause}
     `);
 
@@ -298,8 +290,10 @@ a.hostname, a.status, a.condition_status, a.importance, a.purchase_date,
   subcat.id as subcategory_id, subcat.name as subcategory_name,
   o.id as oem_id, o.name as oem_name,
   v.id as vendor_id, v.name as vendor_name, v.code as vendor_code,
- COALESCE(parent.location_id, a.location_id, u.location_id) as location_id,
-COALESCE(parent.department_id, a.department_id, u.department_id) as department_id,
+//  COALESCE(parent.location_id, a.location_id, u.location_id) as location_id,
+// COALESCE(parent.department_id, a.department_id, u.department_id) as department_id,
+a.location_id as location_id,
+a.department_id as department_id,
   u.first_name + ' ' + u.last_name as assigned_user_name,
   u.email as assigned_user_email,
   u.employee_id as assigned_employee_code,
@@ -333,19 +327,11 @@ ON COALESCE(parent.assigned_to, a.assigned_to) = u.user_id
 
 -- Department
 LEFT JOIN DEPARTMENT_MASTER d
-ON COALESCE(
-    parent.department_id,
-    a.department_id,
-    u.department_id
-) = d.department_id
+    ON a.department_id = d.department_id
 
 -- Location
 LEFT JOIN locations l
-ON COALESCE(
-    parent.location_id,
-    a.location_id,
-    u.location_id
-) = l.id
+    ON a.location_id = l.id
 WHERE ${whereClause}
 ORDER BY ${safeSortBy} ${safeSortOrder}
 OFFSET @offset ROWS
@@ -385,8 +371,8 @@ a.hostname, a.condition_status, a.importance, a.purchase_date,
         subcat.id as subcategory_id, subcat.name as subcategory_name,
         o.id as oem_id, o.name as oem_name,
         v.id as vendor_id, v.name as vendor_name, v.code as vendor_code,
-        COALESCE(a.location_id, u.location_id) as location_id,
-        COALESCE(a.department_id, u.department_id) as department_id,
+        a.location_id as location_id,
+a.department_id as department_id,
         u.first_name + ' ' + u.last_name as assigned_user_name,
         u.email as assigned_user_email,
         u.employee_id as assigned_employee_code,
@@ -419,20 +405,12 @@ LEFT JOIN USER_MASTER u
 ON COALESCE(parent.assigned_to, a.assigned_to) = u.user_id
 
 -- Department
-LEFT JOIN DEPARTMENT_MASTER d
-ON COALESCE(
-    parent.department_id,
-    a.department_id,
-    u.department_id
-) = d.department_id
+LEFT JOIN DEPARTMENT_MASTER dept
+    ON a.department_id = dept.department_id
 
 -- Location
 LEFT JOIN locations l
-ON COALESCE(
-    parent.location_id,
-    a.location_id,
-    u.location_id
-) = l.id
+    ON a.location_id = l.id
       WHERE ${whereClause}
       ORDER BY ${safeSortBy} ${safeSortOrder}
       OFFSET @offset ROWS
@@ -483,18 +461,35 @@ router.get('/statistics',
       WHERE is_active = 1
     `);
 
-    // Get location distribution (assets inherit location from assigned users)
-    const locationResult = await pool.request().query(`
-      SELECT
-        l.id, l.name as location_name, l.building, l.floor,
-        COUNT(a.id) as asset_count
-      FROM locations l
-      LEFT JOIN USER_MASTER u ON l.id = u.location_id AND u.is_active = 1
-      LEFT JOIN assets a ON u.user_id = a.assigned_to AND a.is_active = 1
-      WHERE l.is_active = 1
-      GROUP BY l.id, l.name, l.building, l.floor
-      ORDER BY asset_count DESC
-    `);
+    // // Get location distribution (assets inherit location from assigned users)
+    // const locationResult = await pool.request().query(`
+    //   SELECT
+    //     l.id, l.name as location_name, l.building, l.floor,
+    //     COUNT(a.id) as asset_count
+    //   FROM locations l
+    //   LEFT JOIN USER_MASTER u ON l.id = u.location_id AND u.is_active = 1
+    //   LEFT JOIN assets a ON u.user_id = a.assigned_to AND a.is_active = 1
+    //   WHERE l.is_active = 1
+    //   GROUP BY l.id, l.name, l.building, l.floor
+    //   ORDER BY asset_count DESC
+    // `);
+
+    // Get location distribution based on asset's own location
+const locationResult = await pool.request().query(`
+  SELECT
+    l.id,
+    l.name as location_name,
+    l.building,
+    l.floor,
+    COUNT(a.id) as asset_count
+  FROM locations l
+  LEFT JOIN assets a
+    ON l.id = a.location_id
+    AND a.is_active = 1
+  WHERE l.is_active = 1
+  GROUP BY l.id, l.name, l.building, l.floor
+  ORDER BY asset_count DESC
+`);
 
     // Get category distribution
     const categoryResult = await pool.request().query(`
@@ -846,21 +841,17 @@ router.get('/export',
     //   params.push({ name: 'locationId', type: sql.UniqueIdentifier, value: location_id });
     // }
 
-     if (location_id) {
-        whereClause += `
-          AND COALESCE(
-            parent.location_id,
-            a.location_id,
-            u.location_id
-          ) = @locationId
-        `;
+    if (location_id) {
+  whereClause += `
+    AND a.location_id = @locationId
+  `;
 
-        params.push({
-          name: 'locationId',
-          type: sql.UniqueIdentifier,
-          value: location_id
-        });
-      }
+  params.push({
+    name: 'locationId',
+    type: sql.UniqueIdentifier,
+    value: location_id
+  });
+}
 
     // if (assigned_to) {
     //   whereClause += ' AND a.assigned_to = @assignedTo';
@@ -967,10 +958,10 @@ INNER JOIN products p ON a.product_id = p.id
 LEFT JOIN categories c ON p.category_id = c.id
 LEFT JOIN oems o ON p.oem_id = o.id
 LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
-      LEFT JOIN locations l 
-      ON COALESCE(a.location_id, u.location_id) = l.id
-      LEFT JOIN DEPARTMENT_MASTER d 
-      ON COALESCE(a.department_id, u.department_id) = d.department_id
+  LEFT JOIN locations l
+    ON a.location_id = l.id
+    LEFT JOIN DEPARTMENT_MASTER d
+    ON a.department_id = d.department_id
 LEFT JOIN assets parent ON a.parent_asset_id = parent.id
 WHERE ${whereClause}
 ORDER BY a.created_at DESC
@@ -1021,19 +1012,11 @@ ON COALESCE(parent.assigned_to, a.assigned_to) = u.user_id
 
 -- Department
 LEFT JOIN DEPARTMENT_MASTER d
-ON COALESCE(
-    parent.department_id,
-    a.department_id,
-    u.department_id
-) = d.department_id
+    ON a.department_id = d.department_id
 
 -- Location
 LEFT JOIN locations l
-ON COALESCE(
-    parent.location_id,
-    a.location_id,
-    u.location_id
-) = l.id
+    ON a.location_id = l.id
       WHERE ${whereClause}
       ORDER BY a.created_at DESC
     `);
@@ -1170,7 +1153,7 @@ router.get('/deleted',
         a.purchase_cost, a.notes, a.created_at, a.updated_at,
         a.product_id, p.name as product_name, p.model as product_model, p.description as product_description,
         p.specifications, p.warranty_period,
-        u.location_id, u.department_id, l.name as location_name, l.address as location_address, d.name as department_name,
+        a.location_id, a.department_id, l.name as location_name, l.address as location_address, d.name as department_name,
         a.assigned_to, u.first_name + ' ' + u.last_name as assigned_user_name,
         u.email as assigned_user_email, u.employee_id,
         c.id as category_id, c.name as category_name,
@@ -1182,7 +1165,7 @@ router.get('/deleted',
       LEFT JOIN categories sc ON p.subcategory_id = sc.id
       LEFT JOIN oems o ON p.oem_id = o.id
       LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
-      LEFT JOIN locations l ON COALESCE(a.location_id, u.location_id) = l.id
+      LEFT JOIN locations l ON a.location_id = l.id
       WHERE ${whereClause}
       ORDER BY a.${sort_by} ${order.toUpperCase()}
       OFFSET @offset ROWS
@@ -2069,7 +2052,7 @@ router.get('/:id',
           a.eol_date, a.eos_date,
           a.product_id, p.name as product_name, p.model as product_model, p.description as product_description,
           p.specifications, p.warranty_period,
-          COALESCE(a.location_id, u.location_id) as location_id, COALESCE(a.department_id, u.department_id) as department_id, l.name as location_name, l.address as location_address, d.name as department_name,
+          a.location_id as location_id, a.department_id as department_id, l.name as location_name, l.address as location_address, d.name as department_name,
           a.assigned_to, u.first_name + ' ' + u.last_name as assigned_user_name,
           u.email as assigned_user_email, u.employee_id,
           c.id as category_id, c.name as category_name,
@@ -2088,7 +2071,7 @@ router.get('/:id',
         LEFT JOIN categories sc ON p.subcategory_id = sc.id
         LEFT JOIN oems o ON p.oem_id = o.id
         LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
-        LEFT JOIN locations l ON COALESCE(a.location_id, u.location_id) = l.id
+        LEFT JOIN locations l ON a.location_id = l.id
         WHERE a.id = @id AND a.is_active = 1
       `);
 
@@ -3028,14 +3011,14 @@ router.put('/:id',
         v.name as vendor_name, v.code as vendor_code,
         parent.asset_tag as parent_asset_tag,
         installer.first_name + ' ' + installer.last_name as installed_by_name,
-        COALESCE(a.location_id, u.location_id) as location_id, COALESCE(a.department_id, u.department_id) as department_id
+        a.location_id as location_id, a.department_id as department_id
       FROM assets a
       INNER JOIN products p ON a.product_id = p.id
       LEFT JOIN categories c ON p.category_id = c.id
       LEFT JOIN oems o ON p.oem_id = o.id
       LEFT JOIN vendors v ON a.vendor_id = v.id
       LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
-      LEFT JOIN locations l ON COALESCE(a.location_id, u.location_id) = l.id
+      LEFT JOIN locations l ON a.location_id = l.id
       LEFT JOIN assets parent ON a.parent_asset_id = parent.id
       LEFT JOIN USER_MASTER installer ON a.installed_by = installer.user_id
       WHERE a.id = @id;
