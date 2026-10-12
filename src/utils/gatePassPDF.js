@@ -47,7 +47,7 @@ class GatePassPDF {
         new_assignment: 'New Assignment',
         temporary_handover: 'Temporary Handover',
         permanent_transfer: 'Permanent Transfer',
-        repair_return: 'Repair and Return'
+        repair_return: 'Repair and Working done Successfully'
       }
     }
   };
