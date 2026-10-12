@@ -915,7 +915,7 @@ router.get(
         WHEN 'new_assignment' THEN 'New Assignment'
         WHEN 'temporary_handover' THEN 'Temporary Handover'
         WHEN 'permanent_transfer' THEN 'Permanent Transfer'
-        WHEN 'repair_return' THEN 'Repair and Return'
+        WHEN 'repair_return' THEN 'Repair and Working done Successfully'
         ELSE gp.purpose
     END AS [Purpose],
 
