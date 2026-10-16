@@ -129,6 +129,45 @@ router.get('/',
     dataRequest.input('offset', sql.Int, offset);
     dataRequest.input('limit', sql.Int, limit);
 
+    // const result = await dataRequest.query(`
+    //   SELECT
+    //     cr.*,
+    //     c.name as consumable_name,
+    //     c.sku as consumable_sku,
+    //     cc.name as category_name,
+    //     a.asset_tag,
+    //     a.serial_number as asset_serial,
+    //     p.name as asset_product_name,
+    //     req.first_name + ' ' + req.last_name as requested_by_name,
+    //     req.email as requested_by_email,
+    //     req_loc.name as requester_location_name,
+    //     req_loc.id as requester_location_id,
+    //     app.first_name + ' ' + app.last_name as approved_by_name,
+    //     eng.first_name + ' ' + eng.last_name as assigned_engineer_name,
+    //     eng.email as assigned_engineer_email,
+    //     creator.first_name + ' ' + creator.last_name as created_by_name
+    //   FROM consumable_requests cr
+    //   JOIN consumables c ON cr.consumable_id = c.id
+    //   JOIN consumable_categories cc ON c.category_id = cc.id
+    //   LEFT JOIN assets a ON cr.for_asset_id = a.id
+    //   LEFT JOIN products p ON a.product_id = p.id
+    //   JOIN USER_MASTER req ON cr.requested_by = req.user_id
+    //   LEFT JOIN locations req_loc ON req.location_id = req_loc.id
+    //   LEFT JOIN USER_MASTER app ON cr.approved_by = app.user_id
+    //   LEFT JOIN USER_MASTER eng ON cr.assigned_engineer = eng.user_id
+    //   LEFT JOIN USER_MASTER creator ON cr.created_by = creator.user_id
+    //   WHERE ${whereClause}
+    //   ORDER BY
+    //     CASE cr.priority
+    //       WHEN 'urgent' THEN 1
+    //       WHEN 'high' THEN 2
+    //       WHEN 'normal' THEN 3
+    //       WHEN 'low' THEN 4
+    //     END,
+    //     cr.created_at DESC
+    //   OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+    // `);
+
     const result = await dataRequest.query(`
       SELECT
         cr.*,
@@ -157,15 +196,10 @@ router.get('/',
       LEFT JOIN USER_MASTER eng ON cr.assigned_engineer = eng.user_id
       LEFT JOIN USER_MASTER creator ON cr.created_by = creator.user_id
       WHERE ${whereClause}
-      ORDER BY
-        CASE cr.priority
-          WHEN 'urgent' THEN 1
-          WHEN 'high' THEN 2
-          WHEN 'normal' THEN 3
-          WHEN 'low' THEN 4
-        END,
-        cr.created_at DESC
-      OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+ORDER BY
+  cr.created_at ASC,
+  cr.request_number ASC
+OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
     `);
 
     const pagination = getPaginationInfo(page, limit, countResult.recordset[0].total);
@@ -227,6 +261,21 @@ router.get('/my-requests',
     dataRequest.input('offset', sql.Int, offset);
     dataRequest.input('limit', sql.Int, limit);
 
+    // const result = await dataRequest.query(`
+    //   SELECT
+    //     cr.*,
+    //     c.name as consumable_name,
+    //     cc.name as category_name,
+    //     a.asset_tag
+    //   FROM consumable_requests cr
+    //   JOIN consumables c ON cr.consumable_id = c.id
+    //   JOIN consumable_categories cc ON c.category_id = cc.id
+    //   LEFT JOIN assets a ON cr.for_asset_id = a.id
+    //   WHERE ${whereClause}
+    //   ORDER BY cr.created_at DESC
+    //   OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+    // `);
+
     const result = await dataRequest.query(`
       SELECT
         cr.*,
@@ -238,7 +287,9 @@ router.get('/my-requests',
       JOIN consumable_categories cc ON c.category_id = cc.id
       LEFT JOIN assets a ON cr.for_asset_id = a.id
       WHERE ${whereClause}
-      ORDER BY cr.created_at DESC
+      ORDER BY
+        cr.created_at ASC,
+        cr.request_number ASC
       OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
     `);
 
