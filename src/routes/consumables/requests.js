@@ -197,8 +197,8 @@ router.get('/',
       LEFT JOIN USER_MASTER creator ON cr.created_by = creator.user_id
       WHERE ${whereClause}
 ORDER BY
-  cr.created_at ASC,
-  cr.request_number ASC
+  cr.created_at DESC,
+  cr.request_number DESC
 OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
     `);
 
@@ -288,8 +288,8 @@ router.get('/my-requests',
       LEFT JOIN assets a ON cr.for_asset_id = a.id
       WHERE ${whereClause}
       ORDER BY
-        cr.created_at ASC,
-        cr.request_number ASC
+        cr.created_at DESC,
+        cr.request_number DESC
       OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
     `);
 
