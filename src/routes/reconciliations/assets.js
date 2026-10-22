@@ -500,6 +500,7 @@ router.get(
         a.serial_number AS [Serial No],
         CONCAT(u.first_name, ' ', u.last_name) AS [Assigned To],
         u.email AS [Email],
+        d.department_name AS [Department],
         CONCAT(
           l.name,
           CASE
@@ -536,6 +537,8 @@ router.get(
         ON a.product_id = p.id
       LEFT JOIN USER_MASTER u
         ON a.assigned_to = u.user_id
+        LEFT JOIN DEPARTMENT_MASTER d
+  ON u.department_id = d.department_id
       LEFT JOIN locations l
         ON a.location_id = l.id
       LEFT JOIN RECONCILIATION_RECORDS rr
@@ -564,6 +567,7 @@ router.get(
       { header: 'Serial No', key: 'Serial No', width: 24 },
       { header: 'Assigned To', key: 'Assigned To', width: 28 },
       { header: 'Email', key: 'Email', width: 34 },
+      { header: 'Department', key: 'Department', width: 22 },
       { header: 'Location', key: 'Location', width: 30 },
       { header: 'Asset Status', key: 'Asset Status', width: 18 },
       {
@@ -586,6 +590,7 @@ router.get(
         'Serial No': record['Serial No'],
         'Assigned To': record['Assigned To'],
         Email: record.Email,
+        Department: record.Department,
         Location: record.Location,
         'Asset Status': record['Asset Status'],
         'Reconciliation Status': record['Reconciliation Status'],
