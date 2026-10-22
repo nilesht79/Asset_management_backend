@@ -266,10 +266,34 @@ router.get('/',
     let whereClause = 'a.is_active = 1 AND (a.is_standby_asset = 0 OR a.is_standby_asset IS NULL)';
     const params = [];
 
-    if (search) {
-      whereClause += ' AND (a.asset_tag LIKE @search OR p.name LIKE @search OR a.serial_number LIKE @search)';
-      params.push({ name: 'search', type: sql.VarChar(255), value: `%${search}%` });
-    }
+    // if (search) {
+    //   whereClause += ' AND (a.asset_tag LIKE @search OR p.name LIKE @search OR a.serial_number LIKE @search)';
+    //   params.push({ name: 'search', type: sql.VarChar(255), value: `%${search}%` });
+    // }
+
+    if (search && search.trim()) {
+  whereClause += `
+    AND (
+      a.asset_tag LIKE @search
+      OR p.name LIKE @search
+      OR p.model LIKE @search
+      OR a.serial_number LIKE @search
+      OR u.first_name LIKE @search
+      OR u.last_name LIKE @search
+      OR CONCAT(u.first_name, ' ', u.last_name) LIKE @search
+      OR u.email LIKE @search
+      OR d.department_name LIKE @search
+      OR l.name LIKE @search
+      OR CAST(l.floor AS VARCHAR(20)) LIKE @search
+    )
+  `;
+
+  params.push({
+    name: 'search',
+    type: sql.VarChar(255),
+    value: `%${search.trim()}%`
+  });
+}
 
     if (status) {
       whereClause += ' AND a.status = @status';
@@ -317,14 +341,32 @@ router.get('/',
       .input('reconciliationId', sql.UniqueIdentifier, reconciliationId);
     params.forEach(param => countRequest.input(param.name, param.type, param.value));
 
+    // const countResult = await countRequest.query(`
+    //   SELECT COUNT(*) as total
+    //   FROM assets a
+    //   LEFT JOIN products p ON a.product_id = p.id
+    //   LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
+    //   LEFT JOIN RECONCILIATION_RECORDS rr ON rr.asset_id = a.id AND rr.reconciliation_id = @reconciliationId
+    //   WHERE ${whereClause}
+    // `);
+
     const countResult = await countRequest.query(`
-      SELECT COUNT(*) as total
-      FROM assets a
-      LEFT JOIN products p ON a.product_id = p.id
-      LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
-      LEFT JOIN RECONCILIATION_RECORDS rr ON rr.asset_id = a.id AND rr.reconciliation_id = @reconciliationId
-      WHERE ${whereClause}
-    `);
+  SELECT COUNT(*) AS total
+  FROM assets a
+  LEFT JOIN products p
+    ON a.product_id = p.id
+  LEFT JOIN USER_MASTER u
+    ON a.assigned_to = u.user_id
+  LEFT JOIN DEPARTMENT_MASTER d
+    ON u.department_id = d.department_id
+  LEFT JOIN locations l
+    ON a.location_id = l.id
+  LEFT JOIN RECONCILIATION_RECORDS rr
+    ON rr.asset_id = a.id
+    AND rr.reconciliation_id = @reconciliationId
+  WHERE ${whereClause}
+`);
+    
     const total = countResult.recordset[0].total;
 
     // Fetch paginated data with reconciliation status
