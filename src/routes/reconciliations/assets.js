@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require('uuid');
 const Joi = require('joi');
 
 const { connectDB, sql } = require('../../config/database');
+const ExcelJS = require('exceljs');
 const { validateBody, validateParams, validateQuery, validatePagination, validateUUID } = require('../../middleware/validation');
 const { requireRole } = require('../../middleware/permissions');
 const { authenticateToken } = require('../../middleware/auth');
@@ -231,7 +232,184 @@ async function insertDiscrepancies(transaction, reconciliationRecordId, discrepa
 }
 
 
-// GET /reconciliations/:id/assets/export
+// // GET /reconciliations/:id/assets/export
+// router.get(
+//   '/export',
+//   requireRole([
+//     USER_ROLES.ADMIN,
+//     USER_ROLES.SUPERADMIN,
+//     USER_ROLES.ENGINEER,
+//     USER_ROLES.COORDINATOR
+//   ]),
+//   asyncHandler(async (req, res) => {
+//     const { id: reconciliationId } = req.params;
+//     const {
+//       search,
+//       status,
+//       reconciliation_status,
+//       department_id
+//     } = req.query;
+
+//     const pool = await connectDB();
+
+//     const check = await pool.request()
+//       .input('id', sql.UniqueIdentifier, reconciliationId)
+//       .query(`
+//         SELECT reconciliation_name
+//         FROM RECONCILIATION_PROCESSES
+//         WHERE id = @id AND is_active = 1
+//       `);
+
+//     if (!check.recordset.length) {
+//       return sendNotFound(res, 'Reconciliation process not found');
+//     }
+
+//     let whereClause = `
+//       a.is_active = 1
+//       AND (a.is_standby_asset = 0 OR a.is_standby_asset IS NULL)
+//     `;
+
+//     const request = pool.request()
+//       .input('reconciliationId', sql.UniqueIdentifier, reconciliationId);
+
+//     if (search && search.trim()) {
+//       whereClause += `
+//         AND (
+//           a.asset_tag LIKE @search
+//           OR p.name LIKE @search
+//           OR p.model LIKE @search
+//           OR a.serial_number LIKE @search
+//           OR u.first_name LIKE @search
+//           OR u.last_name LIKE @search
+//           OR CONCAT(u.first_name, ' ', u.last_name) LIKE @search
+//           OR u.email LIKE @search
+//           OR d.department_name LIKE @search
+//           OR l.name LIKE @search
+//         )
+//       `;
+
+//       request.input(
+//         'search',
+//         sql.VarChar(255),
+//         `%${search.trim()}%`
+//       );
+//     }
+
+//     if (status) {
+//       whereClause += ' AND a.status = @status';
+//       request.input('status', sql.VarChar(20), status);
+//     }
+
+//     if (reconciliation_status) {
+//       whereClause += `
+//         AND rr.reconciliation_status = @reconciliationStatus
+//       `;
+//       request.input(
+//         'reconciliationStatus',
+//         sql.VarChar(50),
+//         reconciliation_status
+//       );
+//     }
+
+//     if (department_id) {
+//       whereClause += ' AND u.department_id = @departmentId';
+//       request.input(
+//         'departmentId',
+//         sql.UniqueIdentifier,
+//         department_id
+//       );
+//     }
+
+//     const result = await request.query(`
+//       SELECT
+//         p.name AS [Product],
+//         p.model AS [Model],
+//         a.serial_number AS [Serial No],
+//         CONCAT(u.first_name, ' ', u.last_name) AS [Assigned To],
+//         u.email AS [Email],
+//         d.department_name AS [Department],
+//         CONCAT(
+//           l.name,
+//           CASE
+//             WHEN l.floor IS NOT NULL
+//               AND LTRIM(RTRIM(CAST(l.floor AS VARCHAR(20)))) <> ''
+//             THEN ' - Floor ' + CAST(l.floor AS VARCHAR(20))
+//             ELSE ''
+//           END
+//         ) AS [Location],
+//         CASE a.status
+//           WHEN 'available' THEN 'Available'
+//           WHEN 'assigned' THEN 'Assigned'
+//           WHEN 'in_use' THEN 'In Use'
+//           WHEN 'under_repair' THEN 'Under Repair'
+//           ELSE a.status
+//         END AS [Asset Status],
+//         CASE
+//           WHEN rr.reconciliation_status IS NULL THEN 'Pending'
+//           WHEN rr.reconciliation_status = 'verified' THEN 'Verified'
+//           WHEN rr.reconciliation_status = 'pending' THEN 'Pending'
+//           WHEN rr.reconciliation_status = 'discrepancy' THEN 'Discrepancy'
+//           WHEN rr.reconciliation_status = 'missing' THEN 'Missing'
+//           WHEN rr.reconciliation_status = 'damaged' THEN 'Damaged'
+//           ELSE rr.reconciliation_status
+//         END AS [Reconciliation Status],
+//         reconciler.first_name + ' ' + reconciler.last_name
+//           AS [Reconciled By],
+//         rr.reconciled_at AS [Reconciled At]
+//       FROM assets a
+//       LEFT JOIN products p ON a.product_id = p.id
+//       LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
+//       LEFT JOIN DEPARTMENT_MASTER d ON u.department_id = d.department_id
+//       LEFT JOIN locations l ON a.location_id = l.id
+//       LEFT JOIN RECONCILIATION_RECORDS rr
+//         ON rr.asset_id = a.id
+//         AND rr.reconciliation_id = @reconciliationId
+//       LEFT JOIN USER_MASTER reconciler
+//         ON rr.reconciled_by = reconciler.user_id
+//       WHERE ${whereClause}
+//       ORDER BY a.created_at DESC
+//     `);
+
+//     // Escape CSV values safely for Excel.
+//     const escapeCsv = (value) => {
+//       if (value === null || value === undefined) return '""';
+
+//       return `"${String(value).replace(/"/g, '""')}"`;
+//     };
+
+//     const headers = result.recordset.length
+//       ? Object.keys(result.recordset[0])
+//       : [
+//           'Product', 'Model', 'Asset ID', 'Serial No',
+//           'Assigned To', 'Email', 'Department', 'Location',
+//           'Asset Status', 'Reconciliation Status',
+//           'Reconciled By', 'Reconciled At'
+//         ];
+
+//     const csv = [
+//       headers.map(escapeCsv).join(','),
+//       ...result.recordset.map(row =>
+//         headers.map(header => escapeCsv(row[header])).join(',')
+//       )
+//     ].join('\r\n');
+
+//     const filename =
+//       `reconciliation_assets_${new Date().toISOString().slice(0, 10)}.csv`;
+
+//     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+//     res.setHeader(
+//       'Content-Disposition',
+//       `attachment; filename="${filename}"`
+//     );
+
+//     // BOM helps Excel recognize UTF-8.
+//     res.send('\uFEFF' + csv);
+//   })
+// );
+
+
+
+/* GET /reconciliations/:id/assets/export */
 router.get(
   '/export',
   requireRole([
@@ -245,12 +423,12 @@ router.get(
     const {
       search,
       status,
-      reconciliation_status,
-      department_id
+      reconciliation_status
     } = req.query;
 
     const pool = await connectDB();
 
+    // Validate reconciliation process
     const check = await pool.request()
       .input('id', sql.UniqueIdentifier, reconciliationId)
       .query(`
@@ -269,8 +447,13 @@ router.get(
     `;
 
     const request = pool.request()
-      .input('reconciliationId', sql.UniqueIdentifier, reconciliationId);
+      .input(
+        'reconciliationId',
+        sql.UniqueIdentifier,
+        reconciliationId
+      );
 
+    // Search across asset and employee fields
     if (search && search.trim()) {
       whereClause += `
         AND (
@@ -282,7 +465,6 @@ router.get(
           OR u.last_name LIKE @search
           OR CONCAT(u.first_name, ' ', u.last_name) LIKE @search
           OR u.email LIKE @search
-          OR d.department_name LIKE @search
           OR l.name LIKE @search
         )
       `;
@@ -310,24 +492,14 @@ router.get(
       );
     }
 
-    if (department_id) {
-      whereClause += ' AND u.department_id = @departmentId';
-      request.input(
-        'departmentId',
-        sql.UniqueIdentifier,
-        department_id
-      );
-    }
-
+    // Fetch all matching records, without pagination
     const result = await request.query(`
       SELECT
         p.name AS [Product],
         p.model AS [Model],
-        a.asset_tag AS [Asset ID],
         a.serial_number AS [Serial No],
         CONCAT(u.first_name, ' ', u.last_name) AS [Assigned To],
         u.email AS [Email],
-        d.department_name AS [Department],
         CONCAT(
           l.name,
           CASE
@@ -353,14 +525,19 @@ router.get(
           WHEN rr.reconciliation_status = 'damaged' THEN 'Damaged'
           ELSE rr.reconciliation_status
         END AS [Reconciliation Status],
-        reconciler.first_name + ' ' + reconciler.last_name
-          AS [Reconciled By],
+        CONCAT(
+          reconciler.first_name,
+          ' ',
+          reconciler.last_name
+        ) AS [Reconciled By],
         rr.reconciled_at AS [Reconciled At]
       FROM assets a
-      LEFT JOIN products p ON a.product_id = p.id
-      LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
-      LEFT JOIN DEPARTMENT_MASTER d ON u.department_id = d.department_id
-      LEFT JOIN locations l ON a.location_id = l.id
+      LEFT JOIN products p
+        ON a.product_id = p.id
+      LEFT JOIN USER_MASTER u
+        ON a.assigned_to = u.user_id
+      LEFT JOIN locations l
+        ON a.location_id = l.id
       LEFT JOIN RECONCILIATION_RECORDS rr
         ON rr.asset_id = a.id
         AND rr.reconciliation_id = @reconciliationId
@@ -370,42 +547,110 @@ router.get(
       ORDER BY a.created_at DESC
     `);
 
-    // Escape CSV values safely for Excel.
-    const escapeCsv = (value) => {
-      if (value === null || value === undefined) return '""';
+    // Create a genuine Excel workbook
+    const workbook = new ExcelJS.Workbook();
 
-      return `"${String(value).replace(/"/g, '""')}"`;
-    };
+    workbook.creator = 'PolePlus Unified ITSM Platform';
+    workbook.created = new Date();
 
-    const headers = result.recordset.length
-      ? Object.keys(result.recordset[0])
-      : [
-          'Product', 'Model', 'Asset ID', 'Serial No',
-          'Assigned To', 'Email', 'Department', 'Location',
-          'Asset Status', 'Reconciliation Status',
-          'Reconciled By', 'Reconciled At'
-        ];
-
-    const csv = [
-      headers.map(escapeCsv).join(','),
-      ...result.recordset.map(row =>
-        headers.map(header => escapeCsv(row[header])).join(',')
-      )
-    ].join('\r\n');
-
-    const filename =
-      `reconciliation_assets_${new Date().toISOString().slice(0, 10)}.csv`;
-
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="${filename}"`
+    const worksheet = workbook.addWorksheet(
+      'Reconciliation Assets'
     );
 
-    // BOM helps Excel recognize UTF-8.
-    res.send('\uFEFF' + csv);
+    // Department and Asset ID are intentionally excluded
+    worksheet.columns = [
+      { header: 'Product', key: 'Product', width: 28 },
+      { header: 'Model', key: 'Model', width: 22 },
+      { header: 'Serial No', key: 'Serial No', width: 24 },
+      { header: 'Assigned To', key: 'Assigned To', width: 28 },
+      { header: 'Email', key: 'Email', width: 34 },
+      { header: 'Location', key: 'Location', width: 30 },
+      { header: 'Asset Status', key: 'Asset Status', width: 18 },
+      {
+        header: 'Reconciliation Status',
+        key: 'Reconciliation Status',
+        width: 25
+      },
+      { header: 'Reconciled By', key: 'Reconciled By', width: 28 },
+      {
+        header: 'Reconciled At',
+        key: 'Reconciled At',
+        width: 32
+      }
+    ];
+
+    result.recordset.forEach(record => {
+      worksheet.addRow({
+        Product: record.Product,
+        Model: record.Model,
+        'Serial No': record['Serial No'],
+        'Assigned To': record['Assigned To'],
+        Email: record.Email,
+        Location: record.Location,
+        'Asset Status': record['Asset Status'],
+        'Reconciliation Status': record['Reconciliation Status'],
+        'Reconciled By': record['Reconciled By'],
+        'Reconciled At': record['Reconciled At']
+          ? new Date(record['Reconciled At'])
+          : null
+      });
+    });
+
+    // Format header
+    const headerRow = worksheet.getRow(1);
+    headerRow.height = 24;
+    headerRow.font = {
+      bold: true,
+      color: { argb: 'FFFFFFFF' }
+    };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF1F4E78' }
+    };
+    headerRow.alignment = {
+      vertical: 'middle',
+      horizontal: 'center'
+    };
+
+    // Keep headers visible while scrolling
+    worksheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+    // Format dates and cell borders
+    worksheet.getColumn('Reconciled At').numFmt =
+      'dd-mmm-yyyy hh:mm';
+
+    worksheet.eachRow((row, rowNumber) => {
+      row.alignment = { vertical: 'middle' };
+
+      if (rowNumber > 1) {
+        row.eachCell(cell => {
+          cell.border = {
+            bottom: {
+              style: 'thin',
+              color: { argb: 'FFD9E2F3' }
+            }
+          };
+        });
+      }
+    });
+
+    // Send XLSX file
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="reconciliation_assets.xlsx"'
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
   })
 );
+
 
 // ============================================================================
 // ROUTE: GET /reconciliations/:id/assets
