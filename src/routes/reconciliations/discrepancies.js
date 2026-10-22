@@ -83,10 +83,29 @@ router.get('/',
       params.push({ name: 'isResolved', type: sql.Bit, value: resolvedValue });
     }
 
-    if (search) {
-      whereClause += ' AND (d.field_display_name LIKE @search OR d.system_value LIKE @search OR d.physical_value LIKE @search OR a.asset_tag LIKE @search)';
-      params.push({ name: 'search', type: sql.VarChar(255), value: `%${search}%` });
-    }
+    // if (search) {
+    //   whereClause += ' AND (d.field_display_name LIKE @search OR d.system_value LIKE @search OR d.physical_value LIKE @search OR a.asset_tag LIKE @search)';
+    //   params.push({ name: 'search', type: sql.VarChar(255), value: `%${search}%` });
+    // }
+
+
+    if (search && search.trim()) {
+        whereClause += `
+          AND (
+            d.field_display_name LIKE @search
+            OR d.system_value LIKE @search
+            OR d.physical_value LIKE @search
+            OR a.asset_tag LIKE @search
+            OR a.serial_number LIKE @search
+          )
+        `;
+      
+        params.push({
+          name: 'search',
+          type: sql.VarChar(255),
+          value: `%${search.trim()}%`
+        });
+      }
 
     // Build ORDER BY clause
     const validSortColumns = {
