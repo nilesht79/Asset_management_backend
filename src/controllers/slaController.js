@@ -905,7 +905,8 @@ class SlaController {
 
       // const report = await SlaTrackingModel.getSlaComplianceReport(filters);
       const report = await SlaTrackingModel.getSlaComplianceReport(filters);
-      await this.attachAssetDetails(report);
+      // await this.attachAssetDetails(report);
+      await SlaController.attachAssetDetails(report);
 
       res.json({
         success: true,
@@ -963,6 +964,7 @@ class SlaController {
 
       const report = await SlaTrackingModel.getSlaComplianceReport(filters);
       await this.attachAssetDetails(report);
+      await SlaController.attachAssetDetails(report);
 
       // Create workbook
       const workbook = new ExcelJS.Workbook();
