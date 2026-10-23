@@ -903,9 +903,7 @@ class SlaController {
         met_sla
       };
 
-      // const report = await SlaTrackingModel.getSlaComplianceReport(filters);
       const report = await SlaTrackingModel.getSlaComplianceReport(filters);
-      // await this.attachAssetDetails(report);
       await SlaController.attachAssetDetails(report);
 
       res.json({
@@ -1095,13 +1093,25 @@ class SlaController {
         detailSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFF' } };
 
         // Format dates and add rows
-        const formattedDetails = report.details.map(d => ({
-          ...d,
-          sr_no: index + 1,
-          sla_start_time: d.sla_start_time ? new Date(d.sla_start_time).toLocaleString() : '',
-          resolved_at: d.resolved_at ? new Date(d.resolved_at).toLocaleString() : '',
-          met_sla: d.met_sla ? 'Yes' : 'No'
-        }));
+        // const formattedDetails = report.details.map(d => ({
+        //   ...d,
+        //   sr_no: index + 1,
+        //   sla_start_time: d.sla_start_time ? new Date(d.sla_start_time).toLocaleString() : '',
+        //   resolved_at: d.resolved_at ? new Date(d.resolved_at).toLocaleString() : '',
+        //   met_sla: d.met_sla ? 'Yes' : 'No'
+        // }));
+
+        const formattedDetails = report.details.map((d, index) => ({
+        ...d,
+        sr_no: index + 1,
+        sla_start_time: d.sla_start_time
+          ? new Date(d.sla_start_time).toLocaleString()
+          : '',
+        resolved_at: d.resolved_at
+          ? new Date(d.resolved_at).toLocaleString()
+          : '',
+        met_sla: d.met_sla ? 'Yes' : 'No'
+      }));
 
         detailSheet.addRows(formattedDetails);
 
