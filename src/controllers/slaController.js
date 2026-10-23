@@ -814,6 +814,54 @@ class SlaController {
     }
   }
 
+  
+  static async attachAssetDetails(report) {
+    const pool = await connectDB();
+
+    const result = await pool.request().query(`
+      SELECT
+        ta.ticket_id,
+        STRING_AGG(
+          CONVERT(NVARCHAR(MAX), p.name), ', '
+        ) AS asset_make,
+        STRING_AGG(
+          CONVERT(NVARCHAR(MAX), p.model), ', '
+        ) AS asset_model,
+        STRING_AGG(
+          CONVERT(NVARCHAR(MAX), a.serial_number), ', '
+        ) AS serial_number
+      FROM ticket_assets ta
+      INNER JOIN assets a
+        ON a.id = ta.asset_id
+      LEFT JOIN products p
+        ON p.id = a.product_id
+      GROUP BY ta.ticket_id
+    `);
+
+    const assetMap = new Map(
+      result.recordset.map(row => [
+        String(row.ticket_id).toLowerCase(),
+        row
+      ])
+    );
+
+    report.details = (report.details || []).map(ticket => {
+      const asset = assetMap.get(
+        String(ticket.ticket_id).toLowerCase()
+      );
+
+      return {
+        ...ticket,
+        asset_make: asset?.asset_make || '',
+        asset_model: asset?.asset_model || '',
+        serial_number: asset?.serial_number || ''
+      };
+    });
+
+    return report;
+  }
+
+
   // ==================== REPORTS ====================
 
   /**
@@ -855,7 +903,9 @@ class SlaController {
         met_sla
       };
 
+      // const report = await SlaTrackingModel.getSlaComplianceReport(filters);
       const report = await SlaTrackingModel.getSlaComplianceReport(filters);
+      await this.attachAssetDetails(report);
 
       res.json({
         success: true,
@@ -912,6 +962,7 @@ class SlaController {
       };
 
       const report = await SlaTrackingModel.getSlaComplianceReport(filters);
+      await this.attachAssetDetails(report);
 
       // Create workbook
       const workbook = new ExcelJS.Workbook();
@@ -1016,6 +1067,9 @@ class SlaController {
           { header: 'Title', key: 'title', width: 30 },
           { header: 'Category', key: 'category', width: 15 },
           { header: 'Sub Category', key: 'sub_category_name', width: 25 },
+          { header: 'Asset Make', key: 'asset_make', width: 20 },
+          { header: 'Asset Model', key: 'asset_model', width: 25 },
+          { header: 'Serial Number', key: 'serial_number', width: 25 },
           { header: 'Priority', key: 'priority', width: 12 },
           { header: 'Location', key: 'location_name', width: 20 },
           { header: 'Department', key: 'department_name', width: 20 },
