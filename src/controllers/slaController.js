@@ -1063,6 +1063,7 @@ class SlaController {
       if (report.details && report.details.length > 0) {
         const detailSheet = workbook.addWorksheet('Ticket Details');
         detailSheet.columns = [
+          { header: 'Sr. No.', key: 'sr_no', width: 10 },
           { header: 'Ticket #', key: 'ticket_number', width: 15 },
           { header: 'Title', key: 'title', width: 30 },
           { header: 'Category', key: 'category', width: 15 },
@@ -1094,6 +1095,7 @@ class SlaController {
         // Format dates and add rows
         const formattedDetails = report.details.map(d => ({
           ...d,
+          sr_no: index + 1,
           sla_start_time: d.sla_start_time ? new Date(d.sla_start_time).toLocaleString() : '',
           resolved_at: d.resolved_at ? new Date(d.resolved_at).toLocaleString() : '',
           met_sla: d.met_sla ? 'Yes' : 'No'
