@@ -1099,56 +1099,116 @@ const subCategoryResult = await subCategoryRequest.query(subCategoryQuery);
       if (filters.oem_id) detailRequest.input('oemId', sql.UniqueIdentifier, filters.oem_id);
       if (filters.product_model) detailRequest.input('productModel', sql.NVarChar, `%${filters.product_model}%`);
 
-      const detailQuery = `
-      WITH TicketAsset AS
-        (
-            SELECT
-                ticket_id,
-                MIN(asset_id) AS asset_id
-            FROM TICKET_ASSETS
-            GROUP BY ticket_id
-        )
-        SELECT
-          t.ticket_id,
-          t.ticket_number,
-          t.title,
-          t.category,
-          t.priority,
-          t.status,
-          tst.sla_start_time,
-          t.resolved_at,
-          tst.final_status,
-          tst.business_elapsed_minutes,
-          sr.rule_name,
-          sr.max_tat_minutes,
-          CASE
-          WHEN tst.final_status IN ('on_track','warning','critical')
-          THEN 1
-          WHEN tst.final_status='breached'
-          THEN 0
+      // const detailQuery = `
+      // WITH TicketAsset AS
+      //   (
+      //       SELECT
+      //           ticket_id,
+      //           MIN(asset_id) AS asset_id
+      //       FROM TICKET_ASSETS
+      //       GROUP BY ticket_id
+      //   )
+      //   SELECT
+      //     t.ticket_id,
+      //     t.ticket_number,
+      //     t.title,
+      //     t.category,
+      //     t.priority,
+      //     t.status,
+      //     tst.sla_start_time,
+      //     t.resolved_at,
+      //     tst.final_status,
+      //     tst.business_elapsed_minutes,
+      //     sr.rule_name,
+      //     sr.max_tat_minutes,
+      //     CASE
+      //     WHEN tst.final_status IN ('on_track','warning','critical')
+      //     THEN 1
+      //     WHEN tst.final_status='breached'
+      //     THEN 0
+      //     ELSE NULL
+      //     END AS met_sla,
+      //     l.name AS location_name,
+      //     d.department_name,
+      //     pc.name AS category_name,
+      //     ISNULL(psc.name, 'Others') AS sub_category_name,
+      //     u.first_name + ' ' + u.last_name AS engineer_name
+      //   FROM TICKETS t
+      //   INNER JOIN TICKET_SLA_TRACKING tst
+      //     ON tst.ticket_id = t.ticket_id
+      //   LEFT JOIN SLA_RULES sr
+      //     ON sr.rule_id = tst.sla_rule_id
+      //   LEFT JOIN locations l ON t.location_id = l.id
+      //   LEFT JOIN DEPARTMENT_MASTER d ON t.department_id = d.department_id
+      //   LEFT JOIN USER_MASTER u ON t.assigned_to_engineer_id = u.user_id
+      //   LEFT JOIN TicketAsset ta ON ta.ticket_id = t.ticket_id
+      //   LEFT JOIN assets a ON a.id = ta.asset_id
+      //  LEFT JOIN products p ON p.id = a.product_id
+      //   LEFT JOIN categories pc ON p.category_id = pc.id
+      //   LEFT JOIN categories psc ON p.subcategory_id = psc.id
+      //   ${whereClause}
+      //   ORDER BY t.resolved_at DESC
+      // `;
+
+
+   const detailQuery = `
+  WITH TicketAsset AS
+  (
+      SELECT
+          ticket_id,
+          MIN(asset_id) AS asset_id
+      FROM TICKET_ASSETS
+      GROUP BY ticket_id
+  )
+  SELECT
+      t.ticket_id,
+      t.ticket_number,
+      t.title,
+      t.category,
+      t.priority,
+      t.status,
+      tst.sla_start_time,
+      t.resolved_at,
+      tst.final_status,
+      tst.business_elapsed_minutes,
+      sr.rule_name,
+      sr.max_tat_minutes,
+      CASE
+          WHEN tst.final_status IN ('on_track', 'warning', 'critical')
+              THEN 1
+          WHEN tst.final_status = 'breached'
+              THEN 0
           ELSE NULL
-          END AS met_sla,
-          l.name AS location_name,
-          d.department_name,
-          pc.name AS category_name,
-          ISNULL(psc.name, 'Others') AS sub_category_name,
-          u.first_name + ' ' + u.last_name AS engineer_name
-        FROM TICKETS t
-        INNER JOIN TICKET_SLA_TRACKING tst
-          ON tst.ticket_id = t.ticket_id
-        LEFT JOIN SLA_RULES sr
-          ON sr.rule_id = tst.sla_rule_id
-        LEFT JOIN locations l ON t.location_id = l.id
-        LEFT JOIN DEPARTMENT_MASTER d ON t.department_id = d.department_id
-        LEFT JOIN USER_MASTER u ON t.assigned_to_engineer_id = u.user_id
-        LEFT JOIN TicketAsset ta ON ta.ticket_id = t.ticket_id
-        LEFT JOIN assets a ON a.id = ta.asset_id
-       LEFT JOIN products p ON p.id = a.product_id
-        LEFT JOIN categories pc ON p.category_id = pc.id
-        LEFT JOIN categories psc ON p.subcategory_id = psc.id
-        ${whereClause}
-        ORDER BY t.resolved_at DESC
-      `;
+      END AS met_sla,
+      l.name AS location_name,
+      d.department_name,
+      pc.name AS category_name,
+      ISNULL(psc.name, 'Others') AS sub_category_name,
+      u.first_name + ' ' + u.last_name AS engineer_name
+  FROM TICKETS t
+  INNER JOIN TICKET_SLA_TRACKING tst
+      ON tst.ticket_id = t.ticket_id
+  LEFT JOIN SLA_RULES sr
+      ON sr.rule_id = tst.sla_rule_id
+  LEFT JOIN locations l
+      ON t.location_id = l.id
+  LEFT JOIN DEPARTMENT_MASTER d
+      ON t.department_id = d.department_id
+  LEFT JOIN USER_MASTER u
+      ON t.assigned_to_engineer_id = u.user_id
+  LEFT JOIN TicketAsset ta
+      ON ta.ticket_id = t.ticket_id
+  LEFT JOIN assets a
+      ON a.id = ta.asset_id
+  LEFT JOIN products p
+      ON p.id = a.product_id
+  LEFT JOIN categories pc
+      ON p.category_id = pc.id
+  LEFT JOIN categories psc
+      ON p.subcategory_id = psc.id
+  $DIL0
+  ORDER BY t.resolved_at DESC
+`;
 
       const detailResult = await detailRequest.query(detailQuery);
 
