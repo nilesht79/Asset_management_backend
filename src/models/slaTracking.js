@@ -1204,10 +1204,11 @@ const subCategoryResult = await subCategoryRequest.query(subCategoryQuery);
       ON p.id = a.product_id
   LEFT JOIN categories pc
       ON p.category_id = pc.id
-  LEFT JOIN categories psc
+    LEFT JOIN categories psc
       ON p.subcategory_id = psc.id
-  $DIL0
+  ${whereClause}
   ORDER BY t.resolved_at DESC
+`;
 `;
 
       const detailResult = await detailRequest.query(detailQuery);
