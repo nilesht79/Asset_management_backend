@@ -1209,7 +1209,7 @@ const subCategoryResult = await subCategoryRequest.query(subCategoryQuery);
   ${whereClause}
   ORDER BY t.resolved_at DESC
 `;
-`;
+
 
       const detailResult = await detailRequest.query(detailQuery);
 
