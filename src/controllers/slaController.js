@@ -961,9 +961,8 @@ class SlaController {
       };
 
       const report = await SlaTrackingModel.getSlaComplianceReport(filters);
-      await this.attachAssetDetails(report);
       await SlaController.attachAssetDetails(report);
-
+      
       // Create workbook
       const workbook = new ExcelJS.Workbook();
       workbook.creator = 'Unified ITSM Platform';
