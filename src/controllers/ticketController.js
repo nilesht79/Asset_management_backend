@@ -1430,25 +1430,39 @@ Helpdesk
       const result = await TicketModel.getTickets(filters, { page: 1, limit: 10000 });
       const tickets = result.tickets || [];
 
-      // Fetch serial numbers for assets linked to tickets
-      const pool = await connectDB();
+      // // Fetch serial numbers for assets linked to tickets
+      // const pool = await connectDB();
       
-      const assetSerialResult = await pool.request().query(`
+      // const assetSerialResult = await pool.request().query(`
+      //   SELECT
+      //     ta.ticket_id,
+      //     STRING_AGG(
+      //       CONVERT(NVARCHAR(MAX), a.serial_number),
+      //       ', '
+      //     ) AS serial_number
+      //   FROM ticket_assets ta
+      //   INNER JOIN assets a ON a.id = ta.asset_id
+      //   GROUP BY ta.ticket_id
+      // `);
+
+      const pool = await connectDB();
+
+      const assetDetailsResult = await pool.request().query(`
         SELECT
           ta.ticket_id,
-          STRING_AGG(
-            CONVERT(NVARCHAR(MAX), a.serial_number),
-            ', '
-          ) AS serial_number
+          STRING_AGG(CONVERT(NVARCHAR(MAX), p.name), ', ') AS asset_make,
+          STRING_AGG(CONVERT(NVARCHAR(MAX), p.model), ', ') AS asset_model,
+          STRING_AGG(CONVERT(NVARCHAR(MAX), a.serial_number), ', ') AS serial_number
         FROM ticket_assets ta
         INNER JOIN assets a ON a.id = ta.asset_id
+        LEFT JOIN products p ON p.id = a.product_id
         GROUP BY ta.ticket_id
       `);
       
-      const serialNumberMap = new Map(
-        assetSerialResult.recordset.map(row => [
+      const assetDetailsMap = new Map(
+        assetDetailsResult.recordset.map(row => [
           String(row.ticket_id).toLowerCase(),
-          row.serial_number || ''
+          row
         ])
       );
 
@@ -1465,6 +1479,8 @@ Helpdesk
         { header: 'Priority', key: 'priority', width: 12 },
         { header: 'Category', key: 'category', width: 15 },
         { header: 'Asset Subcategory', key: 'asset_subcategory', width: 30 },
+        { header: 'Asset Make', key: 'asset_make', width: 20 },
+        { header: 'Asset Model', key: 'asset_model', width: 35 },
         { header: 'Serial Number', key: 'serial_number', width: 25 },
         { header: 'Created For', key: 'created_by_user_name', width: 25 },
         { header: 'Created For Email', key: 'created_by_user_email', width: 30 },
@@ -1501,7 +1517,9 @@ Helpdesk
           priority: ticket.priority,
           category: ticket.category,
           asset_subcategory: ticket.asset_subcategory || '',
-          serial_number: serialNumberMap.get(String(ticket.ticket_id).toLowerCase()) || '',
+          asset_make: assetDetailsMap.get(String(ticket.ticket_id).toLowerCase())?.asset_make || '',
+          asset_model: assetDetailsMap.get(String(ticket.ticket_id).toLowerCase())?.asset_model || '',
+          serial_number: assetDetailsMap.get(String(ticket.ticket_id).toLowerCase())?.serial_number || '',
           created_by_user_name: ticket.created_by_user_name,
           created_by_name: ticket.coordinator_name || ticket.created_by_user_name || '',
           created_by_role: ticket.coordinator_name ? (ticket.coordinator_role || 'Coordinator') : (ticket.created_by_user_role || 'Employee'),
