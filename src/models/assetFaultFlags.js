@@ -48,10 +48,47 @@ class AssetFaultFlagsModel {
           -- Previous flag info (for recurring issues)
           pf.resolved_at AS previous_resolved_at,
           pf.resolution_action AS previous_resolution_action,
-          -- Component repairs count (for parent assets)
-          (SELECT COUNT(*) FROM ASSET_REPAIR_HISTORY rh WHERE rh.parent_asset_id = a.id) AS component_repairs_count,
+                   -- Component repairs count (for parent assets)
+          (SELECT COUNT(*)
+           FROM ASSET_REPAIR_HISTORY rh
+           WHERE rh.parent_asset_id = a.id) AS component_repairs_count,
+
           -- Total repairs including components
-          (SELECT COUNT(*) FROM ASSET_REPAIR_HISTORY rh WHERE rh.asset_id = a.id OR rh.parent_asset_id = a.id) AS total_repairs_with_components
+          (SELECT COUNT(*)
+           FROM ASSET_REPAIR_HISTORY rh
+           WHERE rh.asset_id = a.id
+              OR rh.parent_asset_id = a.id) AS total_repairs_with_components,
+
+          -- Repair details for the flagged asset or product model
+          JSON_QUERY((
+              SELECT
+                  rh.repair_id,
+                  a2.serial_number,
+                  rh.fault_description AS issue,
+                  rh.notes AS engineer_notes,
+                  rh.repair_date,
+                  rh.repair_status,
+                  rh.resolution,
+                  rh.total_cost
+              FROM ASSET_REPAIR_HISTORY rh
+              INNER JOIN assets a2
+                  ON a2.id = rh.asset_id
+              WHERE
+                  (
+                      f.flag_type = 'product_model'
+                      AND a2.product_id = f.product_id
+                  )
+                  OR
+                  (
+                      f.flag_type = 'asset'
+                      AND (
+                          rh.asset_id = f.asset_id
+                          OR rh.parent_asset_id = f.asset_id
+                      )
+                  )
+              ORDER BY rh.repair_date DESC
+              FOR JSON PATH
+          )) AS affected_repairs
         FROM ASSET_FAULT_FLAGS f
         LEFT JOIN assets a ON f.asset_id = a.id
         LEFT JOIN assets pa ON a.parent_asset_id = pa.id
@@ -76,8 +113,30 @@ class AssetFaultFlagsModel {
         request.input(key, sql.VarChar, params[key]);
       });
 
+      // const result = await request.query(query);
+      // return result.recordset;
       const result = await request.query(query);
-      return result.recordset;
+
+return result.recordset.map((flag) => {
+  let affectedRepairs = flag.affected_repairs || [];
+
+  if (typeof affectedRepairs === 'string') {
+    try {
+      affectedRepairs = JSON.parse(affectedRepairs);
+    } catch (parseError) {
+      console.error(
+        'Failed to parse affected repair details:',
+        parseError
+      );
+      affectedRepairs = [];
+    }
+  }
+
+  return {
+    ...flag,
+    affected_repairs: affectedRepairs
+  };
+});
     } catch (error) {
       console.error('Error fetching active flags:', error);
       throw error;
