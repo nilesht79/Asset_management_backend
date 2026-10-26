@@ -328,7 +328,7 @@ class AssetFaultFlagsModel {
   /**
    * Analyze faults for product models/OEMs
    */
-  static async analyzeModelFaults(productId = null, oemId = null, monthsPeriod = 3, threshold = 5) {
+  static async analyzeModelFaults(productId = null, oemId = null, monthsPeriod = 3, threshold = 1) {
     try {
       const pool = await connectDB();
 
