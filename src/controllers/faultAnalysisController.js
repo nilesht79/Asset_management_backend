@@ -266,7 +266,7 @@ class FaultAnalysisController {
    */
   static async analyzeModelFaults(req, res) {
     try {
-      const { product_id, oem_id, months = 3, threshold = 5 } = req.query;
+      const { product_id, oem_id, months = 3, threshold = 1 } = req.query;
 
       const results = await AssetFaultFlagsModel.analyzeModelFaults(
         product_id || null,
