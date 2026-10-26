@@ -187,7 +187,7 @@ class FaultAnalysisController {
         asset_months = 6,
         asset_threshold = 3,
         model_months = 3,
-        model_threshold = 5,
+        model_threshold = 50,
         cooldown_days = 30
       } = req.body;
 
