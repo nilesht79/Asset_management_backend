@@ -14,6 +14,12 @@ class ServiceReportController {
    */
   static async createReport(req, res) {
     try {
+      console.log('Incoming service report:', {
+      ticket_id: req.body.ticket_id,
+      service_type: req.body.service_type,
+      parts_used: req.body.parts_used
+    });
+
       const {
         ticket_id,
         service_type,
@@ -339,6 +345,12 @@ class ServiceReportController {
    */
   static async createDraftReport(req, res) {
     try {
+      console.log('Incoming service report:', {
+      ticket_id: req.body.ticket_id,
+      service_type: req.body.service_type,
+      parts_used: req.body.parts_used
+    });
+
       const {
         ticket_id,
         service_type,
