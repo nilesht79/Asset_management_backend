@@ -475,14 +475,28 @@ class ServiceReportModel {
       let whereClause = 'WHERE 1=1';
       const params = {};
 
+      // if (filters.date_from) {
+      //   whereClause += ' AND sr.created_at >= @dateFrom';
+      //   params.dateFrom = filters.date_from;
+      // }
+
+      // if (filters.date_to) {
+      //   whereClause += ' AND sr.created_at <= @dateTo';
+      //   params.dateTo = filters.date_to;
+      // }
+
       if (filters.date_from) {
         whereClause += ' AND sr.created_at >= @dateFrom';
-        params.dateFrom = filters.date_from;
+        params.dateFrom = `${filters.date_from}T00:00:00`;
       }
-
+      
       if (filters.date_to) {
-        whereClause += ' AND sr.created_at <= @dateTo';
-        params.dateTo = filters.date_to;
+        whereClause += ' AND sr.created_at < @dateToExclusive';
+      
+        const endDate = new Date(`${filters.date_to}T00:00:00`);
+        endDate.setDate(endDate.getDate() + 1);
+      
+        params.dateToExclusive = endDate;
       }
 
       if (filters.category_id) {
@@ -538,18 +552,34 @@ class ServiceReportModel {
       let summaryRequest = pool.request();
       let detailRequest = pool.request();
 
+      // Object.keys(params).forEach(key => {
+      //   if (key === 'categoryId') {
+      //     summaryRequest.input(key, sql.UniqueIdentifier, params[key]);
+      //     detailRequest.input(key, sql.UniqueIdentifier, params[key]);
+      //   } else if (key === 'dateFrom' || key === 'dateTo') {
+      //     summaryRequest.input(key, sql.DateTime, params[key]);
+      //     detailRequest.input(key, sql.DateTime, params[key]);
+      //   } else {
+      //     summaryRequest.input(key, sql.VarChar, params[key]);
+      //     detailRequest.input(key, sql.VarChar, params[key]);
+      //   }
+      // });
+
       Object.keys(params).forEach(key => {
-        if (key === 'categoryId') {
-          summaryRequest.input(key, sql.UniqueIdentifier, params[key]);
-          detailRequest.input(key, sql.UniqueIdentifier, params[key]);
-        } else if (key === 'dateFrom' || key === 'dateTo') {
-          summaryRequest.input(key, sql.DateTime, params[key]);
-          detailRequest.input(key, sql.DateTime, params[key]);
-        } else {
-          summaryRequest.input(key, sql.VarChar, params[key]);
-          detailRequest.input(key, sql.VarChar, params[key]);
-        }
-      });
+          if (key === 'categoryId') {
+            summaryRequest.input(key, sql.UniqueIdentifier, params[key]);
+            detailRequest.input(key, sql.UniqueIdentifier, params[key]);
+          } else if (
+            key === 'dateFrom' ||
+            key === 'dateToExclusive'
+          ) {
+            summaryRequest.input(key, sql.DateTime, params[key]);
+            detailRequest.input(key, sql.DateTime, params[key]);
+          } else {
+            summaryRequest.input(key, sql.VarChar, params[key]);
+            detailRequest.input(key, sql.VarChar, params[key]);
+          }
+        });
 
       const [summaryResult, detailResult] = await Promise.all([
         summaryRequest.query(summaryQuery),
