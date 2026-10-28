@@ -275,6 +275,16 @@ router.post('/bulk-upload',
           throw new Error('Missing required fields: name, address, location type');
         }
 
+        // Validate pincode when provided in the Excel file
+        if (
+          locationData.pincode &&
+          !/^[1-9]\d{5}$/.test(locationData.pincode)
+        ) {
+          throw new Error(
+            'Invalid pincode. Enter a valid 6-digit Indian pincode.'
+          );
+        }
+
         // Check for duplicates
         if (existingNames.has(locationData.name.toLowerCase())) {
           throw new Error(`Location name already exists: ${locationData.name}`);
@@ -547,6 +557,20 @@ router.post('/',
       return sendError(res, 'Missing required fields: name, address, location_type_id', 400);
     }
 
+    // Validate Indian pincode format when provided
+      const normalizedPincode = String(pincode ?? '').trim();
+      
+      if (
+        normalizedPincode &&
+        !/^[1-9]\d{5}$/.test(normalizedPincode)
+      ) {
+        return sendError(
+          res,
+          'Enter a valid 6-digit Indian pincode',
+          400
+        );
+      }
+
     const pool = await connectDB();
 
     // Check if parent location exists (if provided)
@@ -593,7 +617,8 @@ router.post('/',
       .input('contactPhone', sql.VarChar(20), contact_phone?.trim() || null)
       .input('stateName', sql.VarChar(100), state_name?.trim() || null)
       .input('cityName', sql.VarChar(100), city_name?.trim() || null)
-      .input('pincode', sql.VarChar(10), pincode?.trim() || null)
+      // .input('pincode', sql.VarChar(10), pincode?.trim() || null)
+      .input('pincode', sql.VarChar(10), normalizedPincode || null)
       .input('areaName', sql.VarChar(200), area_name?.trim() || null)
       .input('building', sql.VarChar(100), building?.trim() || null)
       .input('floor', sql.VarChar(50), floor?.trim() || null)
@@ -641,6 +666,26 @@ router.put('/:id',
   asyncHandler(async (req, res) => {
     const { id } = req.params;
     const updateData = req.body;
+
+    // Validate pincode only when it is included in the update
+      if (Object.prototype.hasOwnProperty.call(updateData, 'pincode')) {
+        const normalizedPincode = String(
+          updateData.pincode ?? ''
+        ).trim();
+      
+        if (
+          normalizedPincode &&
+          !/^[1-9]\d{5}$/.test(normalizedPincode)
+        ) {
+          return sendError(
+            res,
+            'Enter a valid 6-digit Indian pincode',
+            400
+          );
+        }
+      
+        updateData.pincode = normalizedPincode || null;
+      }
 
     const pool = await connectDB();
 
