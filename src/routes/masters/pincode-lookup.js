@@ -18,12 +18,22 @@ router.get('/:pincode',
 
     try {
       // Call India Post API for pincode lookup
-      const response = await axios.get(`http://www.postalpincode.in/api/pincode/${pincode}`, {
-        timeout: 5000,
-        headers: {
-          'User-Agent': 'Asset-Management-System'
+      // const response = await axios.get(`http://www.postalpincode.in/api/pincode/${pincode}`, {
+      //   timeout: 5000,
+      //   headers: {
+      //     'User-Agent': 'Asset-Management-System'
+      //   }
+      // });
+
+      const response = await axios.get(
+        `https://api.postalpincode.in/pincode/${pincode}`,
+        {
+          timeout: 10000,
+          headers: {
+            'User-Agent': 'Asset-Management-System'
+          }
         }
-      });
+      );
 
       const data = response.data;
 
