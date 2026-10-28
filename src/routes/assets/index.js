@@ -2538,6 +2538,11 @@ router.post('/',
     const finalStatus = (asset_type === 'component' && parent_asset_id) ? 'in_use' : status;
     const performedBy = installed_by || req.user?.user_id;
     const createdBy = req.user?.user_id || null;
+    const createdBy = req.user?.user_id || req.user?.id || null;
+
+    console.log('Asset audit - authenticated user:', req.user);
+    console.log('Asset audit - createdBy:', createdBy);
+    
     // Get default vendor (PoleStar) if not provided
     let finalVendorId = vendor_id;
     if (!finalVendorId) {
@@ -3011,10 +3016,14 @@ router.put('/:id',
       // Record the user who last edited the asset
       updateFields.push('updated_by = @updatedBy');
       
+      const updatedBy = req.user?.user_id || req.user?.id || null;
+
+      console.log('Asset audit - updatedBy:', updatedBy);
+      
       updateRequest.input(
         'updatedBy',
         sql.UniqueIdentifier,
-        req.user?.user_id || null
+        updatedBy
       );
       
       // Update the timestamp
