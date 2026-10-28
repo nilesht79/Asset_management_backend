@@ -280,7 +280,7 @@ SELECT
   a.id, a.asset_tag, a.tag_no, a.serial_number, a.ip_address,
 a.hostname, a.status, a.condition_status, a.importance, a.purchase_date,
   a.warranty_start_date, a.warranty_end_date,
-  a.purchase_cost, a.vendor_id as asset_vendor_id, a.invoice_number, a.notes, a.created_at, a.updated_at,
+  a.purchase_cost, a.vendor_id as asset_vendor_id, a.invoice_number, a.notes, a.created_at, a.updated_at, a.created_by, a.updated_by,
   a.eol_date, a.eos_date,
   a.product_id, a.assigned_to,
   a.asset_type, a.parent_asset_id, a.installation_date, a.removal_date,
@@ -293,6 +293,8 @@ a.hostname, a.status, a.condition_status, a.importance, a.purchase_date,
 a.location_id as location_id,
 a.department_id as department_id,
   u.first_name + ' ' + u.last_name as assigned_user_name,
+  creator.first_name + ' ' + creator.last_name AS created_by_name,
+editor.first_name + ' ' + editor.last_name AS updated_by_name,
   u.email as assigned_user_email,
   u.employee_id as assigned_employee_code,
   dept.department_name as department,
@@ -312,6 +314,8 @@ INNER JOIN products p ON a.product_id = p.id
 LEFT JOIN categories c ON p.category_id = c.id
 LEFT JOIN product_types pt ON p.type_id = pt.id
 LEFT JOIN categories subcat ON p.subcategory_id = subcat.id
+LEFT JOIN USER_MASTER creator ON a.created_by = creator.user_id
+LEFT JOIN USER_MASTER editor ON a.updated_by = editor.user_id
 LEFT JOIN oems o ON p.oem_id = o.id
 LEFT JOIN vendors v ON a.vendor_id = v.id
 
@@ -379,6 +383,10 @@ a.department_id as department_id,
         l.address as location_address,
         l.building as location_building,
         l.floor as location_floor,
+        a.created_by,
+        a.updated_by,
+        creator.first_name + ' ' + creator.last_name AS created_by_name,
+        editor.first_name + ' ' + editor.last_name AS updated_by_name,
         (SELECT COUNT(*) FROM assets comp WHERE comp.parent_asset_id = a.id AND comp.is_active = 1 AND comp.removal_date IS NULL) as installed_component_count,
         CASE
           WHEN a.warranty_end_date IS NULL THEN 'No Warranty'
@@ -393,6 +401,10 @@ a.department_id as department_id,
       LEFT JOIN categories subcat ON p.subcategory_id = subcat.id
       LEFT JOIN oems o ON p.oem_id = o.id
       LEFT JOIN vendors v ON a.vendor_id = v.id
+      LEFT JOIN USER_MASTER creator
+    ON a.created_by = creator.user_id
+LEFT JOIN USER_MASTER editor
+    ON a.updated_by = editor.user_id
 
 -- Parent Asset
 LEFT JOIN assets parent
@@ -2525,6 +2537,7 @@ router.post('/',
     // Components with parent = 'in_use', spare components without parent = respect user selection
     const finalStatus = (asset_type === 'component' && parent_asset_id) ? 'in_use' : status;
     const performedBy = installed_by || req.user?.user_id;
+    const createdBy = req.user?.user_id || null;
     // Get default vendor (PoleStar) if not provided
     let finalVendorId = vendor_id;
     if (!finalVendorId) {
@@ -2537,6 +2550,7 @@ router.post('/',
 
     const result = await pool.request()
       .input('id', sql.UniqueIdentifier, assetId)
+      .input('createdBy', sql.UniqueIdentifier, createdBy)
       .input('assetTag', sql.VarChar(50), finalAssetTag)
       .input('tagNo', sql.VarChar(100), tagNo)
       .input('serialNumber', sql.VarChar(100), serial_number ? serial_number.trim() : null)
@@ -2570,14 +2584,14 @@ router.post('/',
           purchase_date, warranty_end_date, warranty_start_date, eol_date, eos_date,
           purchase_cost, vendor_id, invoice_number, notes, is_active,
           asset_type, parent_asset_id, installation_date, installation_notes, installed_by,
-          created_at, updated_at, location_id, department_id
+          created_at, updated_at, created_by, location_id, department_id
         )
         VALUES (
           @id, @assetTag, @tagNo, @serialNumber, @productId, @assignedTo, @ipAddress, @hostname, @status, @conditionStatus, @importance,
           @purchaseDate, @warrantyEndDate, @warrantyStartDate, @eolDate, @eosDate,
           @purchaseCost, @vendorId, @invoiceNumber, @notes, @isActive,
           @assetType, @parentAssetId, @installationDate, @installationNotes, @installedBy,
-          GETUTCDATE(), GETUTCDATE(), @locationId, @departmentId
+          GETUTCDATE(), GETUTCDATE(), @createdBy, @locationId, @departmentId
         );
 
         SELECT
@@ -2984,11 +2998,27 @@ router.put('/:id',
       updateRequest.input('installedBy', sql.UniqueIdentifier, installed_by);
     }
 
-    if (updateFields.length === 0) {
-      return sendError(res, 'No fields to update', 400);
-    }
+    // if (updateFields.length === 0) {
+    //   return sendError(res, 'No fields to update', 400);
+    // }
 
-    updateFields.push('updated_at = GETUTCDATE()');
+    // updateFields.push('updated_at = GETUTCDATE()');
+
+    if (updateFields.length === 0) {
+        return sendError(res, 'No fields to update', 400);
+      }
+      
+      // Record the user who last edited the asset
+      updateFields.push('updated_by = @updatedBy');
+      
+      updateRequest.input(
+        'updatedBy',
+        sql.UniqueIdentifier,
+        req.user?.user_id || null
+      );
+      
+      // Update the timestamp
+      updateFields.push('updated_at = GETUTCDATE()');
 
     const result = await updateRequest.query(`
       UPDATE assets
