@@ -3030,6 +3030,10 @@ router.put('/:id',
         a.warranty_start_date, a.warranty_end_date, a.eol_date, a.eos_date,
         a.purchase_cost, a.vendor_id as asset_vendor_id, a.invoice_number, a.notes, a.asset_type, a.parent_asset_id, a.installation_date,
         a.installation_notes, a.created_at, a.updated_at,
+        a.created_by,
+        a.updated_by,
+        creator.first_name + ' ' + creator.last_name AS created_by_name,
+        editor.first_name + ' ' + editor.last_name AS updated_by_name,
         u.location_id, a.assigned_to,
         p.name as product_name, p.model as product_model,
         l.name as location_name,
@@ -3049,6 +3053,10 @@ router.put('/:id',
       LEFT JOIN locations l ON a.location_id = l.id
       LEFT JOIN assets parent ON a.parent_asset_id = parent.id
       LEFT JOIN USER_MASTER installer ON a.installed_by = installer.user_id
+      LEFT JOIN USER_MASTER creator
+          ON a.created_by = creator.user_id
+      LEFT JOIN USER_MASTER editor
+          ON a.updated_by = editor.user_id
       WHERE a.id = @id;
     `);
 
