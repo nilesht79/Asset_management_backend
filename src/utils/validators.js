@@ -134,18 +134,18 @@ const validators = {
   },
 
   productType: {
-    create: Joi.object({
-      name: Joi.string().min(2).max(100).required(),
-      description: Joi.string().max(500).optional(),
-      is_active: Joi.boolean().default(true)
-    }),
-    
-    update: Joi.object({
-      name: Joi.string().min(2).max(100).optional(),
-      description: Joi.string().max(500).optional(),
-      is_active: Joi.boolean().optional()
-    })
-  },
+  create: Joi.object({
+    name: Joi.string().min(2).max(100).required(),
+    description: Joi.string().max(500).optional().allow('', null),
+    is_active: Joi.boolean().default(true)
+  }),
+
+  update: Joi.object({
+    name: Joi.string().min(2).max(100).optional(),
+    description: Joi.string().max(500).optional().allow('', null),
+    is_active: Joi.boolean().optional()
+  })
+},
 
   product: {
     create: Joi.object({
