@@ -789,8 +789,17 @@ router.put('/:id/cancel',
 
     const requisition = reqResult.recordset[0];
 
-    // Verify user is the requester
-    if (requisition.requested_by !== userId) {
+    // // Verify user is the requester
+    // if (requisition.requested_by !== userId) {
+    //   return sendError(res, 'You can only cancel your own requisitions', 403);
+    // }
+
+    // Allow admins to cancel any requisition.
+    // Other roles can cancel only their own requisitions.
+    const userRole = String(req.oauth.user.role || '').toLowerCase();
+    const isAdmin = ['admin', 'superadmin'].includes(userRole);
+    
+    if (!isAdmin && String(requisition.requested_by) !== String(userId)) {
       return sendError(res, 'You can only cancel your own requisitions', 403);
     }
 
