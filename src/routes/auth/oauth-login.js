@@ -261,25 +261,59 @@ router.post('/oauth-superadmin-login',
 );
 
 // OAuth 2.0 Logout endpoint - clears HttpOnly cookies
+// router.post('/oauth-logout',
+//   asyncHandler(async (req, res) => {
+//     try {
+//       // Audit: Log logout
+//       await auditService.logLogout(req);
+
+//       // Clear the HttpOnly cookies using centralized config
+//       const clearCookieOptions = getClearCookieOptions();
+
+//       res.clearCookie('access_token', clearCookieOptions);
+//       res.clearCookie('refresh_token', clearCookieOptions);
+
+//       return sendSuccess(res, null, 'Logout successful');
+//     } catch (error) {
+//       console.error('OAuth logout error:', error);
+//       return sendError(res, 'Logout failed', 500);
+//     }
+//   })
+// );
+
+
+// OAuth 2.0 Logout endpoint - revokes refresh token and clears cookies
 router.post('/oauth-logout',
   asyncHandler(async (req, res) => {
     try {
-      // Audit: Log logout
-      await auditService.logLogout(req);
+      const refreshToken = req.cookies?.refresh_token
 
-      // Clear the HttpOnly cookies using centralized config
-      const clearCookieOptions = getClearCookieOptions();
+      // Revoke the refresh token in the database
+      if (refreshToken) {
+        const revoked = await OAuth2Server.revokeToken(refreshToken)
 
-      res.clearCookie('access_token', clearCookieOptions);
-      res.clearCookie('refresh_token', clearCookieOptions);
+        if (!revoked) {
+          return sendError(res, 'Unable to revoke session token', 500)
+        }
+      }
 
-      return sendSuccess(res, null, 'Logout successful');
+      // Audit logout
+      await auditService.logLogout(req)
+
+      // Clear HttpOnly cookies
+      const clearCookieOptions = getClearCookieOptions()
+
+      res.clearCookie('access_token', clearCookieOptions)
+      res.clearCookie('refresh_token', clearCookieOptions)
+
+      return sendSuccess(res, null, 'Logout successful')
     } catch (error) {
-      console.error('OAuth logout error:', error);
-      return sendError(res, 'Logout failed', 500);
+      console.error('OAuth logout error:', error)
+      return sendError(res, 'Logout failed', 500)
     }
   })
-);
+)
+
 
 // TEST PASSWORD API
 router.post('/test-password', async (req, res) => {
