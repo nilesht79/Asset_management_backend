@@ -3055,6 +3055,37 @@ router.post('/',
 // PUT /assets/:id - Update asset
 router.put('/:id',
   requireDynamicPermission(),
+    // Restrict Engineer to department_id only
+  (req, res, next) => {
+    const role = String(req.user?.role || '')
+      .trim()
+      .toLowerCase()
+
+    if (role === 'engineer') {
+      const allowedFields = ['department_id']
+      const receivedFields = Object.keys(req.body || {})
+
+      const invalidFields = receivedFields.filter(
+        field => !allowedFields.includes(field)
+      )
+
+      if (
+        invalidFields.length > 0 ||
+        !Object.prototype.hasOwnProperty.call(
+          req.body,
+          'department_id'
+        )
+      ) {
+        return sendError(
+          res,
+          'Engineers can update only the Department field',
+          403
+        )
+      }
+    }
+
+    next()
+  },
   validateUUID('id'),
   validateBody(validators.asset.update),
   asyncHandler(async (req, res) => {
