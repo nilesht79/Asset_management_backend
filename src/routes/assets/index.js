@@ -199,7 +199,6 @@ if (search) {
       OR a.notes LIKE @search
     )
   `
-
   params.push({
     name: 'search',
     type: sql.VarChar(255),
