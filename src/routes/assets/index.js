@@ -175,10 +175,38 @@ router.get('/',
     let whereClause = 'a.is_active = 1 AND (a.is_standby_asset = 0 OR a.is_standby_asset IS NULL)';
     const params = [];
 
-    if (search) {
-      whereClause += ' AND (a.asset_tag LIKE @search OR a.serial_number LIKE @search OR p.name LIKE @search OR p.model LIKE @search OR a.notes LIKE @search)';
-      params.push({ name: 'search', type: sql.VarChar(255), value: `%${search}%` });
-    }
+    // if (search) {
+    //   whereClause += ' AND (a.asset_tag LIKE @search OR a.serial_number LIKE @search OR p.name LIKE @search OR p.model LIKE @search OR a.notes LIKE @search)';
+    //   params.push({ name: 'search', type: sql.VarChar(255), value: `%${search}%` });
+    // }
+
+    
+if (search) {
+  whereClause += `
+    AND (
+      a.serial_number LIKE @search
+      OR p.name LIKE @search
+      OR p.model LIKE @search
+      OR o.name LIKE @search
+      OR u.employee_id LIKE @search
+      OR u.first_name LIKE @search
+      OR u.last_name LIKE @search
+      OR (
+        COALESCE(u.first_name, '') + ' ' +
+        COALESCE(u.last_name, '')
+      ) LIKE @search
+      OR a.asset_tag LIKE @search
+      OR a.notes LIKE @search
+    )
+  `
+
+  params.push({
+    name: 'search',
+    type: sql.VarChar(255),
+    value: `%${search.trim()}%`
+  })
+}
+
 
 //     if (status) {
 //       whereClause += ' AND a.status = @status';
