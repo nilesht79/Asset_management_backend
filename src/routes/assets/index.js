@@ -3088,6 +3088,15 @@ router.put('/:id',
       .trim()
       .toLowerCase()
 
+    // Coordinator cannot edit assets
+    if (role === 'coordinator') {
+      return sendError(
+        res,
+        'Coordinators are not allowed to edit assets',
+        403
+      )
+    }
+
     if (role === 'engineer') {
       const allowedFields = ['department_id']
       const receivedFields = Object.keys(req.body || {})
