@@ -3057,7 +3057,7 @@ router.put('/:id',
   requireDynamicPermission(),
     // Restrict Engineer to department_id only
   (req, res, next) => {
-    const role = String(req.user?.role || '')
+    const role = String(req.oauth?.user?.role || req.user?.role || '')
       .trim()
       .toLowerCase()
 
