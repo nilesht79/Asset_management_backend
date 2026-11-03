@@ -16,6 +16,48 @@ const { generateAssetBulkTemplate, parseAssetBulkFile, generateLegacyAssetTempla
 const { generateUniqueTagNo, generateUniqueAssetTag } = require('../../utils/tag-generator');
 
 const router = express.Router();
+// Convert single or multiple query values into an array
+const normalizeFilterValues = (value) => {
+  if (value === undefined || value === null || value === '') {
+    return [];
+  }
+
+  const values = Array.isArray(value) ? value : String(value).split(',');
+
+  return values
+    .map(value => String(value).trim())
+    .filter(Boolean);
+};
+
+// Add a parameterized SQL IN condition
+const addMultiSelectFilter = (
+  whereClause,
+  params,
+  column,
+  paramPrefix,
+  value,
+  sqlType
+) => {
+  const values = normalizeFilterValues(value);
+
+  if (values.length === 0) {
+    return whereClause;
+  }
+
+  const placeholders = values.map((item, index) => {
+    const paramName = `${paramPrefix}${index}`;
+
+    params.push({
+      name: paramName,
+      type: sqlType,
+      value: item
+    });
+
+    return `@${paramName}`;
+  });
+
+  return `${whereClause} AND ${column} IN (${placeholders.join(', ')})`;
+};
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Import component routes
@@ -93,11 +135,27 @@ router.get('/',
   validatePagination,
   asyncHandler(async (req, res) => {
     const { page, limit, offset, sortBy, sortOrder } = req.pagination;
+    // const {
+    //   search,
+    //   status,
+    //   condition_status,
+    //   location_id,
+    //   assigned_to,
+    //   product_id,
+    //   category_id,
+    //   product_type_id,
+    //   subcategory_id,
+    //   oem_id,
+    //   warranty_expiring,
+    //   board_id,
+    //   serial_number
+    // } = req.query;
     const {
       search,
       status,
       condition_status,
       location_id,
+      department_id,
       assigned_to,
       product_id,
       category_id,
@@ -106,7 +164,8 @@ router.get('/',
       oem_id,
       warranty_expiring,
       board_id,
-      serial_number
+      serial_number,
+      employee_code
     } = req.query;
 
     const pool = await connectDB();
@@ -121,77 +180,140 @@ router.get('/',
       params.push({ name: 'search', type: sql.VarChar(255), value: `%${search}%` });
     }
 
-    if (status) {
-      whereClause += ' AND a.status = @status';
-      params.push({ name: 'status', type: sql.VarChar(20), value: status });
-    }
+//     if (status) {
+//       whereClause += ' AND a.status = @status';
+//       params.push({ name: 'status', type: sql.VarChar(20), value: status });
+//     }
 
-    if (condition_status) {
-      whereClause += ' AND a.condition_status = @conditionStatus';
-      params.push({ name: 'conditionStatus', type: sql.VarChar(20), value: condition_status });
-    }
+//     if (condition_status) {
+//       whereClause += ' AND a.condition_status = @conditionStatus';
+//       params.push({ name: 'conditionStatus', type: sql.VarChar(20), value: condition_status });
+//     }
 
-    // if (location_id) {
-    //   whereClause += ' AND u.location_id = @locationId';
-    //   params.push({ name: 'locationId', type: sql.UniqueIdentifier, value: location_id });
-    // }
 
-    if (location_id) {
-  whereClause += `
-    AND a.location_id = @locationId
-  `;
 
-  params.push({
-    name: 'locationId',
-    type: sql.UniqueIdentifier,
-    value: location_id
-  });
-}
+//     if (location_id) {
+//   whereClause += `
+//     AND a.location_id = @locationId
+//   `;
 
-    // if (assigned_to) {
-    //   whereClause += ' AND a.assigned_to = @assignedTo';
-    //   params.push({ name: 'assignedTo', type: sql.UniqueIdentifier, value: assigned_to });
-    // }
+//   params.push({
+//     name: 'locationId',
+//     type: sql.UniqueIdentifier,
+//     value: location_id
+//   });
+// }
 
-    if (assigned_to) {
-  whereClause += `
-    AND COALESCE(
-      parent.assigned_to,
-      a.assigned_to
-    ) = @assignedTo
-  `;
 
-  params.push({
-    name: 'assignedTo',
-    type: sql.UniqueIdentifier,
-    value: assigned_to
-  });
-}
+//     if (assigned_to) {
+//   whereClause += `
+//     AND COALESCE(
+//       parent.assigned_to,
+//       a.assigned_to
+//     ) = @assignedTo
+//   `;
 
-    if (product_id) {
-      whereClause += ' AND a.product_id = @productId';
-      params.push({ name: 'productId', type: sql.UniqueIdentifier, value: product_id });
-    }
+//   params.push({
+//     name: 'assignedTo',
+//     type: sql.UniqueIdentifier,
+//     value: assigned_to
+//   });
+// }
 
-    if (category_id) {
-      whereClause += ' AND p.category_id = @categoryId';
-      params.push({ name: 'categoryId', type: sql.UniqueIdentifier, value: category_id });
-    }
+//     if (product_id) {
+//       whereClause += ' AND a.product_id = @productId';
+//       params.push({ name: 'productId', type: sql.UniqueIdentifier, value: product_id });
+//     }
 
-    if (product_type_id) {
-      whereClause += ' AND p.type_id = @productTypeId';
-      params.push({ name: 'productTypeId', type: sql.UniqueIdentifier, value: product_type_id });
-    }
+//     if (category_id) {
+//       whereClause += ' AND p.category_id = @categoryId';
+//       params.push({ name: 'categoryId', type: sql.UniqueIdentifier, value: category_id });
+//     }
 
-    if (subcategory_id) {
-      whereClause += ' AND p.subcategory_id = @subcategoryId';
-      params.push({ name: 'subcategoryId', type: sql.UniqueIdentifier, value: subcategory_id });
-    }
+//     if (product_type_id) {
+//       whereClause += ' AND p.type_id = @productTypeId';
+//       params.push({ name: 'productTypeId', type: sql.UniqueIdentifier, value: product_type_id });
+//     }
 
-    if (oem_id) {
-      whereClause += ' AND p.oem_id = @oemId';
-      params.push({ name: 'oemId', type: sql.UniqueIdentifier, value: oem_id });
-    }
+//     if (subcategory_id) {
+//       whereClause += ' AND p.subcategory_id = @subcategoryId';
+//       params.push({ name: 'subcategoryId', type: sql.UniqueIdentifier, value: subcategory_id });
+//     }
+
+//     if (oem_id) {
+//       whereClause += ' AND p.oem_id = @oemId';
+//       params.push({ name: 'oemId', type: sql.UniqueIdentifier, value: oem_id });
+//     }
+
+    // Status - Multi Select
+    whereClause = addMultiSelectFilter(
+      whereClause, params,
+      'a.status', 'status',
+      status, sql.VarChar(20)
+    );
+    
+    // Condition Status - Multi Select
+    whereClause = addMultiSelectFilter(
+      whereClause, params,
+      'a.condition_status', 'conditionStatus',
+      condition_status, sql.VarChar(20)
+    );
+    
+    // Location - Multi Select
+    whereClause = addMultiSelectFilter(
+      whereClause, params,
+      'a.location_id', 'locationId',
+      location_id, sql.UniqueIdentifier
+    );
+    
+    // Department - Multi Select
+    whereClause = addMultiSelectFilter(
+      whereClause, params,
+      'a.department_id', 'departmentId',
+      department_id, sql.UniqueIdentifier
+    );
+    
+    // Assigned User - Multi Select
+    whereClause = addMultiSelectFilter(
+      whereClause, params,
+      'COALESCE(parent.assigned_to, a.assigned_to)', 'assignedTo',
+      assigned_to, sql.UniqueIdentifier
+    );
+    
+    // Product - Multi Select
+    whereClause = addMultiSelectFilter(
+      whereClause, params,
+      'a.product_id', 'productId',
+      product_id, sql.UniqueIdentifier
+    );
+    
+    // Category - Multi Select
+    whereClause = addMultiSelectFilter(
+      whereClause, params,
+      'p.category_id', 'categoryId',
+      category_id, sql.UniqueIdentifier
+    );
+    
+    // Product Type - Multi Select
+    whereClause = addMultiSelectFilter(
+      whereClause, params,
+      'p.type_id', 'productTypeId',
+      product_type_id, sql.UniqueIdentifier
+    );
+    
+    // Subcategory - Multi Select
+    whereClause = addMultiSelectFilter(
+      whereClause, params,
+      'p.subcategory_id', 'subcategoryId',
+      subcategory_id, sql.UniqueIdentifier
+    );
+    
+    // OEM - Multi Select
+    whereClause = addMultiSelectFilter(
+      whereClause, params,
+      'p.oem_id', 'oemId',
+      oem_id, sql.UniqueIdentifier
+    );
 
     // Warranty expiring filter (within 30 days)
     if (warranty_expiring === 'true') {
@@ -205,30 +327,82 @@ router.get('/',
     // }
 
     // Board filter (via user's department)
-if (board_id) {
+// if (board_id) {
+//   whereClause += `
+//     AND EXISTS (
+//       SELECT 1 
+//       FROM BOARD_DEPARTMENTS bd 
+//       WHERE bd.department_id = d.department_id 
+//       AND bd.board_id = @boardId
+//     )
+//   `;
+
+//   params.push({ name: 'boardId', type: sql.UniqueIdentifier, value: board_id });
+// }
+
+        // Board - Multi Select
+const boardIds = normalizeFilterValues(board_id);
+
+if (boardIds.length) {
+  const boardPlaceholders = boardIds.map((id, index) => {
+    const paramName = `boardId${index}`;
+
+    params.push({
+      name: paramName,
+      type: sql.UniqueIdentifier,
+      value: id
+    });
+
+    return `@${paramName}`;
+  });
+
   whereClause += `
     AND EXISTS (
-      SELECT 1 
-      FROM BOARD_DEPARTMENTS bd 
-      WHERE bd.department_id = d.department_id 
-      AND bd.board_id = @boardId
+      SELECT 1
+      FROM BOARD_DEPARTMENTS bd
+      WHERE bd.department_id = dept.department_id
+      AND bd.board_id IN (${boardPlaceholders.join(', ')})
     )
   `;
-
-  params.push({ name: 'boardId', type: sql.UniqueIdentifier, value: board_id });
 }
 
     // Serial number filter
-    if (serial_number) {
-      whereClause += ' AND a.serial_number = @serialNumber';
-      params.push({ name: 'serialNumber', type: sql.VarChar(255), value: serial_number });
-    }
+    // if (serial_number) {
+    //   whereClause += ' AND a.serial_number = @serialNumber';
+    //   params.push({ name: 'serialNumber', type: sql.VarChar(255), value: serial_number });
+    // }
+
+    // Serial Number - Multi Select
+whereClause = addMultiSelectFilter(
+  whereClause, params,
+  'a.serial_number', 'serialNumber',
+  serial_number, sql.VarChar(255)
+);
 
     // Employee code filter
-    if (req.query.employee_code) {
-      whereClause += ' AND u.employee_id LIKE @employeeCode';
-      params.push({ name: 'employeeCode', type: sql.VarChar(20), value: `%${req.query.employee_code}%` });
-    }
+    // if (req.query.employee_code) {
+    //   whereClause += ' AND u.employee_id LIKE @employeeCode';
+    //   params.push({ name: 'employeeCode', type: sql.VarChar(20), value: `%${req.query.employee_code}%` });
+    // }
+
+    // Employee Code - Multi Select
+const employeeCodes = normalizeFilterValues(employee_code);
+
+if (employeeCodes.length) {
+  const employeeConditions = employeeCodes.map((code, index) => {
+    const paramName = `employeeCode${index}`;
+
+    params.push({
+      name: paramName,
+      type: sql.VarChar(50),
+      value: `%${code}%`
+    });
+
+    return `u.employee_id LIKE @${paramName}`;
+  });
+
+  whereClause += ` AND (${employeeConditions.join(' OR ')})`;
+}
 
     // Get total count
     const countRequest = pool.request();
@@ -809,20 +983,39 @@ router.get('/user/:userId/assets',
 router.get('/export',
   requireRole(['superadmin', 'admin', 'coordinator','it_head']),
   asyncHandler(async (req, res) => {
+    // const {
+    //   format = 'xlsx',
+    //   search,
+    //   status,
+    //   condition_status,
+    //   location_id,
+    //   assigned_to,
+    //   product_id,
+    //   category_id,
+    //   product_type_id,
+    //   subcategory_id,
+    //   oem_id,
+    //   warranty_expiring
+    // } = req.query;
+
     const {
-      format = 'xlsx',
-      search,
-      status,
-      condition_status,
-      location_id,
-      assigned_to,
-      product_id,
-      category_id,
-      product_type_id,
-      subcategory_id,
-      oem_id,
-      warranty_expiring
-    } = req.query;
+  format = 'xlsx',
+  search,
+  status,
+  condition_status,
+  location_id,
+  department_id,
+  assigned_to,
+  product_id,
+  category_id,
+  product_type_id,
+  subcategory_id,
+  oem_id,
+  warranty_expiring,
+  board_id,
+  serial_number,
+  employee_code
+} = req.query;
 
     const pool = await connectDB();
 
@@ -836,77 +1029,140 @@ router.get('/export',
       params.push({ name: 'search', type: sql.VarChar(255), value: `%${search}%` });
     }
 
-    if (status) {
-      whereClause += ' AND a.status = @status';
-      params.push({ name: 'status', type: sql.VarChar(20), value: status });
-    }
+//     if (status) {
+//       whereClause += ' AND a.status = @status';
+//       params.push({ name: 'status', type: sql.VarChar(20), value: status });
+//     }
 
-    if (condition_status) {
-      whereClause += ' AND a.condition_status = @conditionStatus';
-      params.push({ name: 'conditionStatus', type: sql.VarChar(20), value: condition_status });
-    }
+//     if (condition_status) {
+//       whereClause += ' AND a.condition_status = @conditionStatus';
+//       params.push({ name: 'conditionStatus', type: sql.VarChar(20), value: condition_status });
+//     }
 
-    // if (location_id) {
-    //   whereClause += ' AND u.location_id = @locationId';
-    //   params.push({ name: 'locationId', type: sql.UniqueIdentifier, value: location_id });
-    // }
+   
 
-    if (location_id) {
-  whereClause += `
-    AND a.location_id = @locationId
-  `;
+//     if (location_id) {
+//   whereClause += `
+//     AND a.location_id = @locationId
+//   `;
 
-  params.push({
-    name: 'locationId',
-    type: sql.UniqueIdentifier,
-    value: location_id
-  });
-}
+//   params.push({
+//     name: 'locationId',
+//     type: sql.UniqueIdentifier,
+//     value: location_id
+//   });
+// }
 
-    // if (assigned_to) {
-    //   whereClause += ' AND a.assigned_to = @assignedTo';
-    //   params.push({ name: 'assignedTo', type: sql.UniqueIdentifier, value: assigned_to });
-    // }
 
-    if (assigned_to) {
-  whereClause += `
-    AND COALESCE(
-      parent.assigned_to,
-      a.assigned_to
-    ) = @assignedTo
-  `;
+//     if (assigned_to) {
+//   whereClause += `
+//     AND COALESCE(
+//       parent.assigned_to,
+//       a.assigned_to
+//     ) = @assignedTo
+//   `;
 
-  params.push({
-    name: 'assignedTo',
-    type: sql.UniqueIdentifier,
-    value: assigned_to
-  });
-}
+//   params.push({
+//     name: 'assignedTo',
+//     type: sql.UniqueIdentifier,
+//     value: assigned_to
+//   });
+// }
 
-    if (product_id) {
-      whereClause += ' AND a.product_id = @productId';
-      params.push({ name: 'productId', type: sql.UniqueIdentifier, value: product_id });
-    }
+//     if (product_id) {
+//       whereClause += ' AND a.product_id = @productId';
+//       params.push({ name: 'productId', type: sql.UniqueIdentifier, value: product_id });
+//     }
 
-    if (category_id) {
-      whereClause += ' AND p.category_id = @categoryId';
-      params.push({ name: 'categoryId', type: sql.UniqueIdentifier, value: category_id });
-    }
+//     if (category_id) {
+//       whereClause += ' AND p.category_id = @categoryId';
+//       params.push({ name: 'categoryId', type: sql.UniqueIdentifier, value: category_id });
+//     }
 
-    if (product_type_id) {
-      whereClause += ' AND p.type_id = @productTypeId';
-      params.push({ name: 'productTypeId', type: sql.UniqueIdentifier, value: product_type_id });
-    }
+//     if (product_type_id) {
+//       whereClause += ' AND p.type_id = @productTypeId';
+//       params.push({ name: 'productTypeId', type: sql.UniqueIdentifier, value: product_type_id });
+//     }
 
-    if (subcategory_id) {
-      whereClause += ' AND p.subcategory_id = @subcategoryId';
-      params.push({ name: 'subcategoryId', type: sql.UniqueIdentifier, value: subcategory_id });
-    }
+//     if (subcategory_id) {
+//       whereClause += ' AND p.subcategory_id = @subcategoryId';
+//       params.push({ name: 'subcategoryId', type: sql.UniqueIdentifier, value: subcategory_id });
+//     }
 
-    if (oem_id) {
-      whereClause += ' AND p.oem_id = @oemId';
-      params.push({ name: 'oemId', type: sql.UniqueIdentifier, value: oem_id });
-    }
+//     if (oem_id) {
+//       whereClause += ' AND p.oem_id = @oemId';
+//       params.push({ name: 'oemId', type: sql.UniqueIdentifier, value: oem_id });
+//     }
+
+    // Status - Multi Select
+whereClause = addMultiSelectFilter(
+  whereClause, params,
+  'a.status', 'status',
+  status, sql.VarChar(20)
+);
+
+// Condition Status - Multi Select
+whereClause = addMultiSelectFilter(
+  whereClause, params,
+  'a.condition_status', 'conditionStatus',
+  condition_status, sql.VarChar(20)
+);
+
+// Location - Multi Select
+whereClause = addMultiSelectFilter(
+  whereClause, params,
+  'a.location_id', 'locationId',
+  location_id, sql.UniqueIdentifier
+);
+
+// Department - Multi Select
+whereClause = addMultiSelectFilter(
+  whereClause, params,
+  'a.department_id', 'departmentId',
+  department_id, sql.UniqueIdentifier
+);
+
+// Assigned User - Multi Select
+whereClause = addMultiSelectFilter(
+  whereClause, params,
+  'COALESCE(parent.assigned_to, a.assigned_to)', 'assignedTo',
+  assigned_to, sql.UniqueIdentifier
+);
+
+// Product - Multi Select
+whereClause = addMultiSelectFilter(
+  whereClause, params,
+  'a.product_id', 'productId',
+  product_id, sql.UniqueIdentifier
+);
+
+// Category - Multi Select
+whereClause = addMultiSelectFilter(
+  whereClause, params,
+  'p.category_id', 'categoryId',
+  category_id, sql.UniqueIdentifier
+);
+
+// Product Type - Multi Select
+whereClause = addMultiSelectFilter(
+  whereClause, params,
+  'p.type_id', 'productTypeId',
+  product_type_id, sql.UniqueIdentifier
+);
+
+// Subcategory - Multi Select
+whereClause = addMultiSelectFilter(
+  whereClause, params,
+  'p.subcategory_id', 'subcategoryId',
+  subcategory_id, sql.UniqueIdentifier
+);
+
+// OEM - Multi Select
+whereClause = addMultiSelectFilter(
+  whereClause, params,
+  'p.oem_id', 'oemId',
+  oem_id, sql.UniqueIdentifier
+);
 
     // if (warranty_expiring === 'true') {
     //   whereClause += ' AND a.warranty_end_date IS NOT NULL AND a.warranty_end_date <= DATEADD(day, 30, GETUTCDATE())';
@@ -919,29 +1175,82 @@ router.get('/export',
 }
 
     // Board filter
-      if (req.query.board_id) {
-        whereClause += `
-          AND EXISTS (
-            SELECT 1 
-            FROM BOARD_DEPARTMENTS bd 
-            WHERE bd.department_id = d.department_id 
-            AND bd.board_id = @boardId
-          )
-        `;
-        params.push({ name: 'boardId', type: sql.UniqueIdentifier, value: req.query.board_id });
-      }
+      // if (req.query.board_id) {
+      //   whereClause += `
+      //     AND EXISTS (
+      //       SELECT 1 
+      //       FROM BOARD_DEPARTMENTS bd 
+      //       WHERE bd.department_id = d.department_id 
+      //       AND bd.board_id = @boardId
+      //     )
+      //   `;
+      //   params.push({ name: 'boardId', type: sql.UniqueIdentifier, value: req.query.board_id });
+      // }
+
+    // Board - Multi Select
+const boardIds = normalizeFilterValues(board_id);
+
+if (boardIds.length) {
+  const boardPlaceholders = boardIds.map((id, index) => {
+    const paramName = `boardId${index}`;
+
+    params.push({
+      name: paramName,
+      type: sql.UniqueIdentifier,
+      value: id
+    });
+
+    return `@${paramName}`;
+  });
+
+  whereClause += `
+    AND EXISTS (
+      SELECT 1
+      FROM BOARD_DEPARTMENTS bd
+      WHERE bd.department_id = d.department_id
+      AND bd.board_id IN (${boardPlaceholders.join(', ')})
+    )
+  `;
+}
 
     // Serial number filter
-    if (req.query.serial_number) {
-      whereClause += ' AND a.serial_number = @serialNumber';
-      params.push({ name: 'serialNumber', type: sql.VarChar(255), value: req.query.serial_number });
-    }
+    // if (req.query.serial_number) {
+    //   whereClause += ' AND a.serial_number = @serialNumber';
+    //   params.push({ name: 'serialNumber', type: sql.VarChar(255), value: req.query.serial_number });
+    // }
+
+    // Serial Number - Multi Select
+whereClause = addMultiSelectFilter(
+  whereClause, params,
+  'a.serial_number', 'serialNumber',
+  serial_number, sql.VarChar(255)
+);
 
     // Employee code filter
-    if (req.query.employee_code) {
-      whereClause += ' AND u.employee_id LIKE @employeeCode';
-      params.push({ name: 'employeeCode', type: sql.VarChar(20), value: `%${req.query.employee_code}%` });
-    }
+    // if (req.query.employee_code) {
+    //   whereClause += ' AND u.employee_id LIKE @employeeCode';
+    //   params.push({ name: 'employeeCode', type: sql.VarChar(20), value: `%${req.query.employee_code}%` });
+    // }
+
+
+    // Employee Code - Multi Select
+const employeeCodes = normalizeFilterValues(employee_code);
+
+if (employeeCodes.length) {
+  const employeeConditions = employeeCodes.map((code, index) => {
+    const paramName = `employeeCode${index}`;
+
+    params.push({
+      name: paramName,
+      type: sql.VarChar(50),
+      value: `%${code}%`
+    });
+
+    return `u.employee_id LIKE @${paramName}`;
+  });
+
+  whereClause += ` AND (${employeeConditions.join(' OR ')})`;
+}
 
     // Get all assets for export (no pagination)
     const dataRequest = pool.request();
