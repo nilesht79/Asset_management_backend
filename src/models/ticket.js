@@ -1187,12 +1187,27 @@ class TicketModel {
         }
       });
 
-      const [ticketsResult, countResult] = await Promise.all([
-        request.query(query),
-        pool.request()
-          .input('engineerId', sql.UniqueIdentifier, engineerId)
-          .query(countQuery)
-      ]);
+      // const [ticketsResult, countResult] = await Promise.all([
+      //   request.query(query),
+      //   pool.request()
+      //     .input('engineerId', sql.UniqueIdentifier, engineerId)
+      //     .query(countQuery)
+      // ]);
+
+      // Prepare count request with all filter parameters
+        const countRequest = pool.request()
+          .input('engineerId', sql.UniqueIdentifier, engineerId);
+        
+        Object.keys(params).forEach(key => {
+          if (key !== 'engineerId') {
+            countRequest.input(key, sql.VarChar, params[key]);
+          }
+        });
+        
+        const [ticketsResult, countResult] = await Promise.all([
+          request.query(query),
+          countRequest.query(countQuery)
+        ]);
 
       return {
         tickets: ticketsResult.recordset,
