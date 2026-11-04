@@ -454,27 +454,52 @@ router.get(
       );
 
     // Search across asset and employee fields
-    if (search && search.trim()) {
-      whereClause += `
-        AND (
-          a.asset_tag LIKE @search
-          OR p.name LIKE @search
-          OR p.model LIKE @search
-          OR a.serial_number LIKE @search
-          OR u.first_name LIKE @search
-          OR u.last_name LIKE @search
-          OR CONCAT(u.first_name, ' ', u.last_name) LIKE @search
-          OR u.email LIKE @search
-          OR l.name LIKE @search
-        )
-      `;
+    // if (search && search.trim()) {
+    //   whereClause += `
+    //     AND (
+    //       a.asset_tag LIKE @search
+    //       OR p.name LIKE @search
+    //       OR p.model LIKE @search
+    //       OR a.serial_number LIKE @search
+    //       OR u.first_name LIKE @search
+    //       OR u.last_name LIKE @search
+    //       OR CONCAT(u.first_name, ' ', u.last_name) LIKE @search
+    //       OR u.email LIKE @search
+    //       OR l.name LIKE @search
+    //     )
+    //   `;
 
-      request.input(
-        'search',
-        sql.VarChar(255),
-        `%${search.trim()}%`
-      );
-    }
+    //   request.input(
+    //     'search',
+    //     sql.VarChar(255),
+    //     `%${search.trim()}%`
+    //   );
+    // }
+
+    if (search && search.trim()) {
+  whereClause += `
+    AND (
+      a.asset_tag LIKE @search
+      OR p.name LIKE @search
+      OR p.model LIKE @search
+      OR a.serial_number LIKE @search
+      OR u.first_name LIKE @search
+      OR u.last_name LIKE @search
+      OR CONCAT(u.first_name, ' ', u.last_name) LIKE @search
+      OR u.employee_id LIKE @search
+      OR u.email LIKE @search
+      OR d.department_name LIKE @search
+      OR l.name LIKE @search
+      OR CAST(l.floor AS VARCHAR(20)) LIKE @search
+    )
+  `;
+
+  request.input(
+  'search',
+  sql.VarChar(255),
+  `%${search.trim()}%`
+);
+}
 
     if (status) {
       whereClause += ' AND a.status = @status';
@@ -698,29 +723,54 @@ router.get('/',
     //   params.push({ name: 'search', type: sql.VarChar(255), value: `%${search}%` });
     // }
 
-    if (search && search.trim()) {
-  whereClause += `
-    AND (
-      a.asset_tag LIKE @search
-      OR p.name LIKE @search
-      OR p.model LIKE @search
-      OR a.serial_number LIKE @search
-      OR u.first_name LIKE @search
-      OR u.last_name LIKE @search
-      OR CONCAT(u.first_name, ' ', u.last_name) LIKE @search
-      OR u.email LIKE @search
-      OR d.department_name LIKE @search
-      OR l.name LIKE @search
-      OR CAST(l.floor AS VARCHAR(20)) LIKE @search
-    )
-  `;
+//     if (search && search.trim()) {
+//   whereClause += `
+//     AND (
+//       a.asset_tag LIKE @search
+//       OR p.name LIKE @search
+//       OR p.model LIKE @search
+//       OR a.serial_number LIKE @search
+//       OR u.first_name LIKE @search
+//       OR u.last_name LIKE @search
+//       OR CONCAT(u.first_name, ' ', u.last_name) LIKE @search
+//       OR u.email LIKE @search
+//       OR d.department_name LIKE @search
+//       OR l.name LIKE @search
+//       OR CAST(l.floor AS VARCHAR(20)) LIKE @search
+//     )
+//   `;
 
-  params.push({
-    name: 'search',
-    type: sql.VarChar(255),
-    value: `%${search.trim()}%`
-  });
-}
+//   params.push({
+//     name: 'search',
+//     type: sql.VarChar(255),
+//     value: `%${search.trim()}%`
+//   });
+// }
+
+          if (search && search.trim()) {
+        whereClause += `
+          AND (
+            a.asset_tag LIKE @search
+            OR p.name LIKE @search
+            OR p.model LIKE @search
+            OR a.serial_number LIKE @search
+            OR u.first_name LIKE @search
+            OR u.last_name LIKE @search
+            OR CONCAT(u.first_name, ' ', u.last_name) LIKE @search
+            OR u.employee_id LIKE @search
+            OR u.email LIKE @search
+            OR d.department_name LIKE @search
+            OR l.name LIKE @search
+            OR CAST(l.floor AS VARCHAR(20)) LIKE @search
+          )
+        `;
+      
+        params.push({
+          name: 'search',
+          type: sql.VarChar(255),
+          value: `%${search.trim()}%`
+        });
+      }
 
     if (status) {
       whereClause += ' AND a.status = @status';
