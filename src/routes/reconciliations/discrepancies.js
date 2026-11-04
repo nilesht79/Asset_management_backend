@@ -89,23 +89,46 @@ router.get('/',
     // }
 
 
-    if (search && search.trim()) {
-        whereClause += `
-          AND (
-            d.field_display_name LIKE @search
-            OR d.system_value LIKE @search
-            OR d.physical_value LIKE @search
-            OR a.asset_tag LIKE @search
-            OR a.serial_number LIKE @search
-          )
-        `;
+    // if (search && search.trim()) {
+    //     whereClause += `
+    //       AND (
+    //         d.field_display_name LIKE @search
+    //         OR d.system_value LIKE @search
+    //         OR d.physical_value LIKE @search
+    //         OR a.asset_tag LIKE @search
+    //         OR a.serial_number LIKE @search
+    //       )
+    //     `;
       
-        params.push({
-          name: 'search',
-          type: sql.VarChar(255),
-          value: `%${search.trim()}%`
-        });
-      }
+    //     params.push({
+    //       name: 'search',
+    //       type: sql.VarChar(255),
+    //       value: `%${search.trim()}%`
+    //     });
+    //   }
+
+    if (search && search.trim()) {
+  whereClause += `
+    AND (
+      d.field_display_name LIKE @search
+      OR d.system_value LIKE @search
+      OR d.physical_value LIKE @search
+      OR a.asset_tag LIKE @search
+      OR a.serial_number LIKE @search
+      OR u.first_name LIKE @search
+      OR u.last_name LIKE @search
+      OR CONCAT(u.first_name, ' ', u.last_name) LIKE @search
+      OR u.employee_id LIKE @search
+      OR u.email LIKE @search
+    )
+  `;
+
+  params.push({
+    name: 'search',
+    type: sql.VarChar(255),
+    value: `%${search.trim()}%`
+  });
+}
 
     // Build ORDER BY clause
     const validSortColumns = {
@@ -128,6 +151,7 @@ router.get('/',
       FROM RECONCILIATION_DISCREPANCIES d
       INNER JOIN RECONCILIATION_RECORDS rr ON d.reconciliation_record_id = rr.id
       LEFT JOIN assets a ON rr.asset_id = a.id
+      LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
       WHERE ${whereClause}
     `);
     const total = countResult.recordset[0].total;
@@ -206,6 +230,9 @@ router.get('/',
         
         LEFT JOIN assets a
             ON rr.asset_id = a.id
+
+        LEFT JOIN USER_MASTER u
+            ON a.assigned_to = u.user_id
         
         LEFT JOIN locations l
             ON a.location_id = l.id
