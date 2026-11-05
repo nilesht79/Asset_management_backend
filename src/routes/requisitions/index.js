@@ -345,7 +345,7 @@ const statsParams = [...params];
 
     if (status) {
   if (status === 'approved_by_it_head') {
-    whereClause += " AND r.it_head_status = 'approved'";
+    whereClause += " AND r.it_head_status = 'approved' AND r.status <> 'cancelled'";
   } else {
     whereClause += ' AND r.status = @status';
 
@@ -510,34 +510,30 @@ statsParams.forEach(p => {
   SELECT
     COUNT(*) AS total,
 
-    SUM(
-      CASE
-        WHEN status = 'pending_it_head'
-        THEN 1
-        ELSE 0
-      END
-    ) AS pending,
+    SUM(CASE
+      WHEN status = 'pending_it_head'
+      THEN 1 ELSE 0
+    END) AS pending,
 
-    SUM(
-      CASE
-        WHEN it_head_status = 'approved'
-        THEN 1
-        ELSE 0
-      END
-    ) AS approved,
+    SUM(CASE
+      WHEN it_head_status = 'approved'
+        AND status <> 'cancelled'
+      THEN 1 ELSE 0
+    END) AS approved,
 
-    SUM(
-      CASE
-        WHEN status = 'rejected_by_it_head'
-        THEN 1
-        ELSE 0
-      END
-    ) AS rejected
+    SUM(CASE
+      WHEN status = 'rejected_by_it_head'
+      THEN 1 ELSE 0
+    END) AS rejected,
+
+    SUM(CASE
+      WHEN status = 'cancelled'
+      THEN 1 ELSE 0
+    END) AS cancelled
 
   FROM ASSET_REQUISITIONS
   WHERE ${statsWhereClause}
 `);
-
 // const stats = {
 //   total: Number(statsResult.recordset[0].total || 0),
 //   pending: Number(statsResult.recordset[0].pending || 0),
