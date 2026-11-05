@@ -329,6 +329,20 @@ const statsParams = [...params];
 //   }
 // }
 
+//     if (status) {
+//   if (status === 'approved_by_it_head') {
+//     whereClause += " AND r.it_head_status = 'approved'";
+//   } else {
+//     whereClause += ' AND r.status = @status';
+
+//     params.push({
+//       name: 'status',
+//       type: sql.VarChar(50),
+//       value: status
+//     });
+//   }
+// }
+
     if (status) {
   if (status === 'approved_by_it_head') {
     whereClause += " AND r.it_head_status = 'approved'";
@@ -341,6 +355,9 @@ const statsParams = [...params];
       value: status
     });
   }
+} else {
+  // Hide cancelled requisitions from the default list
+  whereClause += " AND r.status <> 'cancelled'";
 }
 
 // if (urgency) {
@@ -457,7 +474,39 @@ statsParams.forEach(p => {
   statsRequest.input(p.name, p.type, p.value);
 });
 
-const statsResult = await statsRequest.query(`
+// const statsResult = await statsRequest.query(`
+//   SELECT
+//     COUNT(*) AS total,
+
+//     SUM(
+//       CASE
+//         WHEN status = 'pending_it_head'
+//         THEN 1
+//         ELSE 0
+//       END
+//     ) AS pending,
+
+//     SUM(
+//       CASE
+//         WHEN it_head_status = 'approved'
+//         THEN 1
+//         ELSE 0
+//       END
+//     ) AS approved,
+
+//     SUM(
+//       CASE
+//         WHEN status = 'rejected_by_it_head'
+//         THEN 1
+//         ELSE 0
+//       END
+//     ) AS rejected
+
+//   FROM ASSET_REQUISITIONS
+//   WHERE ${statsWhereClause}
+// `);
+
+    const statsResult = await statsRequest.query(`
   SELECT
     COUNT(*) AS total,
 
@@ -489,11 +538,19 @@ const statsResult = await statsRequest.query(`
   WHERE ${statsWhereClause}
 `);
 
-const stats = {
+// const stats = {
+//   total: Number(statsResult.recordset[0].total || 0),
+//   pending: Number(statsResult.recordset[0].pending || 0),
+//   approved: Number(statsResult.recordset[0].approved || 0),
+//   rejected: Number(statsResult.recordset[0].rejected || 0)
+// };
+
+    const stats = {
   total: Number(statsResult.recordset[0].total || 0),
   pending: Number(statsResult.recordset[0].pending || 0),
   approved: Number(statsResult.recordset[0].approved || 0),
-  rejected: Number(statsResult.recordset[0].rejected || 0)
+  rejected: Number(statsResult.recordset[0].rejected || 0),
+  cancelled: Number(statsResult.recordset[0].cancelled || 0)
 };
 
     // Get total count
