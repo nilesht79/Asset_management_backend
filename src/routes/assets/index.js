@@ -181,30 +181,90 @@ router.get('/',
     // }
 
     
-if (search) {
+// if (search) {
+//   whereClause += `
+//     AND (
+//       a.serial_number LIKE @search
+//       OR p.name LIKE @search
+//       OR p.model LIKE @search
+//       OR o.name LIKE @search
+//       OR u.employee_id LIKE @search
+//       OR u.first_name LIKE @search
+//       OR u.last_name LIKE @search
+//       OR (
+//         COALESCE(u.first_name, '') + ' ' +
+//         COALESCE(u.last_name, '')
+//       ) LIKE @search
+//       OR a.asset_tag LIKE @search
+//       OR a.notes LIKE @search
+//     )
+//   `
+//   params.push({
+//     name: 'search',
+//     type: sql.VarChar(255),
+//     value: `%${search.trim()}%`
+//   })
+// }
+
+    
+if (search && search.trim()) {
   whereClause += `
     AND (
-      a.serial_number LIKE @search
+      -- Asset details
+      a.asset_tag LIKE @search
+      OR CAST(a.tag_no AS VARCHAR(100)) LIKE @search
+      OR a.serial_number LIKE @search
+      OR a.ip_address LIKE @search
+      OR a.hostname LIKE @search
+      OR a.status LIKE @search
+      OR a.condition_status LIKE @search
+      OR a.importance LIKE @search
+      OR a.asset_type LIKE @search
+      OR a.invoice_number LIKE @search
+      OR a.notes LIKE @search
+
+      -- Product details
       OR p.name LIKE @search
       OR p.model LIKE @search
+      OR c.name LIKE @search
+      OR subcat.name LIKE @search
+      OR pt.name LIKE @search
       OR o.name LIKE @search
+      OR v.name LIKE @search
+
+      -- Employee details
       OR u.employee_id LIKE @search
       OR u.first_name LIKE @search
       OR u.last_name LIKE @search
-      OR (
-        COALESCE(u.first_name, '') + ' ' +
-        COALESCE(u.last_name, '')
-      ) LIKE @search
-      OR a.asset_tag LIKE @search
-      OR a.notes LIKE @search
+      OR CONCAT(u.first_name, ' ', u.last_name) LIKE @search
+      OR u.email LIKE @search
+
+      -- Department details
+      OR dept.department_name LIKE @search
+
+      -- Location details
+      OR l.name LIKE @search
+      OR l.address LIKE @search
+      OR l.building LIKE @search
+      OR l.floor LIKE @search
+
+      -- Date and cost fields
+      OR CAST(a.purchase_cost AS VARCHAR(50)) LIKE @search
+      OR CONVERT(VARCHAR(10), a.purchase_date, 23) LIKE @search
+      OR CONVERT(VARCHAR(10), a.warranty_start_date, 23) LIKE @search
+      OR CONVERT(VARCHAR(10), a.warranty_end_date, 23) LIKE @search
+      OR CONVERT(VARCHAR(10), a.eol_date, 23) LIKE @search
+      OR CONVERT(VARCHAR(10), a.eos_date, 23) LIKE @search
     )
-  `
+  `;
+
   params.push({
     name: 'search',
     type: sql.VarChar(255),
     value: `%${search.trim()}%`
-  })
+  });
 }
+
 
 
 //     if (status) {
@@ -447,23 +507,61 @@ if (employeeCodes.length) {
     //   WHERE ${whereClause}
     // `);
 
+    // const countResult = await countRequest.query(`
+    //   SELECT COUNT(*) as total
+    //   FROM assets a
+    //   INNER JOIN products p ON a.product_id = p.id
+    //   LEFT JOIN categories c ON p.category_id = c.id
+    //   LEFT JOIN product_types pt ON p.type_id = pt.id
+    //   LEFT JOIN oems o ON p.oem_id = o.id
+    //   LEFT JOIN assets parent
+    //   ON a.parent_asset_id = parent.id
+
+    //   LEFT JOIN USER_MASTER u
+    //   ON COALESCE(parent.assigned_to, a.assigned_to) = u.user_id
+
+    //   LEFT JOIN categories subcat
+    //   ON p.subcategory_id = subcat.id
+    
+    // LEFT JOIN vendors v
+    //   ON a.vendor_id = v.id
+    
+    // LEFT JOIN locations l
+    //   ON a.location_id = l.id
+
+    //  LEFT JOIN DEPARTMENT_MASTER dept
+    // ON a.department_id = dept.department_id
+    //   WHERE ${whereClause}
+    // `);
+
     const countResult = await countRequest.query(`
-      SELECT COUNT(*) as total
-      FROM assets a
-      INNER JOIN products p ON a.product_id = p.id
-      LEFT JOIN categories c ON p.category_id = c.id
-      LEFT JOIN product_types pt ON p.type_id = pt.id
-      LEFT JOIN oems o ON p.oem_id = o.id
-      LEFT JOIN assets parent
-      ON a.parent_asset_id = parent.id
+  SELECT COUNT(*) as total
+  FROM assets a
+  INNER JOIN products p ON a.product_id = p.id
+  LEFT JOIN categories c ON p.category_id = c.id
+  LEFT JOIN product_types pt ON p.type_id = pt.id
+  LEFT JOIN oems o ON p.oem_id = o.id
 
-      LEFT JOIN USER_MASTER u
-      ON COALESCE(parent.assigned_to, a.assigned_to) = u.user_id
+  LEFT JOIN categories subcat
+    ON p.subcategory_id = subcat.id
 
-     LEFT JOIN DEPARTMENT_MASTER dept
+  LEFT JOIN vendors v
+    ON a.vendor_id = v.id
+
+  LEFT JOIN locations l
+    ON a.location_id = l.id
+
+  LEFT JOIN assets parent
+    ON a.parent_asset_id = parent.id
+
+  LEFT JOIN USER_MASTER u
+    ON COALESCE(parent.assigned_to, a.assigned_to) = u.user_id
+
+  LEFT JOIN DEPARTMENT_MASTER dept
     ON a.department_id = dept.department_id
-      WHERE ${whereClause}
-    `);
+
+  WHERE ${whereClause}
+`);
 
     const total = countResult.recordset[0].total;
     // Get paginated results
