@@ -1184,7 +1184,12 @@ const subCategoryResult = await subCategoryRequest.query(subCategoryQuery);
       d.department_name,
       pc.name AS category_name,
       ISNULL(psc.name, 'Others') AS sub_category_name,
-      u.first_name + ' ' + u.last_name AS engineer_name
+      u.first_name + ' ' + u.last_name AS engineer_name,
+      LTRIM(RTRIM(CONCAT(
+    ISNULL(emp.first_name, ''),
+    ' ',
+    ISNULL(emp.last_name, '')
+))) AS user_name,
   FROM TICKETS t
   INNER JOIN TICKET_SLA_TRACKING tst
       ON tst.ticket_id = t.ticket_id
@@ -1196,6 +1201,8 @@ const subCategoryResult = await subCategoryRequest.query(subCategoryQuery);
       ON t.department_id = d.department_id
   LEFT JOIN USER_MASTER u
       ON t.assigned_to_engineer_id = u.user_id
+  LEFT JOIN USER_MASTER emp
+    ON t.<user_id_column> = emp.user_id
   LEFT JOIN TicketAsset ta
       ON ta.ticket_id = t.ticket_id
   LEFT JOIN assets a
