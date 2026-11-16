@@ -655,6 +655,60 @@ router.get('/my-requisitions',
 
     const pool = await connectDB();
 
+    
+    // ============================================================
+    // EMPLOYEE REQUISITION STATISTICS
+    // Statistics are calculated only for the logged-in employee.
+    // ============================================================
+
+    const statsResult = await pool.request()
+      .input('userId', sql.UniqueIdentifier, userId)
+      .query(`
+        SELECT
+          COUNT(*) AS total,
+
+          -- Pending requisitions
+          SUM(CASE
+            WHEN status IN (
+              'pending_dept_head',
+              'pending_it_head'
+            )
+            THEN 1 ELSE 0
+          END) AS pending,
+
+          -- Approved by IT Head
+          SUM(CASE
+            WHEN it_head_status = 'approved'
+              AND status NOT IN (
+                'cancelled',
+                'rejected_by_it_head',
+                'rejected_by_dept_head'
+              )
+            THEN 1 ELSE 0
+          END) AS approved,
+
+          -- Rejected or cancelled
+          SUM(CASE
+            WHEN status IN (
+              'rejected_by_it_head',
+              'rejected_by_dept_head',
+              'cancelled'
+            )
+            THEN 1 ELSE 0
+          END) AS rejected
+
+        FROM ASSET_REQUISITIONS
+        WHERE requested_by = @userId
+      `);
+
+    const stats = {
+      total: Number(statsResult.recordset[0].total || 0),
+      pending: Number(statsResult.recordset[0].pending || 0),
+      approved: Number(statsResult.recordset[0].approved || 0),
+      rejected: Number(statsResult.recordset[0].rejected || 0)
+    };
+
+
     // Build WHERE clause
     let whereClause = 'requested_by = @userId';
     const params = [{ name: 'userId', type: sql.UniqueIdentifier, value: userId }];
@@ -674,70 +728,7 @@ router.get('/my-requisitions',
       params.push({ name: 'search', type: sql.VarChar(255), value: `%${search}%` });
     }
 
-    // // Get total count
-    // const countRequest = pool.request();
-    // params.forEach(p => countRequest.input(p.name, p.type, p.value));
-    // const countResult = await countRequest.query(`
-    //   SELECT COUNT(*) as total FROM ASSET_REQUISITIONS WHERE ${whereClause}
-    // `);
-    // const total = countResult.recordset[0].total;
-
-  //     // ============================================================
-  // // GLOBAL CARD STATISTICS
-  // // These counts ignore status/search/urgency/department filters.
-  // // They are calculated from ALL requisitions visible to the user.
-  // // ============================================================
   
-  // const statsRequest = pool.request();
-  
-  // statsParams.forEach(p => {
-  //   statsRequest.input(p.name, p.type, p.value);
-  // });
-  
-  // const statsResult = await statsRequest.query(`
-  //   SELECT
-  //     COUNT(*) AS total,
-  
-  //     SUM(
-  //       CASE
-  //         WHEN status = 'pending_it_head'
-  //         THEN 1
-  //         ELSE 0
-  //       END
-  //     ) AS pending,
-  
-  //     SUM(
-  //       CASE
-  //         WHEN it_head_status = 'approved'
-  //         THEN 1
-  //         ELSE 0
-  //       END
-  //     ) AS approved,
-  
-  //     SUM(
-  //       CASE
-  //         WHEN status = 'rejected_by_it_head'
-  //         THEN 1
-  //         ELSE 0
-  //       END
-  //     ) AS rejected
-  
-  //   FROM ASSET_REQUISITIONS
-  //   WHERE ${statsWhereClause}
-  // `);
-  
-  // const stats = {
-  //   total: Number(statsResult.recordset[0].total || 0),
-  //   pending: Number(statsResult.recordset[0].pending || 0),
-  //   approved: Number(statsResult.recordset[0].approved || 0),
-  //   rejected: Number(statsResult.recordset[0].rejected || 0)
-  // };
-  
-  
-  // ============================================================
-  // FILTERED RESULT COUNT
-  // This count is ONLY for the list and pagination.
-  // ============================================================
   
   const countRequest = pool.request();
   
