@@ -1074,6 +1074,7 @@ class SlaController {
           { header: 'Location', key: 'location_name', width: 20 },
           { header: 'Department', key: 'department_name', width: 20 },
           { header: 'Engineer', key: 'engineer_name', width: 20 },
+          { header: 'User Name', key: 'user_name', width: 30 },
           { header: 'SLA Rule', key: 'rule_name', width: 20 },
           { header: 'SLA Started', key: 'sla_start_time', width: 20 },
           { header: 'Resolved At', key: 'resolved_at', width: 20 },
