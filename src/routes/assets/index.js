@@ -785,20 +785,59 @@ router.get('/statistics',
     // `);
 
     // Get location distribution based on asset's own location
+// const locationResult = await pool.request().query(`
+//   SELECT
+//     l.id,
+//     l.name as location_name,
+//     l.building,
+//     l.floor,
+//     COUNT(a.id) as asset_count
+//   FROM locations l
+//   LEFT JOIN assets a
+//     ON l.id = a.location_id
+//     AND a.is_active = 1
+//   WHERE l.is_active = 1
+//   GROUP BY l.id, l.name, l.building, l.floor
+//   ORDER BY asset_count DESC
+// `);
+
+    // Get location distribution - Include ALL active assets
+// Assets without a valid location appear under Unspecified Location
+
 const locationResult = await pool.request().query(`
-  SELECT
-    l.id,
-    l.name as location_name,
-    l.building,
-    l.floor,
-    COUNT(a.id) as asset_count
-  FROM locations l
-  LEFT JOIN assets a
-    ON l.id = a.location_id
-    AND a.is_active = 1
-  WHERE l.is_active = 1
-  GROUP BY l.id, l.name, l.building, l.floor
-  ORDER BY asset_count DESC
+    SELECT
+        l.id,
+        COALESCE(
+    NULLIF(LTRIM(RTRIM(l.name)), ''),
+    'Unspecified Location'
+) AS location_name,
+
+COALESCE(
+    NULLIF(LTRIM(RTRIM(l.building)), ''),
+    'Unspecified Building'
+) AS building,
+
+COALESCE(
+    NULLIF(LTRIM(RTRIM(CONVERT(VARCHAR(50), l.floor))), ''),
+    'No Floor Info'
+) AS floor,
+        COUNT(a.id) AS asset_count
+
+    FROM assets a
+
+    LEFT JOIN locations l
+        ON a.location_id = l.id
+        AND l.is_active = 1
+
+    WHERE a.is_active = 1
+
+    GROUP BY
+        l.id,
+        l.name,
+        l.building,
+        l.floor
+
+    ORDER BY asset_count DESC
 `);
 
     // Get category distribution
