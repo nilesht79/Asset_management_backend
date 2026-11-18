@@ -172,7 +172,8 @@ router.get('/',
 
     // Build WHERE clause
     // Exclude standby assets from regular inventory (they have their own standby pool view)
-    let whereClause = 'a.is_active = 1 AND (a.is_standby_asset = 0 OR a.is_standby_asset IS NULL)';
+    // let whereClause = 'a.is_active = 1 AND (a.is_standby_asset = 0 OR a.is_standby_asset IS NULL)';
+    let whereClause = 'a.is_active = 1';
     const params = [];
 
     // if (search) {
@@ -1146,7 +1147,8 @@ router.get('/export',
 
     // Build WHERE clause for export (same as list query)
     // let whereClause = 'a.is_active = 1';
-    let whereClause = `a.is_active = 1 AND (a.is_standby_asset = 0 OR a.is_standby_asset IS NULL)`;
+    // let whereClause = `a.is_active = 1 AND (a.is_standby_asset = 0 OR a.is_standby_asset IS NULL)`;
+    let whereClause = 'a.is_active = 1';
     const params = [];
 
     // if (search) {
