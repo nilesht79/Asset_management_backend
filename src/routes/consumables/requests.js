@@ -504,7 +504,7 @@ const result = await pool.request().query(`
     
       INNER JOIN consumables c
         ON cr.consumable_id = c.id
-    // Count query - include JOINs needed for search filter
+    
       INNER JOIN consumable_categories cc
         ON c.category_id = cc.id
     
