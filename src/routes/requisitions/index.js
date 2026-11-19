@@ -283,6 +283,20 @@ router.get('/all-requisitions',
     const userId = req.oauth.user.id;
     const userRole = req.oauth.user.role;
 
+    // Role-based pending requisition configuration
+      const isITHead = userRole === 'it_head';
+      
+      const isAdminOrSuperAdmin = [
+        'admin',
+        'superadmin'
+      ].includes(userRole);
+      
+      // Admin and Super Admin: all pending stages
+      // IT Head: only pending IT Head approval
+      const pendingStatusCondition = isAdminOrSuperAdmin
+        ? "status LIKE 'pending%'"
+        : "status = 'pending_it_head'";
+
     const pool = await connectDB();
 
     // Build WHERE clause based on role
@@ -343,10 +357,49 @@ const statsParams = [...params];
 //   }
 // }
 
-    if (status) {
-  if (status === 'approved_by_it_head') {
-    whereClause += " AND r.it_head_status = 'approved' AND r.status <> 'cancelled'";
+//     if (status) {
+//   if (status === 'approved_by_it_head') {
+//     whereClause += " AND r.it_head_status = 'approved' AND r.status <> 'cancelled'";
+//   } else {
+//     whereClause += ' AND r.status = @status';
+
+//     params.push({
+//       name: 'status',
+//       type: sql.VarChar(50),
+//       value: status
+//     });
+//   }
+// } else {
+//   // Hide cancelled requisitions from the default list
+//   whereClause += " AND r.status <> 'cancelled'";
+// }
+
+      // Role-based status filtering
+if (status) {
+
+  if (status === 'pending') {
+
+    // Only Admin and Super Admin can view all pending stages
+    if (isAdminOrSuperAdmin) {
+      whereClause += " AND r.status LIKE 'pending%'";
+    } else if (isITHead) {
+      // IT Head sees only their approval queue
+      whereClause += " AND r.status = 'pending_it_head'";
+    } else {
+      // Do not allow other roles to request the global pending list
+      whereClause += " AND 1 = 0";
+    }
+
+  } else if (status === 'approved_by_it_head') {
+
+    whereClause += `
+      AND r.it_head_status = 'approved'
+      AND r.status <> 'cancelled'
+    `;
+
   } else {
+
+    // Existing individual status filtering
     whereClause += ' AND r.status = @status';
 
     params.push({
@@ -354,10 +407,14 @@ const statsParams = [...params];
       type: sql.VarChar(50),
       value: status
     });
+
   }
+
 } else {
+
   // Hide cancelled requisitions from the default list
   whereClause += " AND r.status <> 'cancelled'";
+
 }
 
 // if (urgency) {
@@ -506,29 +563,63 @@ statsParams.forEach(p => {
 //   WHERE ${statsWhereClause}
 // `);
 
+//     const statsResult = await statsRequest.query(`
+//   SELECT
+//     COUNT(*) AS total,
+
+//     SUM(CASE
+//     WHEN ${pendingStatusCondition}
+//     THEN 1
+//     ELSE 0
+// END) AS pending,
+
+//     SUM(CASE
+//       WHEN it_head_status = 'approved'
+//         AND status <> 'cancelled'
+//       THEN 1 ELSE 0
+//     END) AS approved,
+
+//     SUM(CASE
+//       WHEN status = 'rejected_by_it_head'
+//       THEN 1 ELSE 0
+//     END) AS rejected,
+
+//     SUM(CASE
+//       WHEN status = 'cancelled'
+//       THEN 1 ELSE 0
+//     END) AS cancelled
+
+//   FROM ASSET_REQUISITIONS
+//   WHERE ${statsWhereClause}
+// `);
+
     const statsResult = await statsRequest.query(`
   SELECT
     COUNT(*) AS total,
 
     SUM(CASE
-      WHEN status = 'pending_it_head'
-      THEN 1 ELSE 0
+      WHEN ${pendingStatusCondition}
+      THEN 1
+      ELSE 0
     END) AS pending,
 
     SUM(CASE
       WHEN it_head_status = 'approved'
         AND status <> 'cancelled'
-      THEN 1 ELSE 0
+      THEN 1
+      ELSE 0
     END) AS approved,
 
     SUM(CASE
       WHEN status = 'rejected_by_it_head'
-      THEN 1 ELSE 0
+      THEN 1
+      ELSE 0
     END) AS rejected,
 
     SUM(CASE
       WHEN status = 'cancelled'
-      THEN 1 ELSE 0
+      THEN 1
+      ELSE 0
     END) AS cancelled
 
   FROM ASSET_REQUISITIONS
