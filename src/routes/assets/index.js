@@ -268,41 +268,123 @@ router.get('/',
 
 
     
-const searchTerm = String(search || '').trim().replace(/\s+/g, ' ');
+// const searchTerm = String(search || '').trim().replace(/\s+/g, ' ');
+
+// if (searchTerm) {
+//   const searchPattern = `%${searchTerm.toUpperCase()}%`;
+
+//   // Also support searches without spaces or hyphens
+//   const compactSearch = `%${searchTerm.replace(/[\s-]/g, '').toUpperCase()}%`;
+
+//   whereClause += `
+//     AND (
+//       -- Asset information
+//       UPPER(COALESCE(a.asset_tag, '')) LIKE @search
+//       OR UPPER(COALESCE(CAST(a.tag_no AS VARCHAR(100)), '')) LIKE @search
+//       OR UPPER(COALESCE(a.serial_number, '')) LIKE @search
+//       OR UPPER(REPLACE(REPLACE(COALESCE(a.serial_number, ''), '-', ''), ' ', '')) LIKE @compactSearch
+//       OR UPPER(COALESCE(a.ip_address, '')) LIKE @search
+//       OR UPPER(COALESCE(a.hostname, '')) LIKE @search
+//       OR UPPER(COALESCE(a.notes, '')) LIKE @search
+
+//       -- Product information
+//       OR UPPER(COALESCE(p.name, '')) LIKE @search
+//       OR UPPER(COALESCE(p.model, '')) LIKE @search
+//       OR UPPER(REPLACE(COALESCE(p.name, ''), ' ', '')) LIKE @compactSearch
+//       OR UPPER(REPLACE(COALESCE(p.model, ''), ' ', '')) LIKE @compactSearch
+//       OR UPPER(COALESCE(c.name, '')) LIKE @search
+//       OR UPPER(COALESCE(subcat.name, '')) LIKE @search
+//       OR UPPER(COALESCE(pt.name, '')) LIKE @search
+//       OR UPPER(COALESCE(o.name, '')) LIKE @search
+//       OR UPPER(COALESCE(v.name, '')) LIKE @search
+
+//       -- Assigned employee information
+//       OR UPPER(COALESCE(CONVERT(VARCHAR(50), u.employee_id), '')) LIKE @search
+//       OR UPPER(COALESCE(u.first_name, '')) LIKE @search
+//       OR UPPER(COALESCE(u.last_name, '')) LIKE @search
+//       OR UPPER(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))) LIKE @search
+//       OR UPPER(COALESCE(u.email, '')) LIKE @search
+
+//       -- Department
+//       OR UPPER(COALESCE(dept.department_name, '')) LIKE @search
+
+//       -- Location
+//       OR UPPER(COALESCE(l.name, '')) LIKE @search
+//       OR UPPER(COALESCE(l.address, '')) LIKE @search
+//       OR UPPER(COALESCE(l.building, '')) LIKE @search
+//       OR UPPER(COALESCE(l.floor, '')) LIKE @search
+//     )
+//   `;
+
+//   params.push(
+//     {
+//       name: 'search',
+//       type: sql.NVarChar(255),
+//       value: searchPattern
+//     },
+//     {
+//       name: 'compactSearch',
+//       type: sql.NVarChar(255),
+//       value: compactSearch
+//     }
+//   );
+// }
+
+
+
+// Global asset search
+const searchTerm = String(search || '')
+  .trim()
+  .replace(/\s+/g, ' ')
+  .slice(0, 255);
 
 if (searchTerm) {
   const searchPattern = `%${searchTerm.toUpperCase()}%`;
 
-  // Also support searches without spaces or hyphens
-  const compactSearch = `%${searchTerm.replace(/[\s-]/g, '').toUpperCase()}%`;
+  // Remove spaces and hyphens to support flexible matching
+  const compactTerm = searchTerm
+    .replace(/[\s-]/g, '')
+    .toUpperCase();
+
+  const compactSearch = `%${compactTerm}%`;
 
   whereClause += `
     AND (
-      -- Asset information
+      -- Asset details
       UPPER(COALESCE(a.asset_tag, '')) LIKE @search
       OR UPPER(COALESCE(CAST(a.tag_no AS VARCHAR(100)), '')) LIKE @search
       OR UPPER(COALESCE(a.serial_number, '')) LIKE @search
-      OR UPPER(REPLACE(REPLACE(COALESCE(a.serial_number, ''), '-', ''), ' ', '')) LIKE @compactSearch
+      OR UPPER(
+        REPLACE(REPLACE(COALESCE(a.serial_number, ''), '-', ''), ' ', '')
+      ) LIKE @compactSearch
       OR UPPER(COALESCE(a.ip_address, '')) LIKE @search
       OR UPPER(COALESCE(a.hostname, '')) LIKE @search
       OR UPPER(COALESCE(a.notes, '')) LIKE @search
 
-      -- Product information
+      -- Product details
       OR UPPER(COALESCE(p.name, '')) LIKE @search
       OR UPPER(COALESCE(p.model, '')) LIKE @search
-      OR UPPER(REPLACE(COALESCE(p.name, ''), ' ', '')) LIKE @compactSearch
-      OR UPPER(REPLACE(COALESCE(p.model, ''), ' ', '')) LIKE @compactSearch
+      OR UPPER(
+        REPLACE(REPLACE(COALESCE(p.name, ''), ' ', ''), '-', '')
+      ) LIKE @compactSearch
+      OR UPPER(
+        REPLACE(REPLACE(COALESCE(p.model, ''), ' ', ''), '-', '')
+      ) LIKE @compactSearch
       OR UPPER(COALESCE(c.name, '')) LIKE @search
       OR UPPER(COALESCE(subcat.name, '')) LIKE @search
       OR UPPER(COALESCE(pt.name, '')) LIKE @search
       OR UPPER(COALESCE(o.name, '')) LIKE @search
       OR UPPER(COALESCE(v.name, '')) LIKE @search
 
-      -- Assigned employee information
+      -- Assigned employee details
       OR UPPER(COALESCE(CONVERT(VARCHAR(50), u.employee_id), '')) LIKE @search
       OR UPPER(COALESCE(u.first_name, '')) LIKE @search
       OR UPPER(COALESCE(u.last_name, '')) LIKE @search
-      OR UPPER(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))) LIKE @search
+      OR UPPER(CONCAT(
+        COALESCE(u.first_name, ''),
+        ' ',
+        COALESCE(u.last_name, '')
+      )) LIKE @search
       OR UPPER(COALESCE(u.email, '')) LIKE @search
 
       -- Department
@@ -329,8 +411,6 @@ if (searchTerm) {
     }
   );
 }
-
-
 
 
 //     if (status) {
