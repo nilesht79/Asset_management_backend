@@ -128,15 +128,35 @@ router.get('/',
     }
 
     // Count query - include JOINs needed for search filter
+    // const countRequest = pool.request();
+    // params.forEach(p => countRequest.input(p.name, p.type, p.value));
+    // const countResult = await countRequest.query(`
+    //   SELECT COUNT(*) as total FROM consumable_requests cr
+    //   JOIN consumables c ON cr.consumable_id = c.id
+    //   JOIN USER_MASTER req ON cr.requested_by = req.user_id
+    //   LEFT JOIN assets a ON cr.for_asset_id = a.id
+    //   WHERE ${whereClause}
+    // `);
+
     const countRequest = pool.request();
-    params.forEach(p => countRequest.input(p.name, p.type, p.value));
-    const countResult = await countRequest.query(`
-      SELECT COUNT(*) as total FROM consumable_requests cr
-      JOIN consumables c ON cr.consumable_id = c.id
-      JOIN USER_MASTER req ON cr.requested_by = req.user_id
-      LEFT JOIN assets a ON cr.for_asset_id = a.id
-      WHERE ${whereClause}
-    `);
+
+      params.forEach(p =>
+        countRequest.input(p.name, p.type, p.value)
+      );
+      
+      const countResult = await countRequest.query(`
+        SELECT COUNT(*) AS total
+        FROM consumable_requests cr
+        INNER JOIN consumables c
+          ON cr.consumable_id = c.id
+        INNER JOIN consumable_categories cc
+          ON c.category_id = cc.id
+        INNER JOIN USER_MASTER req
+          ON cr.requested_by = req.user_id
+        LEFT JOIN assets a
+          ON cr.for_asset_id = a.id
+        WHERE ${whereClause}
+      `);
 
     // Data query
     const dataRequest = pool.request();
@@ -429,18 +449,69 @@ router.get('/statistics/summary',
   asyncHandler(async (req, res) => {
     const pool = await connectDB();
 
-    const result = await pool.request().query(`
-      SELECT
-        COUNT(*) as total_requests,
-        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
-        SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved,
-        SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) as delivered,
-        SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
-        SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
-        SUM(CASE WHEN priority = 'urgent' AND status IN ('pending', 'approved') THEN 1 ELSE 0 END) as urgent_pending
-      FROM consumable_requests
-      WHERE created_at >= DATEADD(day, -30, GETUTCDATE())
+    // const result = await pool.request().query(`
+    //   SELECT
+    //     COUNT(*) as total_requests,
+    //     SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+    //     SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved,
+    //     SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) as delivered,
+    //     SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
+    //     SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
+    //     SUM(CASE WHEN priority = 'urgent' AND status IN ('pending', 'approved') THEN 1 ELSE 0 END) as urgent_pending
+    //   FROM consumable_requests
+    //   WHERE created_at >= DATEADD(day, -30, GETUTCDATE())
+    // `);
+
+    
+const result = await pool.request().query(`
+  SELECT
+    COUNT(*) AS total_requests,
+
+        COALESCE(SUM(
+          CASE WHEN cr.status = 'pending'
+          THEN 1 ELSE 0 END
+        ), 0) AS pending,
+    
+        COALESCE(SUM(
+          CASE WHEN cr.status = 'approved'
+          THEN 1 ELSE 0 END
+        ), 0) AS approved,
+    
+        COALESCE(SUM(
+          CASE WHEN cr.status = 'delivered'
+          THEN 1 ELSE 0 END
+        ), 0) AS delivered,
+    
+        COALESCE(SUM(
+          CASE WHEN cr.status = 'rejected'
+          THEN 1 ELSE 0 END
+        ), 0) AS rejected,
+    
+        COALESCE(SUM(
+          CASE WHEN cr.status = 'cancelled'
+          THEN 1 ELSE 0 END
+        ), 0) AS cancelled,
+    
+        COALESCE(SUM(
+          CASE
+            WHEN cr.priority = 'urgent'
+            AND cr.status IN ('pending', 'approved')
+            THEN 1 ELSE 0
+          END
+        ), 0) AS urgent_pending
+    
+      FROM consumable_requests cr
+    
+      INNER JOIN consumables c
+        ON cr.consumable_id = c.id
+    // Count query - include JOINs needed for search filter
+      INNER JOIN consumable_categories cc
+        ON c.category_id = cc.id
+    
+      INNER JOIN USER_MASTER req
+        ON cr.requested_by = req.user_id
     `);
+
 
     sendSuccess(res, result.recordset[0], 'Statistics retrieved');
   })
