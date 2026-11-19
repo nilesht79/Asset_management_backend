@@ -863,6 +863,108 @@ router.get('/my-requisitions',
   })
 );
 
+
+// POST /api/v1/requisitions/:id/remark
+// Admin, Super Admin and Coordinator can submit one remark
+
+router.post('/:id/remark',
+  requireDynamicPermission(),
+  asyncHandler(async (req, res) => {
+
+    const { id } = req.params;
+    const { comments } = req.body;
+
+    const user = req.oauth.user;
+    const userId = user.id;
+    const userRole = String(user.role || '').toLowerCase();
+
+    // Authorized roles
+    const allowedRoles = [
+      'admin',
+      'superadmin',
+      'coordinator',
+      'department_coordinator'
+    ];
+
+    if (!allowedRoles.includes(userRole)) {
+      return sendError(
+        res,
+        'You are not authorized to add remarks',
+        403
+      );
+    }
+
+    const remark = String(comments || '').trim();
+
+    if (!remark) {
+      return sendError(res, 'Please enter a remark', 400);
+    }
+
+    if (remark.length > 2000) {
+      return sendError(
+        res,
+        'Remark cannot exceed 2000 characters',
+        400
+      );
+    }
+
+    const pool = await connectDB();
+
+    // Check requisition exists
+    const reqResult = await pool.request()
+      .input('id', sql.UniqueIdentifier, id)
+      .query(`
+        SELECT requisition_id, status
+        FROM ASSET_REQUISITIONS
+        WHERE requisition_id = @id
+      `);
+
+    if (reqResult.recordset.length === 0) {
+      return sendNotFound(res, 'Requisition not found');
+    }
+
+    // Check whether a remark already exists
+    const existingRemark = await pool.request()
+      .input('id', sql.UniqueIdentifier, id)
+      .query(`
+        SELECT TOP 1 history_id
+        FROM REQUISITION_APPROVAL_HISTORY
+        WHERE requisition_id = @id
+          AND action = 'remark_added'
+      `);
+
+    if (existingRemark.recordset.length > 0) {
+      return sendError(
+        res,
+        'A remark has already been submitted',
+        409
+      );
+    }
+
+    // Save remark in approval history
+    await logApprovalHistory({
+      requisition_id: id,
+      approval_level: 'remark',
+      approver_id: userId,
+      approver_name:
+        `${user.first_name} ${user.last_name}`,
+      approver_role: userRole,
+      action: 'remark_added',
+      comments: remark,
+      previous_status: reqResult.recordset[0].status,
+      new_status: reqResult.recordset[0].status
+    });
+
+    sendSuccess(
+      res,
+      null,
+      'Remark submitted successfully'
+    );
+
+  })
+);
+
+
 // GET /api/v1/requisitions/:id - Get requisition details
 router.get('/:id',
   requireDynamicPermission(),
