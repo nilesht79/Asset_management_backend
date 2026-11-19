@@ -359,7 +359,7 @@ if (searchTerm) {
       ) LIKE @compactSearch
       OR UPPER(COALESCE(a.ip_address, '')) LIKE @search
       OR UPPER(COALESCE(a.hostname, '')) LIKE @search
-      OR UPPER(COALESCE(a.notes, '')) LIKE @search
+      OR UPPER(COALESCE(CAST(a.notes AS NVARCHAR(MAX)), N'')) LIKE @search
 
       -- Product details
       OR UPPER(COALESCE(p.name, '')) LIKE @search
@@ -392,7 +392,7 @@ if (searchTerm) {
 
       -- Location
       OR UPPER(COALESCE(l.name, '')) LIKE @search
-      OR UPPER(COALESCE(l.address, '')) LIKE @search
+      OR UPPER(COALESCE(CAST(l.address AS NVARCHAR(MAX)), N'')) LIKE @search
       OR UPPER(COALESCE(l.building, '')) LIKE @search
       OR UPPER(COALESCE(l.floor, '')) LIKE @search
     )
