@@ -81,10 +81,25 @@ router.get('/',
       params.push({ name: 'requested_by', type: sql.UniqueIdentifier, value: requested_by });
     }
 
-    if (status) {
-      whereClause += ' AND cr.status = @status';
-      params.push({ name: 'status', type: sql.VarChar(30), value: status });
-    }
+    // if (status) {
+    //   whereClause += ' AND cr.status = @status';
+    //   params.push({ name: 'status', type: sql.VarChar(30), value: status });
+    // }
+
+    if (status === 'urgent_pending') {
+        whereClause += `
+          AND cr.priority = 'urgent'
+          AND cr.status IN ('pending', 'approved')
+        `;
+      } else if (status) {
+        whereClause += ' AND cr.status = @status';
+      
+        params.push({
+          name: 'status',
+          type: sql.VarChar(30),
+          value: status
+        });
+      }
 
     if (for_asset_id) {
       whereClause += ' AND cr.for_asset_id = @for_asset_id';
