@@ -208,63 +208,128 @@ router.get('/',
 // }
 
     
-if (search && search.trim()) {
+// if (search && search.trim()) {
+//   whereClause += `
+//     AND (
+//       -- Asset details
+//       a.asset_tag LIKE @search
+//       OR CAST(a.tag_no AS VARCHAR(100)) LIKE @search
+//       OR a.serial_number LIKE @search
+//       OR a.ip_address LIKE @search
+//       OR a.hostname LIKE @search
+//       OR a.status LIKE @search
+//       OR a.condition_status LIKE @search
+//       OR a.importance LIKE @search
+//       OR a.asset_type LIKE @search
+//       OR a.invoice_number LIKE @search
+//       OR a.notes LIKE @search
+
+//       -- Product details
+//       OR p.name LIKE @search
+//       OR p.model LIKE @search
+//       OR c.name LIKE @search
+//       OR subcat.name LIKE @search
+//       OR pt.name LIKE @search
+//       OR o.name LIKE @search
+//       OR v.name LIKE @search
+
+//       -- Employee details
+//       OR u.employee_id LIKE @search
+//       OR u.first_name LIKE @search
+//       OR u.last_name LIKE @search
+//       OR CONCAT(u.first_name, ' ', u.last_name) LIKE @search
+//       OR u.email LIKE @search
+
+//       -- Department details
+//       OR dept.department_name LIKE @search
+
+//       -- Location details
+//       OR l.name LIKE @search
+//       OR l.address LIKE @search
+//       OR l.building LIKE @search
+//       OR l.floor LIKE @search
+
+//       -- Date and cost fields
+//       OR CAST(a.purchase_cost AS VARCHAR(50)) LIKE @search
+//       OR CONVERT(VARCHAR(10), a.purchase_date, 23) LIKE @search
+//       OR CONVERT(VARCHAR(10), a.warranty_start_date, 23) LIKE @search
+//       OR CONVERT(VARCHAR(10), a.warranty_end_date, 23) LIKE @search
+//       OR CONVERT(VARCHAR(10), a.eol_date, 23) LIKE @search
+//       OR CONVERT(VARCHAR(10), a.eos_date, 23) LIKE @search
+//     )
+//   `;
+
+//   params.push({
+//     name: 'search',
+//     type: sql.VarChar(255),
+//     value: `%${search.trim()}%`
+//   });
+// }
+
+
+    
+const searchTerm = String(search || '').trim().replace(/\s+/g, ' ');
+
+if (searchTerm) {
+  const searchPattern = `%${searchTerm.toUpperCase()}%`;
+
+  // Also support searches without spaces or hyphens
+  const compactSearch = `%${searchTerm.replace(/[\s-]/g, '').toUpperCase()}%`;
+
   whereClause += `
     AND (
-      -- Asset details
-      a.asset_tag LIKE @search
-      OR CAST(a.tag_no AS VARCHAR(100)) LIKE @search
-      OR a.serial_number LIKE @search
-      OR a.ip_address LIKE @search
-      OR a.hostname LIKE @search
-      OR a.status LIKE @search
-      OR a.condition_status LIKE @search
-      OR a.importance LIKE @search
-      OR a.asset_type LIKE @search
-      OR a.invoice_number LIKE @search
-      OR a.notes LIKE @search
+      -- Asset information
+      UPPER(COALESCE(a.asset_tag, '')) LIKE @search
+      OR UPPER(COALESCE(CAST(a.tag_no AS VARCHAR(100)), '')) LIKE @search
+      OR UPPER(COALESCE(a.serial_number, '')) LIKE @search
+      OR UPPER(REPLACE(REPLACE(COALESCE(a.serial_number, ''), '-', ''), ' ', '')) LIKE @compactSearch
+      OR UPPER(COALESCE(a.ip_address, '')) LIKE @search
+      OR UPPER(COALESCE(a.hostname, '')) LIKE @search
+      OR UPPER(COALESCE(a.notes, '')) LIKE @search
 
-      -- Product details
-      OR p.name LIKE @search
-      OR p.model LIKE @search
-      OR c.name LIKE @search
-      OR subcat.name LIKE @search
-      OR pt.name LIKE @search
-      OR o.name LIKE @search
-      OR v.name LIKE @search
+      -- Product information
+      OR UPPER(COALESCE(p.name, '')) LIKE @search
+      OR UPPER(COALESCE(p.model, '')) LIKE @search
+      OR UPPER(REPLACE(COALESCE(p.name, ''), ' ', '')) LIKE @compactSearch
+      OR UPPER(REPLACE(COALESCE(p.model, ''), ' ', '')) LIKE @compactSearch
+      OR UPPER(COALESCE(c.name, '')) LIKE @search
+      OR UPPER(COALESCE(subcat.name, '')) LIKE @search
+      OR UPPER(COALESCE(pt.name, '')) LIKE @search
+      OR UPPER(COALESCE(o.name, '')) LIKE @search
+      OR UPPER(COALESCE(v.name, '')) LIKE @search
 
-      -- Employee details
-      OR u.employee_id LIKE @search
-      OR u.first_name LIKE @search
-      OR u.last_name LIKE @search
-      OR CONCAT(u.first_name, ' ', u.last_name) LIKE @search
-      OR u.email LIKE @search
+      -- Assigned employee information
+      OR UPPER(COALESCE(CONVERT(VARCHAR(50), u.employee_id), '')) LIKE @search
+      OR UPPER(COALESCE(u.first_name, '')) LIKE @search
+      OR UPPER(COALESCE(u.last_name, '')) LIKE @search
+      OR UPPER(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))) LIKE @search
+      OR UPPER(COALESCE(u.email, '')) LIKE @search
 
-      -- Department details
-      OR dept.department_name LIKE @search
+      -- Department
+      OR UPPER(COALESCE(dept.department_name, '')) LIKE @search
 
-      -- Location details
-      OR l.name LIKE @search
-      OR l.address LIKE @search
-      OR l.building LIKE @search
-      OR l.floor LIKE @search
-
-      -- Date and cost fields
-      OR CAST(a.purchase_cost AS VARCHAR(50)) LIKE @search
-      OR CONVERT(VARCHAR(10), a.purchase_date, 23) LIKE @search
-      OR CONVERT(VARCHAR(10), a.warranty_start_date, 23) LIKE @search
-      OR CONVERT(VARCHAR(10), a.warranty_end_date, 23) LIKE @search
-      OR CONVERT(VARCHAR(10), a.eol_date, 23) LIKE @search
-      OR CONVERT(VARCHAR(10), a.eos_date, 23) LIKE @search
+      -- Location
+      OR UPPER(COALESCE(l.name, '')) LIKE @search
+      OR UPPER(COALESCE(l.address, '')) LIKE @search
+      OR UPPER(COALESCE(l.building, '')) LIKE @search
+      OR UPPER(COALESCE(l.floor, '')) LIKE @search
     )
   `;
 
-  params.push({
-    name: 'search',
-    type: sql.VarChar(255),
-    value: `%${search.trim()}%`
-  });
+  params.push(
+    {
+      name: 'search',
+      type: sql.NVarChar(255),
+      value: searchPattern
+    },
+    {
+      name: 'compactSearch',
+      type: sql.NVarChar(255),
+      value: compactSearch
+    }
+  );
 }
+
 
 
 
