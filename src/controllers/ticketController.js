@@ -22,6 +22,13 @@ class TicketController {
    */
   static async createTicket(req, res) {
     try {
+      const startTime = Date.now();
+
+const performanceLog = (step) => {
+    console.log(
+        `[TICKET PERFORMANCE] ${step}: ${Date.now() - startTime} ms`
+    );
+};
       const {
         is_guest,
         guest_name,
@@ -124,10 +131,12 @@ class TicketController {
       } else {
         // Create regular employee ticket (dept/location inherited automatically)
         ticket = await TicketModel.createTicket(ticketData);
+        performanceLog('Ticket inserted into database');
       }
 
       // Fetch full ticket details with user/guest info
       const fullTicket = await TicketModel.getTicketById(ticket.ticket_id);
+      performanceLog('Full ticket details fetched');
 
       // Link assets to ticket if provided (BEFORE SLA initialization)
       let linkedAssetIds = [];
@@ -232,6 +241,8 @@ class TicketController {
           ticketContext
       );
 
+      performanceLog('SLA initialization completed');
+
 //       // Create notification for assigned engineer
 //       if (assigned_to_engineer_id) {
 //         try {
@@ -272,166 +283,395 @@ class TicketController {
 //           }
 
 
-// Create notification for assigned engineer
+// // Create notification for assigned engineer
+// if (assigned_to_engineer_id) {
+
+//   console.log('========== EMAIL DEBUG ==========');
+// console.log('REQ.USER =>', req.user);
+// console.log('REQ.OAUTH.USER =>', req.oauth?.user);
+// console.log('ASSIGNED ENGINEER =>', assigned_to_engineer_id);
+// console.log('=================================');
+
+//   console.log('assigned_to_engineer_id:', assigned_to_engineer_id);
+//   console.log('Ticket Details:', ticket);
+
+//   try {
+
+//     // Create in-app notification
+//     // await inAppNotificationService.createTicketAssignmentNotification({
+//     //   engineer_id: assigned_to_engineer_id,
+//     //   ticket_id: ticket.ticket_id,
+//     //   ticket_number: ticket.ticket_number,
+//     //   ticket_title: title,
+//     //   assigned_by_name:
+//     //     req.user?.name ||
+//     //     req.oauth?.user?.name ||
+//     //     req.user?.email ||
+//     //     req.oauth?.user?.email ||
+//     //     'Coordinator'
+//     // });
+//    await inAppNotificationService.createTicketAssignmentNotification({
+//   engineer_id: assigned_to_engineer_id,
+//   ticket_id: ticket.ticket_id,
+//   ticket_number: ticket.ticket_number,
+//   ticket_title: title,
+//   assigned_by_name:
+//     req.oauth?.user?.name ||
+//     req.oauth?.user?.email ||
+//     req.user?.name ||
+//     req.user?.email ||
+//     'Coordinator'
+// });
+
+//     console.log('In-app notification created');
+
+//     // Get engineer details
+//     // const engineer =
+//     //   await TicketController.getEngineerDetails(
+//     //     assigned_to_engineer_id
+//     //   );
+
+//     // console.log('Engineer Details:', engineer);
+
+//     // const engineerName =
+//     //   engineer?.full_name || 'Engineer';
+//     const engineerEmail = await TicketController.getEngineerEmail(assigned_to_engineer_id);
+
+// const engineerName = 'Engineer';
+
+//     // const engineerEmail =
+//     //   engineer?.email || null;
+
+//     console.log('Engineer Email:', engineerEmail);
+
+//     if (!engineerEmail) {
+
+//       console.error('Engineer email not found');
+
+//     } else {
+
+//       const assignedByName =
+//         req.user?.name ||
+//         req.oauth?.user?.name ||
+//         req.user?.email ||
+//         req.oauth?.user?.email ||
+//         'Coordinator';
+
+//       const pool = await connectDB();
+
+//       // let building = 'N/A';
+//       // let floor = 'N/A';
+
+//       // if (fullTicket.location_id) {
+
+//       //   const locResult = await pool.request()
+//       //     .input(
+//       //       'locationId',
+//       //       sql.UniqueIdentifier,
+//       //       fullTicket.location_id
+//       //     )
+//       //     .query(`
+//       //       SELECT building, floor
+//       //       FROM locations
+//       //       WHERE id = @locationId
+//       //     `);
+
+//       //   if (locResult.recordset.length > 0) {
+
+//       //     const loc = locResult.recordset[0];
+
+//       //     building =
+//       //       loc.building || 'N/A';
+
+//       //     floor =
+//       //       loc.floor
+//       //         ? loc.floor + ' Floor'
+//       //         : 'N/A';
+//       //   }
+//       // }
+
+
+//      // ================= USER LOCATION ================= //
+//      let userLocation = ''; 
+//      try 
+//      { 
+//       if (fullTicket.created_by_user_id) 
+//         { 
+//           const userLocationResult = await pool.request() 
+//           .input( 'userId', sql.UniqueIdentifier, fullTicket.created_by_user_id ) 
+//           .query(` SELECT l.name AS location_name, l.floor FROM USER_MASTER u LEFT JOIN locations l ON u.location_id = l.id WHERE u.user_id = @userId `); 
+//           if (userLocationResult.recordset.length > 0) 
+//             { 
+//               const loc = userLocationResult.recordset[0]; 
+//               const locationName = loc?.location_name || ''; 
+//               const floor = loc?.floor ? ` - Floor ${loc.floor}` : ''; userLocation = `${locationName}${floor}`; 
+//             } 
+//           } 
+//         } 
+//         catch (userLocationError) 
+//         { 
+//           console.error( 'User location fetch failed:', userLocationError.message ); 
+//         } console.log('User Location:', userLocation); 
+//         // ================= ASSET LOCATION ================= // 
+//         let assetLocation = ''; 
+//         try 
+//         { 
+//           const assetLocationResult = await pool.request() 
+//           .input( 'ticketId', sql.UniqueIdentifier, ticket.ticket_id ) 
+//           .query(` SELECT TOP 1 l.name AS asset_location, l.floor FROM ticket_assets ta INNER JOIN assets a ON ta.asset_id = a.id LEFT JOIN locations l ON a.location_id = l.id WHERE ta.ticket_id = @ticketId `); 
+//           if (assetLocationResult.recordset.length > 0) 
+//             { 
+//               const loc = assetLocationResult.recordset[0]; 
+//               const locationName = loc?.asset_location || ''; const floor = loc?.floor ? ` - Floor ${loc.floor}` : ''; 
+//               assetLocation = `${locationName}${floor}`; 
+//             } 
+//           } 
+//           catch (assetError) 
+//           { 
+//             console.error( 'Asset location fetch failed:', assetError.message ); 
+//           } 
+//           console.log('Asset Location:', assetLocation); 
+//       const userName =
+//         fullTicket.created_by_user_name ||
+//         'User';
+
+//       const department =
+//         fullTicket.department_name ||
+//         'N/A';
+
+//       const emailSubject =
+//         `New Ticket Assigned: ${ticket.ticket_number}`;
+
+//       const emailBody = `
+
+// Dear ${engineerName},
+
+// A new ticket has been assigned to you.
+
+// Ticket Number: ${ticket.ticket_number}
+// Title: ${title}
+// Priority: ${fullTicket.priority || 'medium'}
+
+// Name: ${userName}
+// Department: ${department}
+// ${userLocation ? `User Location: ${userLocation}` : ''} 
+// ${assetLocation ? `Asset Location: ${assetLocation}` : ''}
+
+// Assigned By: ${assignedByName}
+
+// Description:
+// ${description || 'No description provided'}
+
+// Note: Please close this ticket as soon as possible.
+
+// Regards,
+// Helpdesk
+//       `;
+
+//       console.log('Sending email to:', engineerEmail);
+//       console.log('Email Subject:', emailSubject);
+
+//       try {
+
+//         const emailResult =
+//           await emailService.sendEmail(
+//             engineerEmail,
+//             emailSubject,
+//             emailBody.trim()
+//           );
+
+//         console.log(
+//           `Assignment email sent successfully to ${engineerEmail}`
+//         );
+
+//         console.log(
+//           'Email Result:',
+//           emailResult
+//         );
+
+//       } catch (emailError) {
+
+//         console.error(
+//           'EMAIL SEND ERROR:',
+//           emailError
+//         );
+
+//         console.error(
+//           'EMAIL ERROR MESSAGE:',
+//           emailError.message
+//         );
+//       }
+//     }
+
+//     // Send SMS notification
+//     try {
+
+//       await TicketController.sendAssignmentSms(
+//         assigned_to_engineer_id,
+//         fullTicket
+//       );
+
+//       console.log('SMS notification sent');
+
+//     } catch (smsError) {
+
+//       console.error(
+//         'SMS ERROR:',
+//         smsError.message
+//       );
+//     }
+
+//   } catch (notificationError) {
+
+//     console.error(
+//       'Failed to create assignment notification:',
+//       notificationError
+//     );
+
+//     console.error(
+//       'Notification Error Message:',
+//       notificationError.message
+//     );
+//   }
+// }
+
+      
+// ============================================
+// BACKGROUND ASSIGNMENT NOTIFICATIONS
+// Ticket API will NOT wait for email or SMS
+// ============================================
+
 if (assigned_to_engineer_id) {
 
-  console.log('========== EMAIL DEBUG ==========');
-console.log('REQ.USER =>', req.user);
-console.log('REQ.OAUTH.USER =>', req.oauth?.user);
-console.log('ASSIGNED ENGINEER =>', assigned_to_engineer_id);
-console.log('=================================');
+    setImmediate(() => {
 
-  console.log('assigned_to_engineer_id:', assigned_to_engineer_id);
-  console.log('Ticket Details:', ticket);
+        (async () => {
 
-  try {
+            const assignedByName =
+                req.oauth?.user?.name ||
+                req.oauth?.user?.email ||
+                req.user?.name ||
+                req.user?.email ||
+                'Coordinator';
 
-    // Create in-app notification
-    // await inAppNotificationService.createTicketAssignmentNotification({
-    //   engineer_id: assigned_to_engineer_id,
-    //   ticket_id: ticket.ticket_id,
-    //   ticket_number: ticket.ticket_number,
-    //   ticket_title: title,
-    //   assigned_by_name:
-    //     req.user?.name ||
-    //     req.oauth?.user?.name ||
-    //     req.user?.email ||
-    //     req.oauth?.user?.email ||
-    //     'Coordinator'
-    // });
-   await inAppNotificationService.createTicketAssignmentNotification({
-  engineer_id: assigned_to_engineer_id,
-  ticket_id: ticket.ticket_id,
-  ticket_number: ticket.ticket_number,
-  ticket_title: title,
-  assigned_by_name:
-    req.oauth?.user?.name ||
-    req.oauth?.user?.email ||
-    req.user?.name ||
-    req.user?.email ||
-    'Coordinator'
-});
+            // --------------------------------
+            // 1. IN-APP NOTIFICATION
+            // --------------------------------
 
-    console.log('In-app notification created');
+            const inAppTask = (async () => {
 
-    // Get engineer details
-    // const engineer =
-    //   await TicketController.getEngineerDetails(
-    //     assigned_to_engineer_id
-    //   );
+                await inAppNotificationService.createTicketAssignmentNotification({
+                    engineer_id: assigned_to_engineer_id,
+                    ticket_id: ticket.ticket_id,
+                    ticket_number: ticket.ticket_number,
+                    ticket_title: title,
+                    assigned_by_name: assignedByName
+                });
 
-    // console.log('Engineer Details:', engineer);
+                console.log(
+                    `[BACKGROUND] In-app notification created: ${ticket.ticket_number}`
+                );
 
-    // const engineerName =
-    //   engineer?.full_name || 'Engineer';
-    const engineerEmail = await TicketController.getEngineerEmail(assigned_to_engineer_id);
+            })();
 
-const engineerName = 'Engineer';
+            // --------------------------------
+            // 2. EMAIL NOTIFICATION
+            // --------------------------------
 
-    // const engineerEmail =
-    //   engineer?.email || null;
+            const emailTask = (async () => {
 
-    console.log('Engineer Email:', engineerEmail);
+                const engineerEmail =
+                    await TicketController.getEngineerEmail(
+                        assigned_to_engineer_id
+                    );
 
-    if (!engineerEmail) {
+                if (!engineerEmail) {
+                    console.log(
+                        `[BACKGROUND] Engineer email not found: ${ticket.ticket_number}`
+                    );
+                    return;
+                }
 
-      console.error('Engineer email not found');
+                const pool = await connectDB();
 
-    } else {
+                // Fetch user and asset locations in parallel
+                const [userLocationResult, assetLocationResult] =
+                    await Promise.all([
 
-      const assignedByName =
-        req.user?.name ||
-        req.oauth?.user?.name ||
-        req.user?.email ||
-        req.oauth?.user?.email ||
-        'Coordinator';
+                        fullTicket.created_by_user_id
+                            ? pool.request()
+                                .input(
+                                    'userId',
+                                    sql.UniqueIdentifier,
+                                    fullTicket.created_by_user_id
+                                )
+                                .query(`
+                                    SELECT
+                                        l.name AS location_name,
+                                        l.floor
+                                    FROM USER_MASTER u
+                                    LEFT JOIN locations l
+                                        ON u.location_id = l.id
+                                    WHERE u.user_id = @userId
+                                `)
+                            : Promise.resolve({ recordset: [] }),
 
-      const pool = await connectDB();
+                        pool.request()
+                            .input(
+                                'ticketId',
+                                sql.UniqueIdentifier,
+                                ticket.ticket_id
+                            )
+                            .query(`
+                                SELECT TOP 1
+                                    l.name AS asset_location,
+                                    l.floor
+                                FROM ticket_assets ta
+                                INNER JOIN assets a
+                                    ON ta.asset_id = a.id
+                                LEFT JOIN locations l
+                                    ON a.location_id = l.id
+                                WHERE ta.ticket_id = @ticketId
+                            `)
 
-      // let building = 'N/A';
-      // let floor = 'N/A';
+                    ]);
 
-      // if (fullTicket.location_id) {
+                // User location
+                let userLocation = '';
 
-      //   const locResult = await pool.request()
-      //     .input(
-      //       'locationId',
-      //       sql.UniqueIdentifier,
-      //       fullTicket.location_id
-      //     )
-      //     .query(`
-      //       SELECT building, floor
-      //       FROM locations
-      //       WHERE id = @locationId
-      //     `);
+                if (userLocationResult.recordset.length > 0) {
 
-      //   if (locResult.recordset.length > 0) {
+                    const loc = userLocationResult.recordset[0];
 
-      //     const loc = locResult.recordset[0];
+                    userLocation =
+                        `${loc.location_name || ''}` +
+                        `${loc.floor ? ` - Floor ${loc.floor}` : ''}`;
+                }
 
-      //     building =
-      //       loc.building || 'N/A';
+                // Asset location
+                let assetLocation = '';
 
-      //     floor =
-      //       loc.floor
-      //         ? loc.floor + ' Floor'
-      //         : 'N/A';
-      //   }
-      // }
+                if (assetLocationResult.recordset.length > 0) {
 
+                    const loc = assetLocationResult.recordset[0];
 
-     // ================= USER LOCATION ================= //
-     let userLocation = ''; 
-     try 
-     { 
-      if (fullTicket.created_by_user_id) 
-        { 
-          const userLocationResult = await pool.request() 
-          .input( 'userId', sql.UniqueIdentifier, fullTicket.created_by_user_id ) 
-          .query(` SELECT l.name AS location_name, l.floor FROM USER_MASTER u LEFT JOIN locations l ON u.location_id = l.id WHERE u.user_id = @userId `); 
-          if (userLocationResult.recordset.length > 0) 
-            { 
-              const loc = userLocationResult.recordset[0]; 
-              const locationName = loc?.location_name || ''; 
-              const floor = loc?.floor ? ` - Floor ${loc.floor}` : ''; userLocation = `${locationName}${floor}`; 
-            } 
-          } 
-        } 
-        catch (userLocationError) 
-        { 
-          console.error( 'User location fetch failed:', userLocationError.message ); 
-        } console.log('User Location:', userLocation); 
-        // ================= ASSET LOCATION ================= // 
-        let assetLocation = ''; 
-        try 
-        { 
-          const assetLocationResult = await pool.request() 
-          .input( 'ticketId', sql.UniqueIdentifier, ticket.ticket_id ) 
-          .query(` SELECT TOP 1 l.name AS asset_location, l.floor FROM ticket_assets ta INNER JOIN assets a ON ta.asset_id = a.id LEFT JOIN locations l ON a.location_id = l.id WHERE ta.ticket_id = @ticketId `); 
-          if (assetLocationResult.recordset.length > 0) 
-            { 
-              const loc = assetLocationResult.recordset[0]; 
-              const locationName = loc?.asset_location || ''; const floor = loc?.floor ? ` - Floor ${loc.floor}` : ''; 
-              assetLocation = `${locationName}${floor}`; 
-            } 
-          } 
-          catch (assetError) 
-          { 
-            console.error( 'Asset location fetch failed:', assetError.message ); 
-          } 
-          console.log('Asset Location:', assetLocation); 
-      const userName =
-        fullTicket.created_by_user_name ||
-        'User';
+                    assetLocation =
+                        `${loc.asset_location || ''}` +
+                        `${loc.floor ? ` - Floor ${loc.floor}` : ''}`;
+                }
 
-      const department =
-        fullTicket.department_name ||
-        'N/A';
+                const engineerName = 'Engineer';
 
-      const emailSubject =
-        `New Ticket Assigned: ${ticket.ticket_number}`;
+                const userName =
+                    fullTicket.created_by_user_name || 'User';
 
-      const emailBody = `
+                const department =
+                    fullTicket.department_name || 'N/A';
+
+                const emailSubject =
+                    `New Ticket Assigned: ${ticket.ticket_number}`;
+
+                const emailBody = `
 
 Dear ${engineerName},
 
@@ -443,7 +683,7 @@ Priority: ${fullTicket.priority || 'medium'}
 
 Name: ${userName}
 Department: ${department}
-${userLocation ? `User Location: ${userLocation}` : ''} 
+${userLocation ? `User Location: ${userLocation}` : ''}
 ${assetLocation ? `Asset Location: ${assetLocation}` : ''}
 
 Assigned By: ${assignedByName}
@@ -455,78 +695,102 @@ Note: Please close this ticket as soon as possible.
 
 Regards,
 Helpdesk
-      `;
+                `;
 
-      console.log('Sending email to:', engineerEmail);
-      console.log('Email Subject:', emailSubject);
+                const emailResult = await emailService.sendEmail(
+                    engineerEmail,
+                    emailSubject,
+                    emailBody.trim()
+                );
 
-      try {
+                if (emailResult.success) {
 
-        const emailResult =
-          await emailService.sendEmail(
-            engineerEmail,
-            emailSubject,
-            emailBody.trim()
-          );
+                    console.log(
+                        `[BACKGROUND] Assignment email sent: ${ticket.ticket_number}`
+                    );
 
-        console.log(
-          `Assignment email sent successfully to ${engineerEmail}`
-        );
+                } else {
 
-        console.log(
-          'Email Result:',
-          emailResult
-        );
+                    console.error(
+                        `[BACKGROUND] Assignment email failed: ${ticket.ticket_number}`,
+                        emailResult.error || emailResult.reason
+                    );
+                }
 
-      } catch (emailError) {
+            })();
 
-        console.error(
-          'EMAIL SEND ERROR:',
-          emailError
-        );
+            // --------------------------------
+            // 3. SMS NOTIFICATION
+            // --------------------------------
 
-        console.error(
-          'EMAIL ERROR MESSAGE:',
-          emailError.message
-        );
-      }
-    }
+            const smsTask = (async () => {
 
-    // Send SMS notification
-    try {
+                await TicketController.sendAssignmentSms(
+                    assigned_to_engineer_id,
+                    fullTicket
+                );
 
-      await TicketController.sendAssignmentSms(
-        assigned_to_engineer_id,
-        fullTicket
-      );
+                console.log(
+                    `[BACKGROUND] SMS processing completed: ${ticket.ticket_number}`
+                );
 
-      console.log('SMS notification sent');
+            })();
 
-    } catch (smsError) {
+            // Run all three tasks independently.
+            // Failure in one task will not prevent the others.
 
-      console.error(
-        'SMS ERROR:',
-        smsError.message
-      );
-    }
+            const results = await Promise.allSettled([
+                inAppTask,
+                emailTask,
+                smsTask
+            ]);
 
-  } catch (notificationError) {
+            results.forEach((result, index) => {
 
-    console.error(
-      'Failed to create assignment notification:',
-      notificationError
-    );
+                if (result.status === 'rejected') {
 
-    console.error(
-      'Notification Error Message:',
-      notificationError.message
-    );
-  }
+                    console.error(
+                        `[BACKGROUND] Notification task ${index + 1} failed:`,
+                        result.reason
+                    );
+
+                }
+
+            });
+
+            console.log(
+                `[BACKGROUND] All notification tasks completed: ${ticket.ticket_number}`
+            );
+
+        })().catch(error => {
+
+            console.error(
+                `[BACKGROUND] Assignment notification error: ${ticket.ticket_number}`,
+                error
+            );
+
+        });
+
+    });
+
 }
 
+// ============================================
+// RETURN TICKET RESPONSE IMMEDIATELY
+// ============================================
+
+return sendCreated(
+    res,
+    fullTicket,
+    'Ticket created successfully'
+);
+
+      performanceLog('API response ready');
 
 
-      return sendCreated(res, fullTicket, 'Ticket created successfully');
+
+
+      // return sendCreated(res, fullTicket, 'Ticket created successfully');
     } catch (error) {
       console.error('Create ticket error:', error);
       return sendError(res, error.message || 'Failed to create ticket', 500);
