@@ -68,6 +68,59 @@ const labelRoutes = require('./labels');
 // Apply authentication to all asset routes
 router.use(authenticateToken);
 
+// Get the authenticated user details for asset activity history
+const getAssetActivityUser = async (pool, req) => {
+  const authUser = req.oauth?.user || req.user || {};
+  const userId = authUser.user_id || authUser.id || null;
+
+  const uuidPattern =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  if (!userId || !uuidPattern.test(String(userId))) {
+    return {
+      user_id: null,
+      user_name: authUser.email || 'System',
+      employee_id: null,
+      user_role: authUser.role || 'Unknown'
+    };
+  }
+
+  const result = await pool.request()
+    .input('userId', sql.UniqueIdentifier, userId)
+    .query(`
+      SELECT
+        user_id,
+        first_name,
+        last_name,
+        employee_id,
+        role
+      FROM USER_MASTER
+      WHERE user_id = @userId
+    `);
+
+  const user = result.recordset[0];
+
+  return {
+    user_id: userId,
+    user_name: user
+      ? `${user.first_name || ''} ${user.last_name || ''}`.trim()
+      : authUser.email || 'Unknown User',
+    employee_id: user?.employee_id || null,
+    user_role: user?.role || authUser.role || 'Unknown'
+  };
+};
+
+// Create a single activity history entry
+const createAssetActivityEntry = (action, actor, changes = {}) => ({
+  action,
+  user_id: actor.user_id,
+  user_name: actor.user_name,
+  employee_id: actor.employee_id,
+  user_role: actor.user_role,
+  date: new Date().toISOString(),
+  changes
+});
+
 // Mount component routes - MUST be before other /:id routes to avoid conflicts
 router.use('/:id/components', componentRoutes);
 
@@ -128,6 +181,57 @@ async function installSoftware(pool, assetId, softwareProductId, softwareType, l
     // Continue even if software installation fails
   }
 }
+
+// GET /assets/:id/activity-history
+router.get(
+  '/:id/activity-history',
+  requireDynamicPermission(),
+  validateUUID('id'),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const pool = await connectDB();
+
+    const result = await pool.request()
+      .input('id', sql.UniqueIdentifier, id)
+      .query(`
+        SELECT
+          id,
+          asset_tag,
+          activity_history
+        FROM assets
+        WHERE id = @id
+      `);
+
+    if (result.recordset.length === 0) {
+      return sendNotFound(res, 'Asset not found');
+    }
+
+    let activities = [];
+
+    const history = result.recordset[0].activity_history;
+
+    if (history) {
+      try {
+        activities = JSON.parse(history);
+
+        if (!Array.isArray(activities)) {
+          activities = [];
+        }
+      } catch (error) {
+        console.error(
+          'Error parsing asset activity history:',
+          error
+        );
+      }
+    }
+
+    sendSuccess(
+      res,
+      activities,
+      'Asset activity history retrieved successfully'
+    );
+  })
+);
 
 // GET /assets - List all assets with pagination, search, and filtering
 router.get('/',
@@ -3164,6 +3268,9 @@ router.post('/',
     // Generate asset ID upfront
     const assetId = uuidv4();
 
+
+    const activityActor = await getAssetActivityUser(pool, req);
+
     // Validate component installation if it's a component
     if (asset_type === 'component' && parent_asset_id) {
       const validationResult = await pool.request()
@@ -3198,7 +3305,47 @@ router.post('/',
       }
     }
 
+    const activityEntry = createAssetActivityEntry(
+  'ASSET_CREATED',
+  activityActor,
+  {
+    asset_tag: {
+      old: null,
+      new: finalAssetTag
+    },
+    serial_number: {
+      old: null,
+      new: serial_number || null
+    },
+    product_id: {
+      old: null,
+      new: product_id
+    },
+    assigned_to: {
+      old: null,
+      new: assigned_to || null
+    },
+    status: {
+      old: null,
+      new: finalStatus
+    },
+    condition_status: {
+      old: null,
+      new: condition_status
+    },
+    department_id: {
+      old: null,
+      new: department_id || null
+    },
+    location_id: {
+      old: null,
+      new: location_id || null
+    }
+  }
+);
+
     const result = await pool.request()
+      .input('activityEntry', sql.NVarChar(sql.MAX), JSON.stringify(activityEntry))
       .input('id', sql.UniqueIdentifier, assetId)
       .input('createdBy', sql.UniqueIdentifier, createdBy)
       .input('assetTag', sql.VarChar(50), finalAssetTag)
@@ -3228,20 +3375,21 @@ router.post('/',
       .input('installedBy', sql.UniqueIdentifier, performedBy)
       .input('locationId', sql.UniqueIdentifier, location_id || null)
       .input('departmentId', sql.UniqueIdentifier, department_id || null)
+      
       .query(`
         INSERT INTO assets (
           id, asset_tag, tag_no, serial_number, product_id, assigned_to, ip_address, hostname, status, condition_status, importance,
           purchase_date, warranty_end_date, warranty_start_date, eol_date, eos_date,
           purchase_cost, vendor_id, invoice_number, notes, is_active,
           asset_type, parent_asset_id, installation_date, installation_notes, installed_by,
-          created_at, updated_at, created_by, location_id, department_id
+          created_at, updated_at, created_by, location_id, department_id, activity_history
         )
         VALUES (
           @id, @assetTag, @tagNo, @serialNumber, @productId, @assignedTo, @ipAddress, @hostname, @status, @conditionStatus, @importance,
           @purchaseDate, @warrantyEndDate, @warrantyStartDate, @eolDate, @eosDate,
           @purchaseCost, @vendorId, @invoiceNumber, @notes, @isActive,
           @assetType, @parentAssetId, @installationDate, @installationNotes, @installedBy,
-          GETUTCDATE(), GETUTCDATE(), @createdBy, @locationId, @departmentId
+          GETUTCDATE(), GETUTCDATE(), @createdBy, @locationId, @departmentId, CONCAT('[', @activityEntry, ']')
         );
 
         SELECT
@@ -3459,6 +3607,62 @@ router.put('/:id',
     }
 
     const existingAsset = existingResult.recordset[0];
+
+    const activityActor = await getAssetActivityUser(pool, req);
+
+const activityFields = [
+  'asset_tag',
+  'serial_number',
+  'ip_address',
+  'hostname',
+  'product_id',
+  'assigned_to',
+  'location_id',
+  'department_id',
+  'status',
+  'condition_status',
+  'importance',
+  'purchase_date',
+  'warranty_start_date',
+  'warranty_end_date',
+  'eol_date',
+  'eos_date',
+  'purchase_cost',
+  'vendor_id',
+  'invoice_number',
+  'notes',
+  'is_active',
+  'asset_type',
+  'parent_asset_id',
+  'installation_notes',
+  'installed_by'
+];
+
+const activityChanges = {};
+
+for (const field of activityFields) {
+  if (!Object.prototype.hasOwnProperty.call(req.body, field)) {
+    continue;
+  }
+
+  const oldValue = existingAsset[field] ?? null;
+  const newValue = req.body[field] ?? null;
+
+  const normalizeValue = (value) => {
+    if (value instanceof Date) {
+      return value.toISOString().slice(0, 10);
+    }
+
+    return String(value ?? '').trim();
+  };
+
+  if (normalizeValue(oldValue) !== normalizeValue(newValue)) {
+    activityChanges[field] = {
+      old: oldValue,
+      new: newValue
+    };
+  }
+}
 
     // Validate component hierarchy changes
     if (asset_type !== undefined) {
@@ -3712,47 +3916,82 @@ router.put('/:id',
       );
       
       // Update the timestamp
-      updateFields.push('updated_at = GETUTCDATE()');
+    //   updateFields.push('updated_at = GETUTCDATE()');
 
-    const result = await updateRequest.query(`
-      UPDATE assets
-      SET ${updateFields.join(', ')}
-      WHERE id = @id;
+    // const result = await updateRequest.query(`
+    //   UPDATE assets
+    //   SET ${updateFields.join(', ')}
+    //   WHERE id = @id;
 
-      SELECT
-        a.id, a.asset_tag, a.serial_number, a.ip_address, a.hostname, a.status, a.condition_status, a.importance, a.purchase_date,
-        a.warranty_start_date, a.warranty_end_date, a.eol_date, a.eos_date,
-        a.purchase_cost, a.vendor_id as asset_vendor_id, a.invoice_number, a.notes, a.asset_type, a.parent_asset_id, a.installation_date,
-        a.installation_notes, a.created_at, a.updated_at,
-        a.created_by,
-        a.updated_by,
-        creator.first_name + ' ' + creator.last_name AS created_by_name,
-        editor.first_name + ' ' + editor.last_name AS updated_by_name,
-        u.location_id, a.assigned_to,
-        p.name as product_name, p.model as product_model,
-        l.name as location_name,
-        u.first_name + ' ' + u.last_name as assigned_user_name, u.email as assigned_user_email,
-        c.name as category_name,
-        o.name as oem_name,
-        v.name as vendor_name, v.code as vendor_code,
-        parent.asset_tag as parent_asset_tag,
-        installer.first_name + ' ' + installer.last_name as installed_by_name,
-        a.location_id as location_id, a.department_id as department_id
-      FROM assets a
-      INNER JOIN products p ON a.product_id = p.id
-      LEFT JOIN categories c ON p.category_id = c.id
-      LEFT JOIN oems o ON p.oem_id = o.id
-      LEFT JOIN vendors v ON a.vendor_id = v.id
-      LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
-      LEFT JOIN locations l ON a.location_id = l.id
-      LEFT JOIN assets parent ON a.parent_asset_id = parent.id
-      LEFT JOIN USER_MASTER installer ON a.installed_by = installer.user_id
-      LEFT JOIN USER_MASTER creator
-          ON a.created_by = creator.user_id
-      LEFT JOIN USER_MASTER editor
-          ON a.updated_by = editor.user_id
-      WHERE a.id = @id;
-    `);
+    //   SELECT
+    //     a.id, a.asset_tag, a.serial_number, a.ip_address, a.hostname, a.status, a.condition_status, a.importance, a.purchase_date,
+    //     a.warranty_start_date, a.warranty_end_date, a.eol_date, a.eos_date,
+    //     a.purchase_cost, a.vendor_id as asset_vendor_id, a.invoice_number, a.notes, a.asset_type, a.parent_asset_id, a.installation_date,
+    //     a.installation_notes, a.created_at, a.updated_at,
+    //     a.created_by,
+    //     a.updated_by,
+    //     creator.first_name + ' ' + creator.last_name AS created_by_name,
+    //     editor.first_name + ' ' + editor.last_name AS updated_by_name,
+    //     u.location_id, a.assigned_to,
+    //     p.name as product_name, p.model as product_model,
+    //     l.name as location_name,
+    //     u.first_name + ' ' + u.last_name as assigned_user_name, u.email as assigned_user_email,
+    //     c.name as category_name,
+    //     o.name as oem_name,
+    //     v.name as vendor_name, v.code as vendor_code,
+    //     parent.asset_tag as parent_asset_tag,
+    //     installer.first_name + ' ' + installer.last_name as installed_by_name,
+    //     a.location_id as location_id, a.department_id as department_id
+    //   FROM assets a
+    //   INNER JOIN products p ON a.product_id = p.id
+    //   LEFT JOIN categories c ON p.category_id = c.id
+    //   LEFT JOIN oems o ON p.oem_id = o.id
+    //   LEFT JOIN vendors v ON a.vendor_id = v.id
+    //   LEFT JOIN USER_MASTER u ON a.assigned_to = u.user_id
+    //   LEFT JOIN locations l ON a.location_id = l.id
+    //   LEFT JOIN assets parent ON a.parent_asset_id = parent.id
+    //   LEFT JOIN USER_MASTER installer ON a.installed_by = installer.user_id
+    //   LEFT JOIN USER_MASTER creator
+    //       ON a.created_by = creator.user_id
+    //   LEFT JOIN USER_MASTER editor
+    //       ON a.updated_by = editor.user_id
+    //   WHERE a.id = @id;
+    // `);
+
+    // Add activity history if any tracked field has changed
+if (Object.keys(activityChanges).length > 0) {
+
+  const activityEntry = createAssetActivityEntry(
+    'ASSET_UPDATED',
+    activityActor,
+    activityChanges
+  );
+
+  updateRequest.input(
+    'activityEntry',
+    sql.NVarChar(sql.MAX),
+    JSON.stringify(activityEntry)
+  );
+
+  updateFields.push(`
+    activity_history =
+      CASE
+        WHEN ISJSON(activity_history) = 1
+             AND LEFT(LTRIM(activity_history), 1) = '['
+        THEN JSON_MODIFY(
+          activity_history,
+          'append $',
+          JSON_QUERY(@activityEntry)
+        )
+        ELSE CONCAT('[', @activityEntry, ']')
+      END
+  `);
+}
+
+// Update timestamp
+updateFields.push('updated_at = GETUTCDATE()');
+
+const result = await updateRequest.query(`
 
     const updatedAsset = result.recordset[0];
 
