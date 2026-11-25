@@ -4288,8 +4288,10 @@ router.post('/:id/assign',
                p.category_id, p.subcategory_id,
                c.name as category_name,
                sc.name as subcategory_name,
-               prev_user.location_id as previous_location_id,
-               prev_user.first_name + ' ' + prev_user.last_name as previous_user_name
+               prev_user.location_id AS previous_location_id,
+              prev_user.first_name AS previous_user_first_name,
+              prev_user.last_name AS previous_user_last_name,
+              prev_user.employee_id AS previous_employee_id
         FROM assets a
         INNER JOIN products p ON a.product_id = p.id
         LEFT JOIN categories c ON p.category_id = c.id
@@ -4321,7 +4323,8 @@ router.post('/:id/assign',
     // Verify user exists and get their location and allow_multi_assets flag
     const userResult = await pool.request()
       .input('userId', sql.UniqueIdentifier, user_id)
-      .query('SELECT user_id, first_name, last_name, email, location_id, allow_multi_assets FROM USER_MASTER WHERE user_id = @userId AND is_active = 1');
+      // .query('SELECT user_id, first_name, last_name, email, location_id, allow_multi_assets FROM USER_MASTER WHERE user_id = @userId AND is_active = 1');
+    .query('SELECT user_id, first_name, last_name, email, location_id, allow_multi_assets FROM USER_MASTER WHERE user_id = @userId AND is_active = 1');
 
     if (userResult.recordset.length === 0) {
       return sendNotFound(res, 'User not found or inactive');
@@ -4399,13 +4402,39 @@ await pool.request()
   `);
 
 // Record assignment in Activity History
-const assignmentActivity = createAssetActivityEntry(
+// const assignmentActivity = createAssetActivityEntry(
+//   'ASSET_ASSIGNED',
+//   activityActor,
+//   {
+//     assigned_to: {
+//       old: asset.assigned_to || null,
+//       new: user_id
+//     },
+//     status: {
+//       old: asset.status,
+//       new: 'assigned'
+//     }
+//   }
+// );
+
+    const assignmentActivity = createAssetActivityEntry(
   'ASSET_ASSIGNED',
   activityActor,
   {
     assigned_to: {
-      old: asset.assigned_to || null,
-      new: user_id
+      old: asset.assigned_to
+        ? {
+            user_id: asset.assigned_to,
+            name: `${asset.previous_user_first_name || ''} ${asset.previous_user_last_name || ''}`.trim(),
+            employee_id: asset.previous_employee_id || null
+          }
+        : null,
+
+      new: {
+        user_id: user.user_id,
+        name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+        employee_id: user.employee_id || null
+      }
     },
     status: {
       old: asset.status,
@@ -4413,6 +4442,8 @@ const assignmentActivity = createAssetActivityEntry(
     }
   }
 );
+
+await appendAssetActivityHistory(pool, id, assignmentActivity);
 
 await appendAssetActivityHistory(pool, id, assignmentActivity);
     // Log assignment movement
@@ -4462,11 +4493,19 @@ router.post('/:id/unassign',
     const assetResult = await pool.request()
       .input('id', sql.UniqueIdentifier, id)
       .query(`
-        SELECT a.id, a.asset_tag, a.status, a.assigned_to,
-               prev_user.location_id as previous_location_id
-        FROM assets a
-        LEFT JOIN USER_MASTER prev_user ON a.assigned_to = prev_user.user_id
-        WHERE a.id = @id AND a.is_active = 1
+       SELECT
+  a.id,
+  a.asset_tag,
+  a.status,
+  a.assigned_to,
+  prev_user.location_id AS previous_location_id,
+  prev_user.first_name AS previous_user_first_name,
+  prev_user.last_name AS previous_user_last_name,
+  prev_user.employee_id AS previous_employee_id
+FROM assets a
+LEFT JOIN USER_MASTER prev_user
+  ON a.assigned_to = prev_user.user_id
+WHERE a.id = @id AND a.is_active = 1
       `);
 
     if (assetResult.recordset.length === 0) {
@@ -4503,12 +4542,34 @@ await pool.request()
   `);
 
 // Record unassignment in Activity History
-const unassignmentActivity = createAssetActivityEntry(
+// const unassignmentActivity = createAssetActivityEntry(
+//   'ASSET_UNASSIGNED',
+//   activityActor,
+//   {
+//     assigned_to: {
+//       old: asset.assigned_to,
+//       new: null
+//     },
+//     status: {
+//       old: asset.status,
+//       new: 'available'
+//     }
+//   }
+// );
+
+    const unassignmentActivity = createAssetActivityEntry(
   'ASSET_UNASSIGNED',
   activityActor,
   {
     assigned_to: {
-      old: asset.assigned_to,
+      old: asset.assigned_to
+        ? {
+            user_id: asset.assigned_to,
+            name: `${asset.previous_user_first_name || ''} ${asset.previous_user_last_name || ''}`.trim(),
+            employee_id: asset.previous_employee_id || null
+          }
+        : null,
+
       new: null
     },
     status: {
@@ -4517,6 +4578,8 @@ const unassignmentActivity = createAssetActivityEntry(
     }
   }
 );
+
+await appendAssetActivityHistory(pool, id, unassignmentActivity);
 
 await appendAssetActivityHistory(pool, id, unassignmentActivity);
 
@@ -4537,7 +4600,7 @@ await appendAssetActivityHistory(pool, id, unassignmentActivity);
     await logAssetAssignmentChange(
       updatedAssetData,
       previousData,
-      req.user?.id || req.user?.user_id
+      activityActor.user_id
     );
 
     sendSuccess(res, {
