@@ -3989,11 +3989,22 @@ if (Object.keys(activityChanges).length > 0) {
 }
 
 // Update timestamp
+
 updateFields.push('updated_at = GETUTCDATE()');
 
+// Execute the dynamic asset update
 const result = await updateRequest.query(`
+  UPDATE assets
+  SET ${updateFields.join(', ')}
+  OUTPUT INSERTED.*
+  WHERE id = @id;
+`);
 
-    const updatedAsset = result.recordset[0];
+if (!result.recordset || result.recordset.length === 0) {
+  return sendNotFound(res, 'Asset not found');
+}
+
+const updatedAsset = result.recordset[0];
 
     // Log movement if assignment changed
     const assignmentChanged = assigned_to !== undefined && existingAsset.assigned_to !== finalAssignedTo;
