@@ -3288,9 +3288,13 @@ router.post('/',
     // Determine final status for components
     // Components with parent = 'in_use', spare components without parent = respect user selection
     const finalStatus = (asset_type === 'component' && parent_asset_id) ? 'in_use' : status;
+    // const performedBy = installed_by || req.user?.user_id;
+    // // const createdBy = req.user?.user_id || null;
+    // const createdBy = req.user?.user_id || req.user?.id || null;
+
     const performedBy = installed_by || req.user?.user_id;
-    // const createdBy = req.user?.user_id || null;
-    const createdBy = req.user?.user_id || req.user?.id || null;
+
+    const createdBy = activityActor.user_id;
 
     console.log('Asset audit - authenticated user:', req.user);
     console.log('Asset audit - createdBy:', createdBy);
