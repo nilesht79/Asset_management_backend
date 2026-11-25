@@ -3909,7 +3909,8 @@ for (const field of activityFields) {
       // Record the user who last edited the asset
       updateFields.push('updated_by = @updatedBy');
       
-      const updatedBy = req.user?.user_id || req.user?.id || null;
+      // const updatedBy = req.user?.user_id || req.user?.id || null;
+    const updatedBy = activityActor.user_id;
 
       console.log('Asset audit - updatedBy:', updatedBy);
       
