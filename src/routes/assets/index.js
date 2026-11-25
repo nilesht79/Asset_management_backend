@@ -111,15 +111,15 @@ const getAssetActivityUser = async (pool, req) => {
 };
 
 // Create a single activity history entry
-// const createAssetActivityEntry = (action, actor, changes = {}) => ({
-//   action,
-//   user_id: actor.user_id,
-//   user_name: actor.user_name,
-//   employee_id: actor.employee_id,
-//   user_role: actor.user_role,
-//   date: new Date().toISOString(),
-//   changes
-// });
+const createAssetActivityEntry = (action, actor, changes = {}) => ({
+  action,
+  user_id: actor.user_id,
+  user_name: actor.user_name,
+  employee_id: actor.employee_id,
+  user_role: actor.user_role,
+  date: new Date().toISOString(),
+  changes
+});
 
 // Append an activity entry to the asset's activity_history JSON array
 const appendAssetActivityHistory = async (pool, assetId, activityEntry) => {
@@ -4432,7 +4432,8 @@ await appendAssetActivityHistory(pool, id, assignmentActivity);
     await logAssetAssignmentChange(
       updatedAssetData,
       previousData,
-      req.user?.id || req.user?.user_id
+      // req.user?.id || req.user?.user_id,
+      activityActor.user_id
     );
 
     sendSuccess(res, {
