@@ -4032,13 +4032,21 @@ const updatedAsset = result.recordset[0];
     // Log movement if assignment changed
     const assignmentChanged = assigned_to !== undefined && existingAsset.assigned_to !== finalAssignedTo;
 
+    // if (assignmentChanged) {
+    //   await logAssetAssignmentChange(
+    //     updatedAsset,
+    //     existingAsset,
+    //     req.user.user_id
+    //   );
+    // }
+
     if (assignmentChanged) {
-      await logAssetAssignmentChange(
-        updatedAsset,
-        existingAsset,
-        req.user.user_id
-      );
-    }
+  await logAssetAssignmentChange(
+    updatedAsset,
+    existingAsset,
+    activityActor.user_id
+  );
+}
 
     // Update software installations if provided
     if (software_installations !== undefined) {
