@@ -111,15 +111,37 @@ const getAssetActivityUser = async (pool, req) => {
 };
 
 // Create a single activity history entry
-const createAssetActivityEntry = (action, actor, changes = {}) => ({
-  action,
-  user_id: actor.user_id,
-  user_name: actor.user_name,
-  employee_id: actor.employee_id,
-  user_role: actor.user_role,
-  date: new Date().toISOString(),
-  changes
-});
+// const createAssetActivityEntry = (action, actor, changes = {}) => ({
+//   action,
+//   user_id: actor.user_id,
+//   user_name: actor.user_name,
+//   employee_id: actor.employee_id,
+//   user_role: actor.user_role,
+//   date: new Date().toISOString(),
+//   changes
+// });
+
+// Append an activity entry to the asset's activity_history JSON array
+const appendAssetActivityHistory = async (pool, assetId, activityEntry) => {
+  await pool.request()
+    .input('assetId', sql.UniqueIdentifier, assetId)
+    .input('activityEntry', sql.NVarChar(sql.MAX), JSON.stringify(activityEntry))
+    .query(`
+      UPDATE assets
+      SET activity_history =
+        CASE
+          WHEN ISJSON(activity_history) = 1
+               AND LEFT(LTRIM(activity_history), 1) = '['
+          THEN JSON_MODIFY(
+            activity_history,
+            'append $',
+            JSON_QUERY(@activityEntry)
+          )
+          ELSE CONCAT('[', @activityEntry, ']')
+        END
+      WHERE id = @assetId;
+    `);
+};
 
 // Mount component routes - MUST be before other /:id routes to avoid conflicts
 router.use('/:id/components', componentRoutes);
@@ -4351,15 +4373,48 @@ router.post('/:id/assign',
     }
 
     // Update asset assignment - asset inherits location from user
-    await pool.request()
-      .input('id', sql.UniqueIdentifier, id)
-      .input('userId', sql.UniqueIdentifier, user_id)
-      .query(`
-        UPDATE assets
-        SET assigned_to = @userId, status = 'assigned', updated_at = GETUTCDATE()
-        WHERE id = @id
-      `);
+    // await pool.request()
+    //   .input('id', sql.UniqueIdentifier, id)
+    //   .input('userId', sql.UniqueIdentifier, user_id)
+    //   .query(`
+    //     UPDATE assets
+    //     SET assigned_to = @userId, status = 'assigned', updated_at = GETUTCDATE()
+    //     WHERE id = @id
+    //   `);
 
+
+    // Get the user performing the assignment
+const activityActor = await getAssetActivityUser(pool, req);
+
+// Update asset assignment
+await pool.request()
+  .input('id', sql.UniqueIdentifier, id)
+  .input('userId', sql.UniqueIdentifier, user_id)
+  .query(`
+    UPDATE assets
+    SET assigned_to = @userId,
+        status = 'assigned',
+        updated_at = GETUTCDATE()
+    WHERE id = @id
+  `);
+
+// Record assignment in Activity History
+const assignmentActivity = createAssetActivityEntry(
+  'ASSET_ASSIGNED',
+  activityActor,
+  {
+    assigned_to: {
+      old: asset.assigned_to || null,
+      new: user_id
+    },
+    status: {
+      old: asset.status,
+      new: 'assigned'
+    }
+  }
+);
+
+await appendAssetActivityHistory(pool, id, assignmentActivity);
     // Log assignment movement
     const updatedAssetData = {
       id: id,
@@ -4424,13 +4479,45 @@ router.post('/:id/unassign',
     }
 
     // Update asset to unassign
-    await pool.request()
-      .input('id', sql.UniqueIdentifier, id)
-      .query(`
-        UPDATE assets
-        SET assigned_to = NULL, status = 'available', updated_at = GETUTCDATE()
-        WHERE id = @id
-      `);
+    // await pool.request()
+    //   .input('id', sql.UniqueIdentifier, id)
+    //   .query(`
+    //     UPDATE assets
+    //     SET assigned_to = NULL, status = 'available', updated_at = GETUTCDATE()
+    //     WHERE id = @id
+    //   `);
+
+    // Get the user performing the unassignment
+const activityActor = await getAssetActivityUser(pool, req);
+
+// Update asset to unassign
+await pool.request()
+  .input('id', sql.UniqueIdentifier, id)
+  .query(`
+    UPDATE assets
+    SET assigned_to = NULL,
+        status = 'available',
+        updated_at = GETUTCDATE()
+    WHERE id = @id
+  `);
+
+// Record unassignment in Activity History
+const unassignmentActivity = createAssetActivityEntry(
+  'ASSET_UNASSIGNED',
+  activityActor,
+  {
+    assigned_to: {
+      old: asset.assigned_to,
+      new: null
+    },
+    status: {
+      old: asset.status,
+      new: 'available'
+    }
+  }
+);
+
+await appendAssetActivityHistory(pool, id, unassignmentActivity);
 
     // Log unassignment movement
     const updatedAssetData = {
