@@ -3997,12 +3997,31 @@ if (Object.keys(activityChanges).length > 0) {
 updateFields.push('updated_at = GETUTCDATE()');
 
 // Execute the dynamic asset update
+// const result = await updateRequest.query(`
+//   UPDATE assets
+//   SET ${updateFields.join(', ')}
+//   OUTPUT INSERTED.*
+//   WHERE id = @id;
+// `);
+
+
+    
 const result = await updateRequest.query(`
+  DECLARE @UpdatedAssets TABLE (
+    id UNIQUEIDENTIFIER
+  );
+
   UPDATE assets
   SET ${updateFields.join(', ')}
-  OUTPUT INSERTED.*
+  OUTPUT INSERTED.id INTO @UpdatedAssets (id)
   WHERE id = @id;
+
+  SELECT a.*
+  FROM assets AS a
+  INNER JOIN @UpdatedAssets AS u
+    ON a.id = u.id;
 `);
+
 
 if (!result.recordset || result.recordset.length === 0) {
   return sendNotFound(res, 'Asset not found');
