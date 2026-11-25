@@ -4324,7 +4324,22 @@ router.post('/:id/assign',
     const userResult = await pool.request()
       .input('userId', sql.UniqueIdentifier, user_id)
       // .query('SELECT user_id, first_name, last_name, email, location_id, allow_multi_assets FROM USER_MASTER WHERE user_id = @userId AND is_active = 1');
-    .query('SELECT user_id, first_name, last_name, email, location_id, allow_multi_assets FROM USER_MASTER WHERE user_id = @userId AND is_active = 1');
+    // .query('SELECT user_id, first_name, last_name, email, location_id, allow_multi_assets FROM USER_MASTER WHERE user_id = @userId AND is_active = 1');
+    
+.query(`
+  SELECT
+    user_id,
+    first_name,
+    last_name,
+    employee_id,
+    email,
+    location_id,
+    allow_multi_assets
+  FROM USER_MASTER
+  WHERE user_id = @userId
+    AND is_active = 1
+`);
+
 
     if (userResult.recordset.length === 0) {
       return sendNotFound(res, 'User not found or inactive');
@@ -4443,7 +4458,7 @@ await pool.request()
   }
 );
 
-await appendAssetActivityHistory(pool, id, assignmentActivity);
+// await appendAssetActivityHistory(pool, id, assignmentActivity);
 
 await appendAssetActivityHistory(pool, id, assignmentActivity);
     // Log assignment movement
