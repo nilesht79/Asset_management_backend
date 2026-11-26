@@ -204,6 +204,58 @@ async function installSoftware(pool, assetId, softwareProductId, softwareType, l
   }
 }
 
+// // GET /assets/:id/activity-history
+// router.get(
+//   '/:id/activity-history',
+//   requireDynamicPermission(),
+//   validateUUID('id'),
+//   asyncHandler(async (req, res) => {
+//     const { id } = req.params;
+//     const pool = await connectDB();
+
+//     const result = await pool.request()
+//       .input('id', sql.UniqueIdentifier, id)
+//       .query(`
+//         SELECT
+//           id,
+//           asset_tag,
+//           activity_history
+//         FROM assets
+//         WHERE id = @id
+//       `);
+
+//     if (result.recordset.length === 0) {
+//       return sendNotFound(res, 'Asset not found');
+//     }
+
+//     let activities = [];
+
+//     const history = result.recordset[0].activity_history;
+
+//     if (history) {
+//       try {
+//         activities = JSON.parse(history);
+
+//         if (!Array.isArray(activities)) {
+//           activities = [];
+//         }
+//       } catch (error) {
+//         console.error(
+//           'Error parsing asset activity history:',
+//           error
+//         );
+//       }
+//     }
+
+//     sendSuccess(
+//       res,
+//       activities,
+//       'Asset activity history retrieved successfully'
+//     );
+//   })
+// );
+
+
 // GET /assets/:id/activity-history
 router.get(
   '/:id/activity-history',
@@ -229,7 +281,6 @@ router.get(
     }
 
     let activities = [];
-
     const history = result.recordset[0].activity_history;
 
     if (history) {
@@ -240,20 +291,125 @@ router.get(
           activities = [];
         }
       } catch (error) {
-        console.error(
-          'Error parsing asset activity history:',
-          error
-        );
+        console.error('Error parsing asset activity history:', error);
       }
     }
 
-    sendSuccess(
+    // Collect Location and Department IDs from activity history
+    const locationIds = new Set();
+    const departmentIds = new Set();
+
+    const isUuid = value =>
+      typeof value === 'string' &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+
+    activities.forEach(activity => {
+      Object.entries(activity.changes || {}).forEach(([field, values]) => {
+        if (field === 'location_id') {
+          [values?.old, values?.new].forEach(value => {
+            if (isUuid(value)) locationIds.add(value);
+          });
+        }
+
+        if (field === 'department_id') {
+          [values?.old, values?.new].forEach(value => {
+            if (isUuid(value)) departmentIds.add(value);
+          });
+        }
+      });
+    });
+
+    // Lookup Location names
+    const locationMap = new Map();
+
+    if (locationIds.size > 0) {
+      const request = pool.request();
+
+      const placeholders = [...locationIds].map((value, index) => {
+        request.input(`location${index}`, sql.UniqueIdentifier, value);
+        return `@location${index}`;
+      });
+
+      const locationResult = await request.query(`
+        SELECT id, name
+        FROM locations
+        WHERE id IN (${placeholders.join(', ')})
+      `);
+
+      locationResult.recordset.forEach(location => {
+        locationMap.set(String(location.id).toLowerCase(), location.name);
+      });
+    }
+
+    // Lookup Department names
+    const departmentMap = new Map();
+
+    if (departmentIds.size > 0) {
+      const request = pool.request();
+
+      const placeholders = [...departmentIds].map((value, index) => {
+        request.input(`department${index}`, sql.UniqueIdentifier, value);
+        return `@department${index}`;
+      });
+
+      const departmentResult = await request.query(`
+        SELECT department_id, department_name
+        FROM DEPARTMENT_MASTER
+        WHERE department_id IN (${placeholders.join(', ')})
+      `);
+
+      departmentResult.recordset.forEach(department => {
+        departmentMap.set(
+          String(department.department_id).toLowerCase(),
+          department.department_name
+        );
+      });
+    }
+
+    // Replace UUIDs with readable names in the API response
+    activities = activities.map(activity => {
+      const changes = { ...(activity.changes || {}) };
+
+      Object.entries(changes).forEach(([field, values]) => {
+        if (!values || typeof values !== 'object') return;
+
+        if (field === 'location_id') {
+          changes[field] = {
+            old: isUuid(values.old)
+              ? locationMap.get(values.old.toLowerCase()) || values.old
+              : values.old,
+            new: isUuid(values.new)
+              ? locationMap.get(values.new.toLowerCase()) || values.new
+              : values.new
+          };
+        }
+
+        if (field === 'department_id') {
+          changes[field] = {
+            old: isUuid(values.old)
+              ? departmentMap.get(values.old.toLowerCase()) || values.old
+              : values.old,
+            new: isUuid(values.new)
+              ? departmentMap.get(values.new.toLowerCase()) || values.new
+              : values.new
+          };
+        }
+      });
+
+      return {
+        ...activity,
+        changes
+      };
+    });
+
+    return sendSuccess(
       res,
       activities,
       'Asset activity history retrieved successfully'
     );
   })
 );
+
 
 // GET /assets - List all assets with pagination, search, and filtering
 router.get('/',
