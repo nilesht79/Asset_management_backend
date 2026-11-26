@@ -2773,83 +2773,267 @@ This is an automated notification. Please do not reply to this email.
    * Coordinator approves or rejects close request
    * PUT /api/tickets/:id/review-close-request
    */
-  static async reviewCloseRequest(req, res) {
-    try {
-      const { id } = req.params; // close_request_id
-      const { action, review_notes } = req.body;
-      const coordinatorId = req.oauth.user.id;
+//   static async reviewCloseRequest(req, res) {
+//     try {
+//       const { id } = req.params; // close_request_id
+//       const { action, review_notes } = req.body;
+//       const coordinatorId = req.oauth.user.id;
 
-      if (!action || !['approved', 'rejected'].includes(action)) {
-        return sendError(res, 'Valid action (approved/rejected) is required', 400);
-      }
+//       if (!action || !['approved', 'rejected'].includes(action)) {
+//         return sendError(res, 'Valid action (approved/rejected) is required', 400);
+//       }
 
-      // Review the close request
-      const updatedTicket = await TicketModel.reviewCloseRequest(
-        id,
-        coordinatorId,
-        action,
-        review_notes
-      );
+//       // Review the close request
+//       const updatedTicket = await TicketModel.reviewCloseRequest(
+//         id,
+//         coordinatorId,
+//         action,
+//         review_notes
+//       );
 
-      // Stop SLA tracking if approved
-      if (action === 'approved' && updatedTicket) {
-        try {
-          const slaResult = await SlaTrackingModel.stopTracking(updatedTicket.ticket_id, null);
-          if (slaResult) {
-            console.log(`SLA tracking stopped for ticket ${updatedTicket.ticket_number} via close request approval`);
-          }
-        } catch (slaError) {
-          console.error('Failed to stop SLA tracking on close request approval:', slaError.message);
-        }
-      }
+//       // Stop SLA tracking if approved
+//       if (action === 'approved' && updatedTicket) {
+//         try {
+//           const slaResult = await SlaTrackingModel.stopTracking(updatedTicket.ticket_id, null);
+//           if (slaResult) {
+//             console.log(`SLA tracking stopped for ticket ${updatedTicket.ticket_number} via close request approval`);
+//           }
+//         } catch (slaError) {
+//           console.error('Failed to stop SLA tracking on close request approval:', slaError.message);
+//         }
+//       }
 
-      // Notify relevant parties about close request decision
-      if (updatedTicket) {
-        try {
-          const reviewerName = req.oauth?.user?.name || req.oauth?.user?.email || 'Coordinator';
+//       // Notify relevant parties about close request decision
+//       if (updatedTicket) {
+//         try {
+//           const reviewerName = req.oauth?.user?.name || req.oauth?.user?.email || 'Coordinator';
 
-          if (action === 'approved') {
-            // Notify employee about ticket closure
-            if (updatedTicket.created_by_user_id) {
-              await NotificationModel.createNotification({
-                user_id: updatedTicket.created_by_user_id,
-                ticket_id: updatedTicket.ticket_id,
-                notification_type: 'ticket_closed',
-                title: `Ticket Closed: ${updatedTicket.ticket_number}`,
-                message: `Your ticket "${updatedTicket.title}" has been closed.`,
-                priority: 'medium',
-                related_data: {
-                  ticket_number: updatedTicket.ticket_number,
-                  ticket_title: updatedTicket.title,
-                  closed_by: reviewerName,
-                  review_notes: review_notes
-                }
-              });
+//           if (action === 'approved') {
+//             // Notify employee about ticket closure
+//             if (updatedTicket.created_by_user_id) {
+//               await NotificationModel.createNotification({
+//                 user_id: updatedTicket.created_by_user_id,
+//                 ticket_id: updatedTicket.ticket_id,
+//                 notification_type: 'ticket_closed',
+//                 title: `Ticket Closed: ${updatedTicket.ticket_number}`,
+//                 message: `Your ticket "${updatedTicket.title}" has been closed.`,
+//                 priority: 'medium',
+//                 related_data: {
+//                   ticket_number: updatedTicket.ticket_number,
+//                   ticket_title: updatedTicket.title,
+//                   closed_by: reviewerName,
+//                   review_notes: review_notes
+//                 }
+//               });
 
-//               const employeeEmail = await TicketController.getEngineerEmail(updatedTicket.created_by_user_id);
-//               if (employeeEmail) {
-//                 const emailSubject = `Ticket Closed: ${updatedTicket.ticket_number}`;
+// //               const employeeEmail = await TicketController.getEngineerEmail(updatedTicket.created_by_user_id);
+// //               if (employeeEmail) {
+// //                 const emailSubject = `Ticket Closed: ${updatedTicket.ticket_number}`;
+// //                 const emailBody = `
+// // Hello,
+
+// // Your ticket has been closed after review.
+
+// // Ticket Number: ${updatedTicket.ticket_number}
+// // Title: ${updatedTicket.title}
+// // Status: Closed
+// // Approved By: ${reviewerName}
+
+// // If you believe this issue is not fully resolved, please contact the IT support team.
+
+// // This is an automated notification. Please do not reply to this email.
+// //                 `;
+// //                 await emailService.sendEmail(employeeEmail, emailSubject, emailBody.trim());
+// //               }
+//             }
+
+//             // Notify engineer that close request was approved
+//             if (updatedTicket.assigned_to_engineer_id) {
+//               await NotificationModel.createNotification({
+//                 user_id: updatedTicket.assigned_to_engineer_id,
+//                 ticket_id: updatedTicket.ticket_id,
+//                 notification_type: 'ticket_closed',
+//                 title: `Close Request Approved: ${updatedTicket.ticket_number}`,
+//                 message: `Your close request for ticket "${updatedTicket.title}" has been approved by ${reviewerName}.`,
+//                 priority: 'low',
+//                 related_data: {
+//                   ticket_number: updatedTicket.ticket_number,
+//                   ticket_title: updatedTicket.title,
+//                   approved_by: reviewerName,
+//                   review_notes: review_notes
+//                 }
+//               });
+
+//               const engineerEmail = await TicketController.getEngineerEmail(updatedTicket.assigned_to_engineer_id);
+//               if (engineerEmail) {
+//                 const emailSubject = `Close Request Approved: ${updatedTicket.ticket_number}`;
 //                 const emailBody = `
 // Hello,
 
-// Your ticket has been closed after review.
+// Your close request has been approved and the ticket is now closed.
 
 // Ticket Number: ${updatedTicket.ticket_number}
 // Title: ${updatedTicket.title}
 // Status: Closed
 // Approved By: ${reviewerName}
-
-// If you believe this issue is not fully resolved, please contact the IT support team.
+// ${review_notes ? `Review Notes: ${review_notes}` : ''}
 
 // This is an automated notification. Please do not reply to this email.
 //                 `;
-//                 await emailService.sendEmail(employeeEmail, emailSubject, emailBody.trim());
+//                 await emailService.sendEmail(engineerEmail, emailSubject, emailBody.trim());
 //               }
-            }
+//             }
+//             console.log(`Close approval notifications sent for ticket ${updatedTicket.ticket_number}`);
 
-            // Notify engineer that close request was approved
-            if (updatedTicket.assigned_to_engineer_id) {
-              await NotificationModel.createNotification({
+//           } else if (action === 'rejected') {
+//             // Notify engineer that close request was rejected
+//             if (updatedTicket.assigned_to_engineer_id) {
+//               await NotificationModel.createNotification({
+//                 user_id: updatedTicket.assigned_to_engineer_id,
+//                 ticket_id: updatedTicket.ticket_id,
+//                 notification_type: 'close_request_rejected',
+//                 title: `Close Request Rejected: ${updatedTicket.ticket_number}`,
+//                 message: `Your close request for ticket "${updatedTicket.title}" has been rejected by ${reviewerName}. The ticket has been returned to In Progress.`,
+//                 priority: 'high',
+//                 related_data: {
+//                   ticket_number: updatedTicket.ticket_number,
+//                   ticket_title: updatedTicket.title,
+//                   rejected_by: reviewerName,
+//                   review_notes: review_notes
+//                 }
+//               });
+
+//               const engineerEmail = await TicketController.getEngineerEmail(updatedTicket.assigned_to_engineer_id);
+//               if (engineerEmail) {
+//                 const emailSubject = `Close Request Rejected: ${updatedTicket.ticket_number}`;
+//                 const emailBody = `
+// Hello,
+
+// Your close request for the following ticket has been rejected. The ticket has been returned to "In Progress" status.
+
+// Ticket Number: ${updatedTicket.ticket_number}
+// Title: ${updatedTicket.title}
+// Status: In Progress
+// Rejected By: ${reviewerName}
+// ${review_notes ? `Reason: ${review_notes}` : ''}
+
+// Please review the feedback and continue working on this ticket.
+
+// This is an automated notification. Please do not reply to this email.
+//                 `;
+//                 await emailService.sendEmail(engineerEmail, emailSubject, emailBody.trim());
+//               }
+//             }
+//             console.log(`Close rejection notification sent for ticket ${updatedTicket.ticket_number}`);
+//           }
+//         } catch (notificationError) {
+//           console.error('Failed to send close request review notifications:', notificationError.message);
+//         }
+//       }
+
+//       const message = action === 'approved'
+//         ? 'Ticket closed successfully'
+//         : 'Close request rejected';
+
+//       return sendSuccess(res, updatedTicket, message);
+//     } catch (error) {
+//       console.error('Review close request error:', error);
+//       return sendError(res, error.message || 'Failed to review close request', 500);
+//     }
+//   }
+
+
+  
+static async reviewCloseRequest(req, res) {
+  try {
+    const { id } = req.params; // close_request_id
+    const { action, review_notes } = req.body;
+    const coordinatorId = req.oauth.user.id;
+
+    if (!action || !['approved', 'rejected'].includes(action)) {
+      return sendError(
+        res,
+        'Valid action (approved/rejected) is required',
+        400
+      );
+    }
+
+    // 1. Update the close request in the database
+    const updatedTicket = await TicketModel.reviewCloseRequest(
+      id,
+      coordinatorId,
+      action,
+      review_notes
+    );
+
+    if (!updatedTicket) {
+      return sendError(res, 'Failed to review close request', 500);
+    }
+
+    const reviewerName =
+      req.oauth?.user?.name ||
+      req.oauth?.user?.email ||
+      'Coordinator';
+
+    // 2. Send API response immediately after successful database update
+    const message =
+      action === 'approved'
+        ? 'Ticket closed successfully'
+        : 'Close request rejected';
+
+    const response = sendSuccess(res, updatedTicket, message);
+
+    // 3. Process SLA and notifications in the background
+    setImmediate(() => {
+      (async () => {
+        const tasks = [];
+
+        // Stop SLA tracking after approval
+        if (action === 'approved') {
+          tasks.push(
+            (async () => {
+              const slaResult = await SlaTrackingModel.stopTracking(
+                updatedTicket.ticket_id,
+                null
+              );
+
+              if (slaResult) {
+                console.log(
+                  `SLA tracking stopped for ticket ${updatedTicket.ticket_number}`
+                );
+              }
+            })()
+          );
+        }
+
+        // Employee notification on approval
+        if (
+          action === 'approved' &&
+          updatedTicket.created_by_user_id
+        ) {
+          tasks.push(
+            NotificationModel.createNotification({
+              user_id: updatedTicket.created_by_user_id,
+              ticket_id: updatedTicket.ticket_id,
+              notification_type: 'ticket_closed',
+              title: `Ticket Closed: ${updatedTicket.ticket_number}`,
+              message: `Your ticket "${updatedTicket.title}" has been closed.`,
+              priority: 'medium',
+              related_data: {
+                ticket_number: updatedTicket.ticket_number,
+                ticket_title: updatedTicket.title,
+                closed_by: reviewerName,
+                review_notes: review_notes
+              }
+            })
+          );
+        }
+
+        // Engineer notification and email
+        if (updatedTicket.assigned_to_engineer_id) {
+          if (action === 'approved') {
+            tasks.push(
+              NotificationModel.createNotification({
                 user_id: updatedTicket.assigned_to_engineer_id,
                 ticket_id: updatedTicket.ticket_id,
                 notification_type: 'ticket_closed',
@@ -2862,33 +3046,11 @@ This is an automated notification. Please do not reply to this email.
                   approved_by: reviewerName,
                   review_notes: review_notes
                 }
-              });
-
-              const engineerEmail = await TicketController.getEngineerEmail(updatedTicket.assigned_to_engineer_id);
-              if (engineerEmail) {
-                const emailSubject = `Close Request Approved: ${updatedTicket.ticket_number}`;
-                const emailBody = `
-Hello,
-
-Your close request has been approved and the ticket is now closed.
-
-Ticket Number: ${updatedTicket.ticket_number}
-Title: ${updatedTicket.title}
-Status: Closed
-Approved By: ${reviewerName}
-${review_notes ? `Review Notes: ${review_notes}` : ''}
-
-This is an automated notification. Please do not reply to this email.
-                `;
-                await emailService.sendEmail(engineerEmail, emailSubject, emailBody.trim());
-              }
-            }
-            console.log(`Close approval notifications sent for ticket ${updatedTicket.ticket_number}`);
-
-          } else if (action === 'rejected') {
-            // Notify engineer that close request was rejected
-            if (updatedTicket.assigned_to_engineer_id) {
-              await NotificationModel.createNotification({
+              })
+            );
+          } else {
+            tasks.push(
+              NotificationModel.createNotification({
                 user_id: updatedTicket.assigned_to_engineer_id,
                 ticket_id: updatedTicket.ticket_id,
                 notification_type: 'close_request_rejected',
@@ -2901,12 +3063,46 @@ This is an automated notification. Please do not reply to this email.
                   rejected_by: reviewerName,
                   review_notes: review_notes
                 }
-              });
+              })
+            );
+          }
 
-              const engineerEmail = await TicketController.getEngineerEmail(updatedTicket.assigned_to_engineer_id);
-              if (engineerEmail) {
-                const emailSubject = `Close Request Rejected: ${updatedTicket.ticket_number}`;
-                const emailBody = `
+          // Engineer email
+          tasks.push(
+            (async () => {
+              const engineerEmail =
+                await TicketController.getEngineerEmail(
+                  updatedTicket.assigned_to_engineer_id
+                );
+
+              if (!engineerEmail) {
+                console.log(
+                  `Engineer email not found: ${updatedTicket.ticket_number}`
+                );
+                return;
+              }
+
+              const approved = action === 'approved';
+
+              const emailSubject = approved
+                ? `Close Request Approved: ${updatedTicket.ticket_number}`
+                : `Close Request Rejected: ${updatedTicket.ticket_number}`;
+
+              const emailBody = approved
+                ? `
+Hello,
+
+Your close request has been approved and the ticket is now closed.
+
+Ticket Number: ${updatedTicket.ticket_number}
+Title: ${updatedTicket.title}
+Status: Closed
+Approved By: ${reviewerName}
+${review_notes ? `Review Notes: ${review_notes}` : ''}
+
+This is an automated notification. Please do not reply to this email.
+                `
+                : `
 Hello,
 
 Your close request for the following ticket has been rejected. The ticket has been returned to "In Progress" status.
@@ -2921,26 +3117,71 @@ Please review the feedback and continue working on this ticket.
 
 This is an automated notification. Please do not reply to this email.
                 `;
-                await emailService.sendEmail(engineerEmail, emailSubject, emailBody.trim());
-              }
-            }
-            console.log(`Close rejection notification sent for ticket ${updatedTicket.ticket_number}`);
-          }
-        } catch (notificationError) {
-          console.error('Failed to send close request review notifications:', notificationError.message);
+
+              await emailService.sendEmail(
+                engineerEmail,
+                emailSubject,
+                emailBody.trim()
+              );
+
+              console.log(
+                `Close request email processed: ${updatedTicket.ticket_number}`
+              );
+            })()
+          );
         }
-      }
 
-      const message = action === 'approved'
-        ? 'Ticket closed successfully'
-        : 'Close request rejected';
+        // Run all background tasks independently
+        const results = await Promise.allSettled(tasks);
 
-      return sendSuccess(res, updatedTicket, message);
-    } catch (error) {
-      console.error('Review close request error:', error);
-      return sendError(res, error.message || 'Failed to review close request', 500);
+        results.forEach((result, index) => {
+          if (result.status === 'rejected') {
+            console.error(
+              `[BACKGROUND] Close request task ${index + 1} failed:`,
+              result.reason
+            );
+          }
+        });
+
+        console.log(
+          `[BACKGROUND] Close request processing completed: ${updatedTicket.ticket_number}`
+        );
+      })().catch(error => {
+        console.error(
+          '[BACKGROUND] Close request processing error:',
+          error
+        );
+      });
+    });
+
+    return response;
+
+  } catch (error) {
+    console.error('Review close request error:', error);
+
+    const message = error.message || '';
+
+    if (message === 'Close request not found') {
+      return sendNotFound(res, message);
     }
+
+    if (
+      message.includes('already been') ||
+      message.includes('already been reviewed') ||
+      message.includes('no longer in pending_closure') ||
+      message.includes('could not be updated')
+    ) {
+      return sendError(res, message, 409);
+    }
+
+    return sendError(
+      res,
+      message || 'Failed to review close request',
+      500
+    );
   }
+}
+
   /**
    * Get close request history for a ticket
    * GET /api/tickets/:id/close-request-history
