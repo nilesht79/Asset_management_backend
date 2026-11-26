@@ -2449,7 +2449,7 @@ This is an automated notification. Please do not reply to this email.
             // Notify employee about ticket closure
             if (updatedTicket.created_by_user_id) {
               await NotificationModel.createNotification({
-                // user_id: updatedTicket.created_by_user_id,
+                user_id: updatedTicket.created_by_user_id,
                 ticket_id: updatedTicket.ticket_id,
                 notification_type: 'ticket_closed',
                 title: `Ticket Closed: ${updatedTicket.ticket_number}`,
