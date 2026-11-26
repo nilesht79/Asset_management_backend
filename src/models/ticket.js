@@ -1351,8 +1351,10 @@ static async requestTicketClose(
     const ticket = ticketCheck.recordset[0];
 
     if (
-      !ticket.assigned_to_engineer_id ||
-      ticket.assigned_to_engineer_id.toLowerCase() !== engineerId.toLowerCase()
+      // !ticket.assigned_to_engineer_id ||
+      // ticket.assigned_to_engineer_id.toLowerCase() !== engineerId.toLowerCase()
+      String(ticket.assigned_to_engineer_id).toLowerCase() !==
+String(engineerId).toLowerCase()
     ) {
       throw new Error('Ticket is not assigned to this engineer');
     }
@@ -1567,324 +1569,582 @@ static async requestTicketClose(
   /**
    * Coordinator approves or rejects close request
    */
-  static async reviewCloseRequest(closeRequestId, coordinatorId, action, reviewNotes = null) {
-    try {
-      // const pool = await connectDB();
+//   static async reviewCloseRequest(closeRequestId, coordinatorId, action, reviewNotes = null) {
+//     try {
+//       // const pool = await connectDB();
 
-      // // Get close request and ticket details
-      // const requestCheck = await pool.request()
-      //   .input('closeRequestId', sql.UniqueIdentifier, closeRequestId)
-      //   .query(`
-      //     SELECT
-      //       cr.*,
-      //       t.ticket_id as ticket_id_from_tickets,
-      //       t.status as ticket_status_current,
-      //       t.service_type,
-      //       t.assigned_to_engineer_id
-      //     FROM TICKET_CLOSE_REQUESTS cr
-      //     INNER JOIN TICKETS t ON cr.ticket_id = t.ticket_id
-      //     WHERE cr.close_request_id = @closeRequestId
-      //   `);
+//       // // Get close request and ticket details
+//       // const requestCheck = await pool.request()
+//       //   .input('closeRequestId', sql.UniqueIdentifier, closeRequestId)
+//       //   .query(`
+//       //     SELECT
+//       //       cr.*,
+//       //       t.ticket_id as ticket_id_from_tickets,
+//       //       t.status as ticket_status_current,
+//       //       t.service_type,
+//       //       t.assigned_to_engineer_id
+//       //     FROM TICKET_CLOSE_REQUESTS cr
+//       //     INNER JOIN TICKETS t ON cr.ticket_id = t.ticket_id
+//       //     WHERE cr.close_request_id = @closeRequestId
+//       //   `);
 
-      // if (requestCheck.recordset.length === 0) {
-      //   throw new Error('Close request not found');
-      // }
+//       // if (requestCheck.recordset.length === 0) {
+//       //   throw new Error('Close request not found');
+//       // }
 
-      // const closeRequest = requestCheck.recordset[0];
+//       // const closeRequest = requestCheck.recordset[0];
 
-      // if (closeRequest.request_status !== 'pending') {
-      //   const status = closeRequest.request_status;
-      //   throw new Error(`Close request has already been ${status}. Please refresh the list.`);
-      // }
+//       // if (closeRequest.request_status !== 'pending') {
+//       //   const status = closeRequest.request_status;
+//       //   throw new Error(`Close request has already been ${status}. Please refresh the list.`);
+//       // }
 
-      // // Double-check ticket status
-      // if (closeRequest.ticket_status_current !== 'pending_closure') {
-      //   throw new Error('Ticket is no longer in pending_closure state. Please refresh the list.');
-      // }
+//       // // Double-check ticket status
+//       // if (closeRequest.ticket_status_current !== 'pending_closure') {
+//       //   throw new Error('Ticket is no longer in pending_closure state. Please refresh the list.');
+//       // }
 
-      // // Use the ticket_id from the close request
-      // const ticketId = closeRequest.ticket_id;
-      // const serviceReportId = closeRequest.service_report_id;
-      // const serviceType = closeRequest.service_type;
+//       // // Use the ticket_id from the close request
+//       // const ticketId = closeRequest.ticket_id;
+//       // const serviceReportId = closeRequest.service_report_id;
+//       // const serviceType = closeRequest.service_type;
 
-      // // Validation: Ensure ticketId is valid
-      // if (!ticketId) {
-      //   console.error('Missing ticket_id in close request:', closeRequest);
-      //   throw new Error('Invalid close request data: missing ticket_id');
-      // }
+//       // // Validation: Ensure ticketId is valid
+//       // if (!ticketId) {
+//       //   console.error('Missing ticket_id in close request:', closeRequest);
+//       //   throw new Error('Invalid close request data: missing ticket_id');
+//       // }
 
-      // console.log(`Processing close request ${closeRequestId} for ticket ${ticketId}, action: ${action}`);
+//       // console.log(`Processing close request ${closeRequestId} for ticket ${ticketId}, action: ${action}`);
 
-      // // Update close request
-      // await pool.request()
-      //   .input('closeRequestId', sql.UniqueIdentifier, closeRequestId)
-      //   .input('coordinatorId', sql.UniqueIdentifier, coordinatorId)
-      //   .input('action', sql.VarChar, action)
-      //   .input('reviewNotes', sql.NVarChar(sql.MAX), reviewNotes)
-      //   .query(`
-      //     UPDATE TICKET_CLOSE_REQUESTS
-      //     SET
-      //       request_status = @action,
-      //       reviewed_by_coordinator_id = @coordinatorId,
-      //       review_notes = @reviewNotes,
-      //       reviewed_at = GETUTCDATE(),
-      //       updated_at = GETUTCDATE()
-      //     WHERE close_request_id = @closeRequestId
-      //   `);
+//       // // Update close request
+//       // await pool.request()
+//       //   .input('closeRequestId', sql.UniqueIdentifier, closeRequestId)
+//       //   .input('coordinatorId', sql.UniqueIdentifier, coordinatorId)
+//       //   .input('action', sql.VarChar, action)
+//       //   .input('reviewNotes', sql.NVarChar(sql.MAX), reviewNotes)
+//       //   .query(`
+//       //     UPDATE TICKET_CLOSE_REQUESTS
+//       //     SET
+//       //       request_status = @action,
+//       //       reviewed_by_coordinator_id = @coordinatorId,
+//       //       review_notes = @reviewNotes,
+//       //       reviewed_at = GETUTCDATE(),
+//       //       updated_at = GETUTCDATE()
+//       //     WHERE close_request_id = @closeRequestId
+//       //   `);
 
-      // // Update ticket based on action
-      // if (action === 'approved') {
-      //   // Close the ticket
-      //   await pool.request()
-      //     .input('ticketId', sql.UniqueIdentifier, ticketId)
-      //     .input('resolutionNotes', sql.NVarChar(sql.MAX), closeRequest.request_notes)
-      //     .query(`
-      //       UPDATE TICKETS
-      //       SET
-      //         status = 'closed',
-      //         resolved_at = CASE WHEN resolved_at IS NULL THEN GETUTCDATE() ELSE resolved_at END,
-      //         closed_at = GETUTCDATE(),
-      //         resolution_notes = @resolutionNotes,
-      //         updated_at = GETUTCDATE()
-      //       WHERE ticket_id = @ticketId
-      //     `);
+//       // // Update ticket based on action
+//       // if (action === 'approved') {
+//       //   // Close the ticket
+//       //   await pool.request()
+//       //     .input('ticketId', sql.UniqueIdentifier, ticketId)
+//       //     .input('resolutionNotes', sql.NVarChar(sql.MAX), closeRequest.request_notes)
+//       //     .query(`
+//       //       UPDATE TICKETS
+//       //       SET
+//       //         status = 'closed',
+//       //         resolved_at = CASE WHEN resolved_at IS NULL THEN GETUTCDATE() ELSE resolved_at END,
+//       //         closed_at = GETUTCDATE(),
+//       //         resolution_notes = @resolutionNotes,
+//       //         updated_at = GETUTCDATE()
+//       //       WHERE ticket_id = @ticketId
+//       //     `);
 
       
-const pool = await connectDB();
-const transaction = new sql.Transaction(pool);
-let transactionStarted = false;
+// const pool = await connectDB();
+// const transaction = new sql.Transaction(pool);
+// let transactionStarted = false;
 
-let closeRequest;
-let ticketId;
-let serviceReportId;
-let serviceType;
+// let closeRequest;
+// let ticketId;
+// let serviceReportId;
+// let serviceType;
 
-try {
-  await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
-  transactionStarted = true;
+// try {
+//   await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+//   transactionStarted = true;
 
-  // Lock request and ticket to prevent simultaneous reviews.
-  const requestCheck = await transaction.request()
-    .input('closeRequestId', sql.UniqueIdentifier, closeRequestId)
-    .query(`
-      SELECT
-        cr.*,
-        t.ticket_id AS ticket_id_from_tickets,
-        t.status AS ticket_status_current,
-        t.service_type,
-        t.assigned_to_engineer_id
-      FROM TICKET_CLOSE_REQUESTS cr WITH (UPDLOCK, HOLDLOCK)
-      INNER JOIN TICKETS t WITH (UPDLOCK, HOLDLOCK)
-        ON cr.ticket_id = t.ticket_id
-      WHERE cr.close_request_id = @closeRequestId
-    `);
+//   // Lock request and ticket to prevent simultaneous reviews.
+//   const requestCheck = await transaction.request()
+//     .input('closeRequestId', sql.UniqueIdentifier, closeRequestId)
+//     .query(`
+//       SELECT
+//         cr.*,
+//         t.ticket_id AS ticket_id_from_tickets,
+//         t.status AS ticket_status_current,
+//         t.service_type,
+//         t.assigned_to_engineer_id
+//       FROM TICKET_CLOSE_REQUESTS cr WITH (UPDLOCK, HOLDLOCK)
+//       INNER JOIN TICKETS t WITH (UPDLOCK, HOLDLOCK)
+//         ON cr.ticket_id = t.ticket_id
+//       WHERE cr.close_request_id = @closeRequestId
+//     `);
 
-  if (requestCheck.recordset.length === 0) {
-    throw new Error('Close request not found');
+//   if (requestCheck.recordset.length === 0) {
+//     throw new Error('Close request not found');
+//   }
+
+//   closeRequest = requestCheck.recordset[0];
+
+//   if (closeRequest.request_status !== 'pending') {
+//     throw new Error(
+//       `Close request has already been ${closeRequest.request_status}. Please refresh the list.`
+//     );
+//   }
+
+//   if (closeRequest.ticket_status_current !== 'pending_closure') {
+//     throw new Error(
+//       'Ticket is no longer in pending_closure state. Please refresh the list.'
+//     );
+//   }
+
+//   ticketId = closeRequest.ticket_id;
+//   serviceReportId = closeRequest.service_report_id;
+//   serviceType = closeRequest.service_type;
+
+//   if (!ticketId) {
+//     throw new Error('Invalid close request data: missing ticket_id');
+//   }
+
+//   // Update close request only if it is still pending.
+//   const requestUpdate = await transaction.request()
+//     .input('closeRequestId', sql.UniqueIdentifier, closeRequestId)
+//     .input('coordinatorId', sql.UniqueIdentifier, coordinatorId)
+//     .input('action', sql.VarChar, action)
+//     .input('reviewNotes', sql.NVarChar(sql.MAX), reviewNotes)
+//     .query(`
+//       UPDATE TICKET_CLOSE_REQUESTS
+//       SET
+//         request_status = @action,
+//         reviewed_by_coordinator_id = @coordinatorId,
+//         review_notes = @reviewNotes,
+//         reviewed_at = GETUTCDATE(),
+//         updated_at = GETUTCDATE()
+//       WHERE close_request_id = @closeRequestId
+//         AND request_status = 'pending'
+//     `);
+
+//   if (requestUpdate.rowsAffected[0] !== 1) {
+//     throw new Error('Close request has already been reviewed');
+//   }
+
+//   let ticketUpdate;
+
+//   if (action === 'approved') {
+//     ticketUpdate = await transaction.request()
+//       .input('ticketId', sql.UniqueIdentifier, ticketId)
+//       .input('resolutionNotes', sql.NVarChar(sql.MAX), closeRequest.request_notes)
+//       .query(`
+//         UPDATE TICKETS
+//         SET
+//           status = 'closed',
+//           resolved_at = CASE
+//             WHEN resolved_at IS NULL THEN GETUTCDATE()
+//             ELSE resolved_at
+//           END,
+//           closed_at = GETUTCDATE(),
+//           resolution_notes = @resolutionNotes,
+//           updated_at = GETUTCDATE()
+//         WHERE ticket_id = @ticketId
+//           AND status = 'pending_closure'
+//       `);
+
+//   } else {
+//     ticketUpdate = await transaction.request()
+//       .input('ticketId', sql.UniqueIdentifier, ticketId)
+//       .query(`
+//         UPDATE TICKETS
+//         SET
+//           status = 'in_progress',
+//           updated_at = GETUTCDATE()
+//         WHERE ticket_id = @ticketId
+//           AND status = 'pending_closure'
+//       `);
+//   }
+
+//   if (ticketUpdate.rowsAffected[0] !== 1) {
+//     throw new Error('Ticket status could not be updated');
+//   }
+
+//   await transaction.commit();
+//   transactionStarted = false;
+
+//   console.log(
+//     `Successfully ${action} close request ${closeRequestId}, ticket ${ticketId}`
+//   );
+
+// } catch (error) {
+//   if (transactionStarted) {
+//     try {
+//       await transaction.rollback();
+//     } catch (rollbackError) {
+//       console.error('Review rollback error:', rollbackError);
+//     }
+//   }
+
+//   console.error('Error reviewing close request:', error);
+//   throw error;
+// }
+
+// // Continue with your existing SLA tracking and service report logic below.
+
+
+//         // Stop SLA tracking - important for compliance report
+//         try {
+//           const slaResult = await SlaTrackingModel.stopTracking(ticketId, null);
+//           if (slaResult) {
+//             console.log(`SLA tracking stopped for ticket ${ticketId} - final status: ${slaResult.final_status}`);
+//           }
+//         } catch (slaError) {
+//           console.error('Failed to stop SLA tracking:', slaError.message);
+//           // Don't fail the whole operation if SLA tracking fails
+//         }
+
+//         // Finalize service report if exists
+//         if (serviceReportId) {
+//           try {
+//             const finalizedReport = await ServiceReportModel.finalizeReport(serviceReportId, coordinatorId);
+//             console.log(`Finalized service report ${serviceReportId}`);
+
+//             // Create or update repair history from service report (only for repair type, not replace)
+//             if (serviceType === 'repair' && finalizedReport && finalizedReport.asset_id) {
+//               // Build parts_replaced string from parts_used
+//               let partsReplacedStr = null;
+//               if (finalizedReport.parts_used && finalizedReport.parts_used.length > 0) {
+//                 partsReplacedStr = finalizedReport.parts_used
+//                   .map(p => `${p.product_name || 'Part'} (${p.asset_tag || 'N/A'}) x${p.quantity}`)
+//                   .join(', ');
+//               }
+
+//               // Calculate labor hours from labor cost (assuming rate or just store null)
+//               const laborHours = finalizedReport.labor_cost > 0 ? null : null;
+
+//               const repairData = {
+//                 asset_id: finalizedReport.asset_id,
+//                 ticket_id: ticketId,
+//                 fault_type_id: finalizedReport.fault_type_id || null,
+//                 fault_description: finalizedReport.diagnosis,
+//                 repair_date: new Date(),
+//                 engineer_id: closeRequest.assigned_to_engineer_id,
+//                 parts_replaced: partsReplacedStr,
+//                 labor_hours: laborHours,
+//                 parts_cost: finalizedReport.total_parts_cost || 0,
+//                 labor_cost: finalizedReport.labor_cost || 0,
+//                 resolution: finalizedReport.work_performed,
+//                 repair_status: 'completed',
+//                 notes: finalizedReport.engineer_notes,
+//                 created_by: coordinatorId
+//               };
+
+//               // Check if repair history exists for this ticket (reopened ticket case)
+//               const repairExists = await AssetRepairHistoryModel.existsForTicket(ticketId);
+
+//               if (repairExists) {
+//                 // Update existing repair history
+//                 await AssetRepairHistoryModel.updateRepairEntryByTicket(ticketId, repairData, coordinatorId);
+//                 console.log(`Updated repair history for ticket ${ticketId}`);
+//               } else {
+//                 // Create new repair history
+//                 await AssetRepairHistoryModel.createRepairEntry(repairData);
+//                 console.log(`Created repair history for asset ${finalizedReport.asset_id}`);
+//               }
+//             }
+//           } catch (srError) {
+//             console.error('Error finalizing service report:', srError);
+//             // Don't fail the whole operation if service report finalization fails
+//           }
+//         }
+//       } else if (action === 'rejected') {
+//         // Return ticket to in_progress
+//         await pool.request()
+//           .input('ticketId', sql.UniqueIdentifier, ticketId)
+//           .query(`
+//             UPDATE TICKETS
+//             SET
+//               status = 'in_progress',
+//               updated_at = GETUTCDATE()
+//             WHERE ticket_id = @ticketId
+//           `);
+
+//         // Delete draft service report if exists
+//         if (serviceReportId) {
+//           try {
+//             await ServiceReportModel.deleteDraftReport(serviceReportId);
+//             console.log(`Deleted draft service report ${serviceReportId}`);
+//           } catch (srError) {
+//             console.error('Error deleting draft service report:', srError);
+//             // Don't fail the whole operation
+//           }
+//         }
+//       }
+
+//       console.log(`Successfully ${action} close request ${closeRequestId}, ticket ${ticketId} status updated`);
+
+//       return await this.getTicketById(ticketId);
+//     } catch (error) {
+//       console.error('Error reviewing close request:', error);
+//       throw error;
+//     }
+//   }
+
+
+  
+static async reviewCloseRequest(
+  closeRequestId,
+  coordinatorId,
+  action,
+  reviewNotes = null
+) {
+  if (!['approved', 'rejected'].includes(action)) {
+    throw new Error('Invalid close request action');
   }
 
-  closeRequest = requestCheck.recordset[0];
+  const pool = await connectDB();
+  const transaction = new sql.Transaction(pool);
 
-  if (closeRequest.request_status !== 'pending') {
-    throw new Error(
-      `Close request has already been ${closeRequest.request_status}. Please refresh the list.`
+  let transactionStarted = false;
+  let closeRequest;
+  let ticketId;
+  let serviceReportId;
+  let serviceType;
+
+  try {
+    // Step 1: Perform the request and ticket updates atomically.
+    await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+    transactionStarted = true;
+
+    const requestCheck = await transaction.request()
+      .input('closeRequestId', sql.UniqueIdentifier, closeRequestId)
+      .query(`
+        SELECT
+          cr.*,
+          t.ticket_id AS ticket_id_from_tickets,
+          t.status AS ticket_status_current,
+          t.service_type,
+          t.assigned_to_engineer_id
+        FROM TICKET_CLOSE_REQUESTS cr WITH (UPDLOCK, HOLDLOCK)
+        INNER JOIN TICKETS t WITH (UPDLOCK, HOLDLOCK)
+          ON cr.ticket_id = t.ticket_id
+        WHERE cr.close_request_id = @closeRequestId
+      `);
+
+    if (requestCheck.recordset.length === 0) {
+      throw new Error('Close request not found');
+    }
+
+    closeRequest = requestCheck.recordset[0];
+
+    if (closeRequest.request_status !== 'pending') {
+      throw new Error(
+        `Close request has already been ${closeRequest.request_status}. Please refresh the list.`
+      );
+    }
+
+    if (closeRequest.ticket_status_current !== 'pending_closure') {
+      throw new Error(
+        'Ticket is no longer in pending_closure state. Please refresh the list.'
+      );
+    }
+
+    ticketId = closeRequest.ticket_id;
+    serviceReportId = closeRequest.service_report_id;
+    serviceType = closeRequest.service_type;
+
+    if (!ticketId) {
+      throw new Error('Invalid close request data: missing ticket_id');
+    }
+
+    // Step 2: Update close request.
+    const requestUpdate = await transaction.request()
+      .input('closeRequestId', sql.UniqueIdentifier, closeRequestId)
+      .input('coordinatorId', sql.UniqueIdentifier, coordinatorId)
+      .input('action', sql.VarChar(20), action)
+      .input('reviewNotes', sql.NVarChar(sql.MAX), reviewNotes)
+      .query(`
+        UPDATE TICKET_CLOSE_REQUESTS
+        SET
+          request_status = @action,
+          reviewed_by_coordinator_id = @coordinatorId,
+          review_notes = @reviewNotes,
+          reviewed_at = GETUTCDATE(),
+          updated_at = GETUTCDATE()
+        WHERE close_request_id = @closeRequestId
+          AND request_status = 'pending'
+      `);
+
+    if (requestUpdate.rowsAffected[0] !== 1) {
+      throw new Error('Close request has already been reviewed');
+    }
+
+    // Step 3: Update ticket status.
+    let ticketUpdate;
+
+    if (action === 'approved') {
+      ticketUpdate = await transaction.request()
+        .input('ticketId', sql.UniqueIdentifier, ticketId)
+        .input('resolutionNotes', sql.NVarChar(sql.MAX), closeRequest.request_notes)
+        .query(`
+          UPDATE TICKETS
+          SET
+            status = 'closed',
+            resolved_at = CASE
+              WHEN resolved_at IS NULL THEN GETUTCDATE()
+              ELSE resolved_at
+            END,
+            closed_at = GETUTCDATE(),
+            resolution_notes = @resolutionNotes,
+            updated_at = GETUTCDATE()
+          WHERE ticket_id = @ticketId
+            AND status = 'pending_closure'
+        `);
+    } else {
+      ticketUpdate = await transaction.request()
+        .input('ticketId', sql.UniqueIdentifier, ticketId)
+        .query(`
+          UPDATE TICKETS
+          SET
+            status = 'in_progress',
+            updated_at = GETUTCDATE()
+          WHERE ticket_id = @ticketId
+            AND status = 'pending_closure'
+        `);
+    }
+
+    if (ticketUpdate.rowsAffected[0] !== 1) {
+      throw new Error('Ticket status could not be updated');
+    }
+
+    // Step 4: Commit both database updates.
+    await transaction.commit();
+    transactionStarted = false;
+
+    console.log(
+      `Successfully ${action} close request ${closeRequestId}, ticket ${ticketId}`
     );
+
+  } catch (error) {
+    if (transactionStarted) {
+      try {
+        await transaction.rollback();
+      } catch (rollbackError) {
+        console.error('Review rollback error:', rollbackError);
+      }
+    }
+
+    console.error('Error reviewing close request:', error);
+    throw error;
   }
 
-  if (closeRequest.ticket_status_current !== 'pending_closure') {
-    throw new Error(
-      'Ticket is no longer in pending_closure state. Please refresh the list.'
-    );
-  }
-
-  ticketId = closeRequest.ticket_id;
-  serviceReportId = closeRequest.service_report_id;
-  serviceType = closeRequest.service_type;
-
-  if (!ticketId) {
-    throw new Error('Invalid close request data: missing ticket_id');
-  }
-
-  // Update close request only if it is still pending.
-  const requestUpdate = await transaction.request()
-    .input('closeRequestId', sql.UniqueIdentifier, closeRequestId)
-    .input('coordinatorId', sql.UniqueIdentifier, coordinatorId)
-    .input('action', sql.VarChar, action)
-    .input('reviewNotes', sql.NVarChar(sql.MAX), reviewNotes)
-    .query(`
-      UPDATE TICKET_CLOSE_REQUESTS
-      SET
-        request_status = @action,
-        reviewed_by_coordinator_id = @coordinatorId,
-        review_notes = @reviewNotes,
-        reviewed_at = GETUTCDATE(),
-        updated_at = GETUTCDATE()
-      WHERE close_request_id = @closeRequestId
-        AND request_status = 'pending'
-    `);
-
-  if (requestUpdate.rowsAffected[0] !== 1) {
-    throw new Error('Close request has already been reviewed');
-  }
-
-  let ticketUpdate;
-
+  // Step 5: Perform post-approval operations.
   if (action === 'approved') {
-    ticketUpdate = await transaction.request()
-      .input('ticketId', sql.UniqueIdentifier, ticketId)
-      .input('resolutionNotes', sql.NVarChar(sql.MAX), closeRequest.request_notes)
-      .query(`
-        UPDATE TICKETS
-        SET
-          status = 'closed',
-          resolved_at = CASE
-            WHEN resolved_at IS NULL THEN GETUTCDATE()
-            ELSE resolved_at
-          END,
-          closed_at = GETUTCDATE(),
-          resolution_notes = @resolutionNotes,
-          updated_at = GETUTCDATE()
-        WHERE ticket_id = @ticketId
-          AND status = 'pending_closure'
-      `);
 
-  } else {
-    ticketUpdate = await transaction.request()
-      .input('ticketId', sql.UniqueIdentifier, ticketId)
-      .query(`
-        UPDATE TICKETS
-        SET
-          status = 'in_progress',
-          updated_at = GETUTCDATE()
-        WHERE ticket_id = @ticketId
-          AND status = 'pending_closure'
-      `);
-  }
-
-  if (ticketUpdate.rowsAffected[0] !== 1) {
-    throw new Error('Ticket status could not be updated');
-  }
-
-  await transaction.commit();
-  transactionStarted = false;
-
-  console.log(
-    `Successfully ${action} close request ${closeRequestId}, ticket ${ticketId}`
-  );
-
-} catch (error) {
-  if (transactionStarted) {
+    // Stop SLA tracking.
     try {
-      await transaction.rollback();
-    } catch (rollbackError) {
-      console.error('Review rollback error:', rollbackError);
+      const slaResult = await SlaTrackingModel.stopTracking(ticketId, null);
+
+      if (slaResult) {
+        console.log(
+          `SLA tracking stopped for ticket ${ticketId} - final status: ${slaResult.final_status}`
+        );
+      }
+    } catch (slaError) {
+      console.error('Failed to stop SLA tracking:', slaError.message);
+    }
+
+    // Finalize service report.
+    if (serviceReportId) {
+      try {
+        const finalizedReport =
+          await ServiceReportModel.finalizeReport(
+            serviceReportId,
+            coordinatorId
+          );
+
+        console.log(`Finalized service report ${serviceReportId}`);
+
+        // Create or update repair history for repair tickets.
+        if (
+          serviceType === 'repair' &&
+          finalizedReport &&
+          finalizedReport.asset_id
+        ) {
+          let partsReplacedStr = null;
+
+          if (
+            finalizedReport.parts_used &&
+            finalizedReport.parts_used.length > 0
+          ) {
+            partsReplacedStr = finalizedReport.parts_used
+              .map(
+                p =>
+                  `${p.product_name || 'Part'} (${p.asset_tag || 'N/A'}) x${p.quantity}`
+              )
+              .join(', ');
+          }
+
+          const laborHours =
+            finalizedReport.labor_cost > 0 ? null : null;
+
+          const repairData = {
+            asset_id: finalizedReport.asset_id,
+            ticket_id: ticketId,
+            fault_type_id: finalizedReport.fault_type_id || null,
+            fault_description: finalizedReport.diagnosis,
+            repair_date: new Date(),
+            engineer_id: closeRequest.assigned_to_engineer_id,
+            parts_replaced: partsReplacedStr,
+            labor_hours: laborHours,
+            parts_cost: finalizedReport.total_parts_cost || 0,
+            labor_cost: finalizedReport.labor_cost || 0,
+            resolution: finalizedReport.work_performed,
+            repair_status: 'completed',
+            notes: finalizedReport.engineer_notes,
+            created_by: coordinatorId
+          };
+
+          const repairExists =
+            await AssetRepairHistoryModel.existsForTicket(ticketId);
+
+          if (repairExists) {
+            await AssetRepairHistoryModel.updateRepairEntryByTicket(
+              ticketId,
+              repairData,
+              coordinatorId
+            );
+
+            console.log(`Updated repair history for ticket ${ticketId}`);
+          } else {
+            await AssetRepairHistoryModel.createRepairEntry(repairData);
+
+            console.log(
+              `Created repair history for asset ${finalizedReport.asset_id}`
+            );
+          }
+        }
+
+      } catch (srError) {
+        console.error('Error finalizing service report:', srError);
+      }
+    }
+
+  } else if (action === 'rejected') {
+
+    // Delete draft service report if it exists.
+    if (serviceReportId) {
+      try {
+        await ServiceReportModel.deleteDraftReport(serviceReportId);
+
+        console.log(`Deleted draft service report ${serviceReportId}`);
+      } catch (srError) {
+        console.error('Error deleting draft service report:', srError);
+      }
     }
   }
 
-  console.error('Error reviewing close request:', error);
-  throw error;
+  return await this.getTicketById(ticketId);
 }
 
-// Continue with your existing SLA tracking and service report logic below.
-
-
-        // Stop SLA tracking - important for compliance report
-        try {
-          const slaResult = await SlaTrackingModel.stopTracking(ticketId, null);
-          if (slaResult) {
-            console.log(`SLA tracking stopped for ticket ${ticketId} - final status: ${slaResult.final_status}`);
-          }
-        } catch (slaError) {
-          console.error('Failed to stop SLA tracking:', slaError.message);
-          // Don't fail the whole operation if SLA tracking fails
-        }
-
-        // Finalize service report if exists
-        if (serviceReportId) {
-          try {
-            const finalizedReport = await ServiceReportModel.finalizeReport(serviceReportId, coordinatorId);
-            console.log(`Finalized service report ${serviceReportId}`);
-
-            // Create or update repair history from service report (only for repair type, not replace)
-            if (serviceType === 'repair' && finalizedReport && finalizedReport.asset_id) {
-              // Build parts_replaced string from parts_used
-              let partsReplacedStr = null;
-              if (finalizedReport.parts_used && finalizedReport.parts_used.length > 0) {
-                partsReplacedStr = finalizedReport.parts_used
-                  .map(p => `${p.product_name || 'Part'} (${p.asset_tag || 'N/A'}) x${p.quantity}`)
-                  .join(', ');
-              }
-
-              // Calculate labor hours from labor cost (assuming rate or just store null)
-              const laborHours = finalizedReport.labor_cost > 0 ? null : null;
-
-              const repairData = {
-                asset_id: finalizedReport.asset_id,
-                ticket_id: ticketId,
-                fault_type_id: finalizedReport.fault_type_id || null,
-                fault_description: finalizedReport.diagnosis,
-                repair_date: new Date(),
-                engineer_id: closeRequest.assigned_to_engineer_id,
-                parts_replaced: partsReplacedStr,
-                labor_hours: laborHours,
-                parts_cost: finalizedReport.total_parts_cost || 0,
-                labor_cost: finalizedReport.labor_cost || 0,
-                resolution: finalizedReport.work_performed,
-                repair_status: 'completed',
-                notes: finalizedReport.engineer_notes,
-                created_by: coordinatorId
-              };
-
-              // Check if repair history exists for this ticket (reopened ticket case)
-              const repairExists = await AssetRepairHistoryModel.existsForTicket(ticketId);
-
-              if (repairExists) {
-                // Update existing repair history
-                await AssetRepairHistoryModel.updateRepairEntryByTicket(ticketId, repairData, coordinatorId);
-                console.log(`Updated repair history for ticket ${ticketId}`);
-              } else {
-                // Create new repair history
-                await AssetRepairHistoryModel.createRepairEntry(repairData);
-                console.log(`Created repair history for asset ${finalizedReport.asset_id}`);
-              }
-            }
-          } catch (srError) {
-            console.error('Error finalizing service report:', srError);
-            // Don't fail the whole operation if service report finalization fails
-          }
-        }
-      } else if (action === 'rejected') {
-        // Return ticket to in_progress
-        await pool.request()
-          .input('ticketId', sql.UniqueIdentifier, ticketId)
-          .query(`
-            UPDATE TICKETS
-            SET
-              status = 'in_progress',
-              updated_at = GETUTCDATE()
-            WHERE ticket_id = @ticketId
-          `);
-
-        // Delete draft service report if exists
-        if (serviceReportId) {
-          try {
-            await ServiceReportModel.deleteDraftReport(serviceReportId);
-            console.log(`Deleted draft service report ${serviceReportId}`);
-          } catch (srError) {
-            console.error('Error deleting draft service report:', srError);
-            // Don't fail the whole operation
-          }
-        }
-      }
-
-      console.log(`Successfully ${action} close request ${closeRequestId}, ticket ${ticketId} status updated`);
-
-      return await this.getTicketById(ticketId);
-    } catch (error) {
-      console.error('Error reviewing close request:', error);
-      throw error;
-    }
-  }
 
   /**
    * Get close request history for a ticket
