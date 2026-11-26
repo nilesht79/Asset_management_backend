@@ -2479,30 +2479,33 @@ This is an automated notification. Please do not reply to this email.
     );
 
  
+
 } catch (error) {
-  console.error('Review close request error:', error);
+  console.error('Request ticket close error:', error);
 
   const message = error.message || '';
 
-  if (message === 'Close request not found') {
+  if (message === 'Ticket not found') {
     return sendNotFound(res, message);
   }
 
   if (
+    message.includes('already exists') ||
+    message.includes('already closed') ||
     message.includes('already been') ||
-    message.includes('already been reviewed') ||
-    message.includes('no longer in pending_closure') ||
-    message.includes('could not be updated')
+    message.includes('not assigned to this engineer') ||
+    message.includes('pending_closure')
   ) {
     return sendError(res, message, 409);
   }
 
   return sendError(
     res,
-    message || 'Failed to review close request',
+    message || 'Failed to submit close request',
     500
   );
 }
+
 
 }
 
