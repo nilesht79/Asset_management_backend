@@ -1363,9 +1363,35 @@ String(engineerId).toLowerCase()
       throw new Error('Ticket is already closed');
     }
 
+    // if (ticket.status === 'pending_closure') {
+    //   throw new Error('Close request already exists for this ticket');
+    // }
+
     if (ticket.status === 'pending_closure') {
-      throw new Error('Close request already exists for this ticket');
-    }
+  const existingRequest = await transaction.request()
+    .input('ticketId', sql.UniqueIdentifier, ticketId)
+    .query(`
+      SELECT TOP 1 *
+      FROM TICKET_CLOSE_REQUESTS
+      WHERE ticket_id = @ticketId
+        AND request_status = 'pending'
+      ORDER BY created_at DESC
+    `);
+
+  if (existingRequest.recordset.length > 0) {
+    await transaction.commit();
+    transactionStarted = false;
+
+    return {
+      ...existingRequest.recordset[0],
+      already_exists: true
+    };
+  }
+
+  throw new Error(
+    'Ticket is pending closure, but no pending close request was found'
+  );
+}
 
     if (
       ['repair', 'replace'].includes(ticket.service_type) &&
