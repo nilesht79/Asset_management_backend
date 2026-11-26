@@ -2419,6 +2419,20 @@ Helpdesk
   service_report_id || null
 );
 
+    // Avoid duplicate notifications when the request already exists.
+if (closeRequest.already_exists) {
+  return sendSuccess(
+    res,
+    {
+      ...existingTicket,
+      status: 'pending_closure',
+      close_request_id: closeRequest.close_request_id,
+      close_request_status: closeRequest.request_status
+    },
+    'Close request is already pending coordinator approval'
+  );
+}
+
 const updatedTicket = {
   ...existingTicket,
   status: 'pending_closure',
