@@ -2234,10 +2234,26 @@ This is an automated notification. Please do not reply to this email.
       }
 
       return sendSuccess(res, updatedTicket, 'Close request submitted successfully');
-    } catch (error) {
-      console.error('Request ticket close error:', error);
-      return sendError(res, error.message || 'Failed to submit close request', 500);
-    }
+    // } catch (error) {
+    //   console.error('Request ticket close error:', error);
+    //   return sendError(res, error.message || 'Failed to submit close request', 500);
+    // }
+      } catch (error) {
+  console.error('Request ticket close error:', error);
+
+  if (
+    error.message ===
+    'Close request already exists for this ticket'
+  ) {
+    return sendError(res, error.message, 409);
+  }
+
+  return sendError(
+    res,
+    error.message || 'Failed to submit close request',
+    500
+  );
+}
   }
 
   /**
