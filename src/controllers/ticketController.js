@@ -3198,11 +3198,27 @@ This is an automated notification. Please do not reply to this email.
   static async getAllCoordinators() {
     try {
       const pool = await connectDB();
-      const result = await pool.request()
-        .query(`
-          SELECT user_id, email, first_name + ' ' + last_name AS full_name
+      // const result = await pool.request()
+      //   .query(`
+      //     SELECT user_id, email, first_name + ' ' + last_name AS full_name
+      //     FROM USER_MASTER
+      //     WHERE role = 'coordinator' AND is_active = 1
+      //   `);
+      const result = await pool.request().query(`
+          SELECT
+            user_id,
+            email,
+            first_name + ' ' + last_name AS full_name,
+            role
           FROM USER_MASTER
-          WHERE role = 'coordinator' AND is_active = 1
+          WHERE role IN (
+            'coordinator',
+            'department_coordinator',
+            'it_head',
+            'admin',
+            'superadmin'
+          )
+          AND is_active = 1
         `);
       return result.recordset;
     } catch (error) {
