@@ -2387,7 +2387,159 @@ Helpdesk
 // }
 //   }
 
-  static async requestTicketClose(req, res) {
+//   static async requestTicketClose(req, res) {
+//   try {
+//     const { id } = req.params;
+//     const { request_notes, service_report_id } = req.body;
+//     const engineerId = req.oauth.user.id;
+
+//     if (!request_notes || !request_notes.trim()) {
+//       return sendError(res, 'Resolution notes are required', 400);
+//     }
+
+//     const existingTicket = await TicketModel.getTicketById(id);
+
+//     if (!existingTicket) {
+//       return sendNotFound(res, 'Ticket not found');
+//     }
+
+//     // await TicketModel.requestTicketClose(
+//     //   id,
+//     //   engineerId,
+//     //   request_notes.trim(),
+//     //   service_report_id || null
+//     // );
+
+//     // const updatedTicket = await TicketModel.getTicketById(id);
+
+//     const closeRequest = await TicketModel.requestTicketClose(
+//   id,
+//   engineerId,
+//   request_notes.trim(),
+//   service_report_id || null
+// );
+
+//     // Avoid duplicate notifications when the request already exists.
+// if (closeRequest.already_exists) {
+//   return sendSuccess(
+//     res,
+//     {
+//       ...existingTicket,
+//       status: 'pending_closure',
+//       close_request_id: closeRequest.close_request_id,
+//       close_request_status: closeRequest.request_status
+//     },
+//     'Close request is already pending coordinator approval'
+//   );
+// }
+
+// const updatedTicket = {
+//   ...existingTicket,
+//   status: 'pending_closure',
+//   resolution_notes: request_notes.trim(),
+//   close_request_id: closeRequest.close_request_id,
+//   close_request_status: closeRequest.request_status
+// };
+
+//       // Notify coordinator(s) about close request
+//       try {
+//         let coordinatorsToNotify = [];
+
+//         if (existingTicket.created_by_coordinator_id) {
+//           coordinatorsToNotify = [{
+//             user_id: existingTicket.created_by_coordinator_id,
+//             email: existingTicket.coordinator_email
+//           }];
+//         } else {
+//           coordinatorsToNotify = await TicketController.getAllCoordinators();
+//         }
+
+//         if (coordinatorsToNotify.length > 0) {
+//           // In-app notification
+//           const coordUserIds = coordinatorsToNotify.map(c => c.user_id);
+//           await NotificationModel.createBulkNotifications(coordUserIds, {
+//             ticket_id: existingTicket.ticket_id,
+//             notification_type: 'close_request_submitted',
+//             title: `Close Request: ${existingTicket.ticket_number}`,
+//             message: `Engineer ${existingTicket.engineer_name || 'assigned engineer'} has requested closure of ticket "${existingTicket.title}". Please review.`,
+//             priority: 'medium',
+//             related_data: {
+//               ticket_number: existingTicket.ticket_number,
+//               ticket_title: existingTicket.title,
+//               engineer_name: existingTicket.engineer_name,
+//               request_notes: request_notes
+//             }
+//           });
+
+//           // Email notifications
+//           for (const coord of coordinatorsToNotify) {
+//             if (coord.email) {
+//               const emailSubject = `Close Request Pending: ${existingTicket.ticket_number}`;
+//               const emailBody = `
+// Hello,
+
+// An engineer has requested closure of a ticket that requires your review.
+
+// Ticket Number: ${existingTicket.ticket_number}
+// Title: ${existingTicket.title}
+// Priority: ${existingTicket.priority || 'medium'}
+// Engineer: ${existingTicket.engineer_name || 'Assigned Engineer'}
+
+// Resolution Notes:
+// ${request_notes || 'No notes provided'}
+
+// Please log in to the Unified ITSM Platform to approve or reject this close request.
+
+// This is an automated notification. Please do not reply to this email.
+//               `;
+//               await emailService.sendEmail(coord.email, emailSubject, emailBody.trim());
+//             }
+//           }
+//           console.log(`Close request notifications sent for ticket ${existingTicket.ticket_number}`);
+//         }
+//       } catch (notificationError) {
+//         console.error('Failed to notify coordinators about close request:', notificationError.message);
+//       }
+
+//     return sendSuccess(
+//       res,
+//       updatedTicket,
+//       'Close request submitted successfully'
+//     );
+
+ 
+
+// } catch (error) {
+//   console.error('Request ticket close error:', error);
+
+//   const message = error.message || '';
+
+//   if (message === 'Ticket not found') {
+//     return sendNotFound(res, message);
+//   }
+
+//   if (
+//     message.includes('already exists') ||
+//     message.includes('already closed') ||
+//     message.includes('already been') ||
+//     message.includes('not assigned to this engineer') ||
+//     message.includes('pending_closure')
+//   ) {
+//     return sendError(res, message, 409);
+//   }
+
+//   return sendError(
+//     res,
+//     message || 'Failed to submit close request',
+//     500
+//   );
+// }
+
+
+// }
+
+  
+static async requestTicketClose(req, res) {
   try {
     const { id } = req.params;
     const { request_notes, service_report_id } = req.body;
@@ -2403,45 +2555,45 @@ Helpdesk
       return sendNotFound(res, 'Ticket not found');
     }
 
-    // await TicketModel.requestTicketClose(
-    //   id,
-    //   engineerId,
-    //   request_notes.trim(),
-    //   service_report_id || null
-    // );
-
-    // const updatedTicket = await TicketModel.getTicketById(id);
-
+    // Create close request and update ticket status.
     const closeRequest = await TicketModel.requestTicketClose(
-  id,
-  engineerId,
-  request_notes.trim(),
-  service_report_id || null
-);
+      id,
+      engineerId,
+      request_notes.trim(),
+      service_report_id || null
+    );
 
-    // Avoid duplicate notifications when the request already exists.
-if (closeRequest.already_exists) {
-  return sendSuccess(
-    res,
-    {
+    // Handle an existing pending request.
+    if (closeRequest.already_exists) {
+      return sendSuccess(
+        res,
+        {
+          ...existingTicket,
+          status: 'pending_closure',
+          close_request_id: closeRequest.close_request_id,
+          close_request_status: closeRequest.request_status
+        },
+        'Close request is already pending coordinator approval'
+      );
+    }
+
+    const updatedTicket = {
       ...existingTicket,
       status: 'pending_closure',
+      resolution_notes: request_notes.trim(),
       close_request_id: closeRequest.close_request_id,
       close_request_status: closeRequest.request_status
-    },
-    'Close request is already pending coordinator approval'
-  );
-}
+    };
 
-const updatedTicket = {
-  ...existingTicket,
-  status: 'pending_closure',
-  resolution_notes: request_notes.trim(),
-  close_request_id: closeRequest.close_request_id,
-  close_request_status: closeRequest.request_status
-};
+    // Return API success immediately.
+    sendSuccess(
+      res,
+      updatedTicket,
+      'Close request submitted successfully'
+    );
 
-      // Notify coordinator(s) about close request
+    // Process notifications after returning the response.
+    setImmediate(async () => {
       try {
         let coordinatorsToNotify = [];
 
@@ -2451,31 +2603,50 @@ const updatedTicket = {
             email: existingTicket.coordinator_email
           }];
         } else {
-          coordinatorsToNotify = await TicketController.getAllCoordinators();
+          coordinatorsToNotify =
+            await TicketController.getAllCoordinators();
         }
 
-        if (coordinatorsToNotify.length > 0) {
-          // In-app notification
-          const coordUserIds = coordinatorsToNotify.map(c => c.user_id);
-          await NotificationModel.createBulkNotifications(coordUserIds, {
-            ticket_id: existingTicket.ticket_id,
-            notification_type: 'close_request_submitted',
-            title: `Close Request: ${existingTicket.ticket_number}`,
-            message: `Engineer ${existingTicket.engineer_name || 'assigned engineer'} has requested closure of ticket "${existingTicket.title}". Please review.`,
-            priority: 'medium',
-            related_data: {
-              ticket_number: existingTicket.ticket_number,
-              ticket_title: existingTicket.title,
-              engineer_name: existingTicket.engineer_name,
-              request_notes: request_notes
-            }
-          });
+        if (!coordinatorsToNotify.length) {
+          console.log(
+            `No coordinators found for ${existingTicket.ticket_number}`
+          );
+          return;
+        }
 
-          // Email notifications
-          for (const coord of coordinatorsToNotify) {
-            if (coord.email) {
-              const emailSubject = `Close Request Pending: ${existingTicket.ticket_number}`;
-              const emailBody = `
+        // Create in-app notifications.
+        const coordUserIds = coordinatorsToNotify
+          .map(c => c.user_id)
+          .filter(Boolean);
+
+        if (coordUserIds.length > 0) {
+          await NotificationModel.createBulkNotifications(
+            coordUserIds,
+            {
+              ticket_id: existingTicket.ticket_id,
+              notification_type: 'close_request_submitted',
+              title: `Close Request: ${existingTicket.ticket_number}`,
+              message: `Engineer ${existingTicket.engineer_name || 'assigned engineer'} has requested closure of ticket "${existingTicket.title}". Please review.`,
+              priority: 'medium',
+              related_data: {
+                ticket_number: existingTicket.ticket_number,
+                ticket_title: existingTicket.title,
+                engineer_name: existingTicket.engineer_name,
+                request_notes: request_notes.trim()
+              }
+            }
+          );
+        }
+
+        // Send email notifications.
+        for (const coord of coordinatorsToNotify) {
+          if (!coord.email) continue;
+
+          try {
+            const emailSubject =
+              `Close Request Pending: ${existingTicket.ticket_number}`;
+
+            const emailBody = `
 Hello,
 
 An engineer has requested closure of a ticket that requires your review.
@@ -2486,57 +2657,76 @@ Priority: ${existingTicket.priority || 'medium'}
 Engineer: ${existingTicket.engineer_name || 'Assigned Engineer'}
 
 Resolution Notes:
-${request_notes || 'No notes provided'}
+${request_notes.trim()}
 
 Please log in to the Unified ITSM Platform to approve or reject this close request.
 
 This is an automated notification. Please do not reply to this email.
-              `;
-              await emailService.sendEmail(coord.email, emailSubject, emailBody.trim());
-            }
+            `;
+
+            await emailService.sendEmail(
+              coord.email,
+              emailSubject,
+              emailBody.trim()
+            );
+
+            console.log(
+              `Close request email sent to ${coord.email} for ${existingTicket.ticket_number}`
+            );
+          } catch (emailError) {
+            console.error(
+              `Email notification failed for ${coord.email}:`,
+              emailError.message
+            );
           }
-          console.log(`Close request notifications sent for ticket ${existingTicket.ticket_number}`);
         }
+
+        console.log(
+          `Close request notifications processed for ${existingTicket.ticket_number}`
+        );
+
       } catch (notificationError) {
-        console.error('Failed to notify coordinators about close request:', notificationError.message);
+        console.error(
+          'Close request background notification failed:',
+          notificationError
+        );
       }
+    });
 
-    return sendSuccess(
+  } catch (error) {
+    console.error('Request ticket close error:', error);
+
+    const message = error.message || '';
+
+    if (message === 'Ticket not found') {
+      return sendNotFound(res, message);
+    }
+
+    if (
+      message.includes('already exists') ||
+      message.includes('already closed') ||
+      message.includes('already been') ||
+      message.includes('not assigned to this engineer') ||
+      message.includes('pending_closure')
+    ) {
+      return sendError(res, message, 409);
+    }
+
+    if (
+      message.includes('Resolution notes are required') ||
+      message.includes('Service report is required')
+    ) {
+      return sendError(res, message, 400);
+    }
+
+    return sendError(
       res,
-      updatedTicket,
-      'Close request submitted successfully'
+      message || 'Failed to submit close request',
+      500
     );
-
- 
-
-} catch (error) {
-  console.error('Request ticket close error:', error);
-
-  const message = error.message || '';
-
-  if (message === 'Ticket not found') {
-    return sendNotFound(res, message);
   }
-
-  if (
-    message.includes('already exists') ||
-    message.includes('already closed') ||
-    message.includes('already been') ||
-    message.includes('not assigned to this engineer') ||
-    message.includes('pending_closure')
-  ) {
-    return sendError(res, message, 409);
-  }
-
-  return sendError(
-    res,
-    message || 'Failed to submit close request',
-    500
-  );
 }
 
-
-}
 
   /**
    * Get pending close requests for coordinator
