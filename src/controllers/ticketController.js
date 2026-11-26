@@ -1260,18 +1260,107 @@ return sendCreated(
   // 'Coordinator'
   //       });
 
+//   await inAppNotificationService.createTicketAssignmentNotification({
+//   engineer_id: assigned_to_engineer_id,
+//   ticket_id: ticket.ticket_id,
+//   ticket_number: ticket.ticket_number,
+//   ticket_title: title,
+//   assigned_by_name:
+//     req.oauth?.user?.name ||
+//     req.oauth?.user?.email ||
+//     req.user?.name ||
+//     req.user?.email ||
+//     'Coordinator'
+// });
+
+        
+// 1. In-app notification
+try {
   await inAppNotificationService.createTicketAssignmentNotification({
-  engineer_id: assigned_to_engineer_id,
-  ticket_id: ticket.ticket_id,
-  ticket_number: ticket.ticket_number,
-  ticket_title: title,
-  assigned_by_name:
-    req.oauth?.user?.name ||
-    req.oauth?.user?.email ||
-    req.user?.name ||
-    req.user?.email ||
-    'Coordinator'
-});
+    engineer_id: engineer_id,
+    ticket_id: id,
+    ticket_number: updatedTicket.ticket_number,
+    ticket_title: updatedTicket.title,
+    assigned_by_name:
+      req.oauth?.user?.name ||
+      req.oauth?.user?.email ||
+      req.user?.name ||
+      req.user?.email ||
+      'Coordinator'
+  });
+} catch (notificationError) {
+  console.error(
+    'Failed to create assignment notification:',
+    notificationError.message
+  );
+}
+
+// 2. Email notification
+try {
+  const engineerEmail =
+    await TicketController.getEngineerEmail(engineer_id);
+
+  if (engineerEmail) {
+    const assignedByName =
+      req.oauth?.user?.name ||
+      req.oauth?.user?.email ||
+      req.user?.name ||
+      req.user?.email ||
+      'Coordinator';
+
+    const engineerName =
+      updatedTicket.engineer_name || 'Engineer';
+
+    const emailSubject =
+      `New Ticket Assigned: ${updatedTicket.ticket_number}`;
+
+    const emailBody = `
+Hello ${engineerName},
+
+A new ticket has been assigned to you.
+
+Ticket Number: ${updatedTicket.ticket_number}
+Title: ${updatedTicket.title}
+Priority: ${updatedTicket.priority || 'medium'}
+Status: ${updatedTicket.status}
+
+Assigned By: ${assignedByName}
+
+Description:
+${updatedTicket.description || 'No description provided'}
+
+Please login to the Unified ITSM Platform and work on this ticket.
+
+Regards,
+Helpdesk
+    `;
+
+    await emailService.sendEmail(
+      engineerEmail,
+      emailSubject,
+      emailBody.trim()
+    );
+  }
+} catch (emailError) {
+  console.error(
+    'Assignment email failed:',
+    emailError.message
+  );
+}
+
+// 3. SMS notification
+try {
+  await TicketController.sendAssignmentSms(
+    engineer_id,
+    updatedTicket
+  );
+} catch (smsError) {
+  console.error(
+    'Assignment SMS failed:',
+    smsError.message
+  );
+}
+
 
         // Send email notification
         const engineerEmail = await TicketController.getEngineerEmail(engineer_id);
