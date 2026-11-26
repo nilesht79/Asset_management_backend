@@ -2403,14 +2403,29 @@ Helpdesk
       return sendNotFound(res, 'Ticket not found');
     }
 
-    await TicketModel.requestTicketClose(
-      id,
-      engineerId,
-      request_notes.trim(),
-      service_report_id || null
-    );
+    // await TicketModel.requestTicketClose(
+    //   id,
+    //   engineerId,
+    //   request_notes.trim(),
+    //   service_report_id || null
+    // );
 
-    const updatedTicket = await TicketModel.getTicketById(id);
+    // const updatedTicket = await TicketModel.getTicketById(id);
+
+    const closeRequest = await TicketModel.requestTicketClose(
+  id,
+  engineerId,
+  request_notes.trim(),
+  service_report_id || null
+);
+
+const updatedTicket = {
+  ...existingTicket,
+  status: 'pending_closure',
+  resolution_notes: request_notes.trim(),
+  close_request_id: closeRequest.close_request_id,
+  close_request_status: closeRequest.request_status
+};
 
       // Notify coordinator(s) about close request
       try {
