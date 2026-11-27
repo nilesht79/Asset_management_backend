@@ -949,12 +949,28 @@ router.put('/:id/approve',
     }
 
     // Validate assigned engineer exists and is an engineer role
-    const engineerCheck = await pool.request()
-      .input('engineer_id', sql.UniqueIdentifier, assigned_engineer)
-      .query(`
-        SELECT user_id, first_name, last_name FROM USER_MASTER
-        WHERE user_id = @engineer_id AND is_active = 1 AND role = 'engineer'
-      `);
+    // const engineerCheck = await pool.request()
+    //   .input('engineer_id', sql.UniqueIdentifier, assigned_engineer)
+    //   .query(`
+    //     SELECT user_id, first_name, last_name FROM USER_MASTER
+    //     WHERE user_id = @engineer_id AND is_active = 1 AND role = 'engineer'
+    //   `);
+
+    
+const engineerCheck = await pool.request()
+  .input('engineer_id', sql.UniqueIdentifier, assigned_engineer)
+  .query(`
+    SELECT
+      user_id,
+      first_name,
+      last_name,
+      email
+    FROM USER_MASTER
+    WHERE user_id = @engineer_id
+      AND is_active = 1
+      AND role = 'engineer'
+  `);
+
 
     if (engineerCheck.recordset.length === 0) {
       return sendError(res, 'Invalid engineer selected or user is not an engineer', 400);
@@ -1127,120 +1143,347 @@ if (stockCheck.recordset.length === 0) {
       await transaction.commit();
 
       // Send notifications to requester and assigned engineer
-      try {
-        // Get requester info
-        const requesterResult = await pool.request()
-          .input('userId', sql.UniqueIdentifier, reqData.requested_by)
-          .query(`SELECT user_id, first_name + ' ' + last_name as name, email FROM USER_MASTER WHERE user_id = @userId`);
-        const requester = requesterResult.recordset[0];
-        const engineerName = `${engineerCheck.recordset[0].first_name} ${engineerCheck.recordset[0].last_name}`;
-        const engineerEmail = engineerCheck.recordset[0].email;
+//       try {
+//         // Get requester info
+//         const requesterResult = await pool.request()
+//           .input('userId', sql.UniqueIdentifier, reqData.requested_by)
+//           .query(`SELECT user_id, first_name + ' ' + last_name as name, email FROM USER_MASTER WHERE user_id = @userId`);
+//         const requester = requesterResult.recordset[0];
+//         const engineerName = `${engineerCheck.recordset[0].first_name} ${engineerCheck.recordset[0].last_name}`;
+//         const engineerEmail = engineerCheck.recordset[0].email;
 
-        // In-app notification to requester
-        if (requester) {
+//         // In-app notification to requester
+//         if (requester) {
+//           try {
+//             await NotificationModel.createNotification({
+//               user_id: requester.user_id,
+//               ticket_id: null,
+//               notification_type: 'consumable_approved',
+//               title: `Request Approved: ${reqData.request_number}`,
+//               message: `Your consumable request for ${reqData.quantity_requested} x ${reqData.consumable_name} has been approved. Engineer ${engineerName} will deliver it soon.`,
+//               priority: 'medium',
+//               related_data: {
+//                 request_id: id,
+//                 request_number: reqData.request_number,
+//                 consumable_name: reqData.consumable_name,
+//                 quantity: reqData.quantity_requested,
+//                 assigned_engineer: engineerName
+//               }
+//             });
+//           } catch (notifError) {
+//             console.error('Failed to create in-app notification for requester:', notifError.message);
+//           }
+
+//           // Email notification to requester
+//           if (requester.email) {
+//             try {
+//               const emailSubject = `Consumable Request Approved: ${reqData.request_number}`;
+//               const emailBody = `
+// Hello ${requester.name},
+
+// Great news! Your consumable request has been approved.
+
+// Request Details:
+// - Request Number: ${reqData.request_number}
+// - Consumable: ${reqData.consumable_name}
+// - Quantity: ${reqData.quantity_requested}
+// - Assigned Engineer: ${engineerName}
+
+// The engineer will contact you to arrange delivery.
+
+// This is an automated notification. Please do not reply to this email.
+//               `;
+//               await emailService.sendEmail(requester.email, emailSubject, emailBody.trim());
+//             } catch (emailError) {
+//               console.error('Failed to send email to requester:', emailError.message);
+//             }
+//           }
+//         }
+
+//         // In-app notification to assigned engineer
+//         try {
+//           await NotificationModel.createNotification({
+//             user_id: assigned_engineer,
+//             ticket_id: null,
+//             notification_type: 'consumable_delivery_assigned',
+//             title: `Delivery Assignment: ${reqData.request_number}`,
+//             message: `You have been assigned to deliver ${reqData.quantity_requested} x ${reqData.consumable_name} to ${requester?.name || 'the requester'}.`,
+//             priority: 'high',
+//             related_data: {
+//               request_id: id,
+//               request_number: reqData.request_number,
+//               consumable_name: reqData.consumable_name,
+//               quantity: reqData.quantity_requested,
+//               requester_name: requester?.name,
+//               requester_location: reqData.requester_location_name
+//             }
+//           });
+//         } catch (notifError) {
+//           console.error('Failed to create in-app notification for engineer:', notifError.message);
+//         }
+
+//         // Email notification to assigned engineer
+//         if (engineerEmail) {
+//           try {
+//             const emailSubject = `Consumable Delivery Assignment: ${reqData.request_number}`;
+//             const emailBody = `
+// Hello ${engineerName},
+
+// You have been assigned a consumable delivery task.
+
+// Delivery Details:
+// - Request Number: ${reqData.request_number}
+// - Consumable: ${reqData.consumable_name}
+// - Quantity: ${reqData.quantity_requested}
+// - Deliver To: ${requester?.name || 'Unknown'}
+// ${reqData.requester_location_name ? `- Location: ${reqData.requester_location_name}` : ''}
+
+// Please complete the delivery and mark it as delivered in the system.
+
+// This is an automated notification. Please do not reply to this email.
+//             `;
+//             await emailService.sendEmail(engineerEmail, emailSubject, emailBody.trim());
+//           } catch (emailError) {
+//             console.error('Failed to send email to engineer:', emailError.message);
+//           }
+//         }
+//       } catch (notificationError) {
+//         console.error('Failed to send approval notifications:', notificationError.message);
+//       }
+
+//       sendSuccess(res, {
+//         assigned_engineer: assigned_engineer,
+//         engineer_name: `${engineerCheck.recordset[0].first_name} ${engineerCheck.recordset[0].last_name}`,
+//         quantity_issued: reqData.quantity_requested,
+//         stock_after: quantityAfter
+//       }, 'Request approved and stock deducted successfully');
+
+      
+      // ==========================================
+      // APPROVAL SUCCESS - BACKGROUND NOTIFICATIONS
+      // ==========================================
+
+      const engineerName =
+        `${engineerCheck.recordset[0].first_name} ${engineerCheck.recordset[0].last_name}`;
+
+      const engineerEmail =
+        engineerCheck.recordset[0].email?.trim();
+
+      // Process notifications without delaying API response
+      setImmediate(async () => {
+        try {
+          // Get Employee/requester details
+          const requesterResult = await pool.request()
+            .input('userId', sql.UniqueIdentifier, reqData.requested_by)
+            .query(`
+              SELECT
+                user_id,
+                first_name + ' ' + last_name AS name,
+                email
+              FROM USER_MASTER
+              WHERE user_id = @userId
+            `);
+
+          const requester = requesterResult.recordset[0];
+          const requesterEmail = requester?.email?.trim();
+
+          // ======================================
+          // 1. EMPLOYEE IN-APP NOTIFICATION
+          // ======================================
+
+          if (requester) {
+            try {
+              await NotificationModel.createNotification({
+                user_id: requester.user_id,
+                ticket_id: null,
+                notification_type: 'consumable_approved',
+                title: `Request Approved: ${reqData.request_number}`,
+                message: `Your consumable request for ${reqData.quantity_requested} x ${reqData.consumable_name} has been approved. Engineer ${engineerName} will deliver it soon.`,
+                priority: 'medium',
+                related_data: {
+                  request_id: id,
+                  request_number: reqData.request_number,
+                  consumable_name: reqData.consumable_name,
+                  quantity: reqData.quantity_requested,
+                  assigned_engineer: engineerName
+                }
+              });
+
+              console.log(
+                `[CONSUMABLE] Employee notification created: ${reqData.request_number}`
+              );
+            } catch (error) {
+              console.error(
+                '[CONSUMABLE] Employee notification failed:',
+                error
+              );
+            }
+
+            // ======================================
+            // 2. EMPLOYEE EMAIL
+            // ======================================
+
+            if (requesterEmail) {
+              try {
+                const emailSubject =
+                  `Consumable Request Approved: ${reqData.request_number}`;
+
+                const emailBody = `
+Hello ${requester.name},
+
+Your consumable request has been approved successfully.
+
+Request Details:
+Request Number: ${reqData.request_number}
+Consumable: ${reqData.consumable_name}
+Quantity: ${reqData.quantity_requested}
+Assigned Engineer: ${engineerName}
+
+The engineer will contact you to arrange delivery.
+
+This is an automated notification.
+                `.trim();
+
+                console.log(
+                  `[CONSUMABLE EMAIL] Sending Employee email to ${requesterEmail}`
+                );
+
+                const result = await emailService.sendEmail(
+                  requesterEmail,
+                  emailSubject,
+                  emailBody
+                );
+
+                console.log(
+                  `[CONSUMABLE EMAIL] Employee email accepted: ${requesterEmail}`,
+                  result
+                );
+
+              } catch (error) {
+                console.error(
+                  `[CONSUMABLE EMAIL] Employee email failed: ${requesterEmail}`,
+                  error
+                );
+              }
+            } else {
+              console.error(
+                `[CONSUMABLE EMAIL] Employee email missing for ${reqData.request_number}`
+              );
+            }
+          } else {
+            console.error(
+              `[CONSUMABLE] Requester not found: ${reqData.requested_by}`
+            );
+          }
+
+          // ======================================
+          // 3. ENGINEER IN-APP NOTIFICATION
+          // ======================================
+
           try {
             await NotificationModel.createNotification({
-              user_id: requester.user_id,
+              user_id: assigned_engineer,
               ticket_id: null,
-              notification_type: 'consumable_approved',
-              title: `Request Approved: ${reqData.request_number}`,
-              message: `Your consumable request for ${reqData.quantity_requested} x ${reqData.consumable_name} has been approved. Engineer ${engineerName} will deliver it soon.`,
-              priority: 'medium',
+              notification_type: 'consumable_delivery_assigned',
+              title: `Delivery Assignment: ${reqData.request_number}`,
+              message: `You have been assigned to deliver ${reqData.quantity_requested} x ${reqData.consumable_name} to ${requester?.name || 'the requester'}.`,
+              priority: 'high',
               related_data: {
                 request_id: id,
                 request_number: reqData.request_number,
                 consumable_name: reqData.consumable_name,
                 quantity: reqData.quantity_requested,
-                assigned_engineer: engineerName
+                requester_name: requester?.name,
+                requester_location: reqData.requester_location_name
               }
             });
-          } catch (notifError) {
-            console.error('Failed to create in-app notification for requester:', notifError.message);
+
+            console.log(
+              `[CONSUMABLE] Engineer notification created: ${reqData.request_number}`
+            );
+          } catch (error) {
+            console.error(
+              '[CONSUMABLE] Engineer notification failed:',
+              error
+            );
           }
 
-          // Email notification to requester
-          if (requester.email) {
+          // ======================================
+          // 4. ENGINEER EMAIL
+          // ======================================
+
+          if (engineerEmail) {
             try {
-              const emailSubject = `Consumable Request Approved: ${reqData.request_number}`;
+              const emailSubject =
+                `Consumable Delivery Assignment: ${reqData.request_number}`;
+
               const emailBody = `
-Hello ${requester.name},
-
-Great news! Your consumable request has been approved.
-
-Request Details:
-- Request Number: ${reqData.request_number}
-- Consumable: ${reqData.consumable_name}
-- Quantity: ${reqData.quantity_requested}
-- Assigned Engineer: ${engineerName}
-
-The engineer will contact you to arrange delivery.
-
-This is an automated notification. Please do not reply to this email.
-              `;
-              await emailService.sendEmail(requester.email, emailSubject, emailBody.trim());
-            } catch (emailError) {
-              console.error('Failed to send email to requester:', emailError.message);
-            }
-          }
-        }
-
-        // In-app notification to assigned engineer
-        try {
-          await NotificationModel.createNotification({
-            user_id: assigned_engineer,
-            ticket_id: null,
-            notification_type: 'consumable_delivery_assigned',
-            title: `Delivery Assignment: ${reqData.request_number}`,
-            message: `You have been assigned to deliver ${reqData.quantity_requested} x ${reqData.consumable_name} to ${requester?.name || 'the requester'}.`,
-            priority: 'high',
-            related_data: {
-              request_id: id,
-              request_number: reqData.request_number,
-              consumable_name: reqData.consumable_name,
-              quantity: reqData.quantity_requested,
-              requester_name: requester?.name,
-              requester_location: reqData.requester_location_name
-            }
-          });
-        } catch (notifError) {
-          console.error('Failed to create in-app notification for engineer:', notifError.message);
-        }
-
-        // Email notification to assigned engineer
-        if (engineerEmail) {
-          try {
-            const emailSubject = `Consumable Delivery Assignment: ${reqData.request_number}`;
-            const emailBody = `
 Hello ${engineerName},
 
 You have been assigned a consumable delivery task.
 
 Delivery Details:
-- Request Number: ${reqData.request_number}
-- Consumable: ${reqData.consumable_name}
-- Quantity: ${reqData.quantity_requested}
-- Deliver To: ${requester?.name || 'Unknown'}
-${reqData.requester_location_name ? `- Location: ${reqData.requester_location_name}` : ''}
+Request Number: ${reqData.request_number}
+Consumable: ${reqData.consumable_name}
+Quantity: ${reqData.quantity_requested}
+Deliver To: ${requester?.name || 'Unknown'}
+Location: ${reqData.requester_location_name || 'Not available'}
 
-Please complete the delivery and mark it as delivered in the system.
+Please complete the delivery and mark it as delivered.
 
-This is an automated notification. Please do not reply to this email.
-            `;
-            await emailService.sendEmail(engineerEmail, emailSubject, emailBody.trim());
-          } catch (emailError) {
-            console.error('Failed to send email to engineer:', emailError.message);
+This is an automated notification.
+              `.trim();
+
+              console.log(
+                `[CONSUMABLE EMAIL] Sending Engineer email to ${engineerEmail}`
+              );
+
+              const result = await emailService.sendEmail(
+                engineerEmail,
+                emailSubject,
+                emailBody
+              );
+
+              console.log(
+                `[CONSUMABLE EMAIL] Engineer email accepted: ${engineerEmail}`,
+                result
+              );
+
+            } catch (error) {
+              console.error(
+                `[CONSUMABLE EMAIL] Engineer email failed: ${engineerEmail}`,
+                error
+              );
+            }
+          } else {
+            console.error(
+              `[CONSUMABLE EMAIL] Engineer email missing: ${assigned_engineer}`
+            );
           }
-        }
-      } catch (notificationError) {
-        console.error('Failed to send approval notifications:', notificationError.message);
-      }
 
-      sendSuccess(res, {
+          console.log(
+            `[CONSUMABLE] Background notifications completed: ${reqData.request_number}`
+          );
+
+        } catch (error) {
+          console.error(
+            '[CONSUMABLE] Background notification processing failed:',
+            error
+          );
+        }
+      });
+
+      // ======================================
+      // 5. RETURN SUCCESS TO FRONTEND
+      // ======================================
+
+      return sendSuccess(res, {
         assigned_engineer: assigned_engineer,
-        engineer_name: `${engineerCheck.recordset[0].first_name} ${engineerCheck.recordset[0].last_name}`,
+        engineer_name: engineerName,
         quantity_issued: reqData.quantity_requested,
         stock_after: quantityAfter
       }, 'Request approved and stock deducted successfully');
+
     } catch (error) {
       await transaction.rollback();
       throw error;
