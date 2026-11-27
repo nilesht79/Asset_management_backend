@@ -427,11 +427,19 @@ router.post(
  * @desc    Assign engineer to ticket
  * @access  Coordinator, Superadmin
  */
+// router.put(
+//   '/:id/assign',
+//   authenticateOAuth,
+//   requireRole(TICKET_MANAGERS),
+//   TicketController.assignEngineer
+// );
+
+
 router.put(
-  '/:id/assign',
-  authenticateOAuth,
-  requireRole(TICKET_MANAGERS),
-  TicketController.assignEngineer
+    '/:id/assign',
+    authenticateOAuth,
+    requireRole(COORDINATORS),
+    TicketController.assignEngineer
 );
 
 /**
